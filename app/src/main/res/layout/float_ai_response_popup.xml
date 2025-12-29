@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@android:color/white"
+    android:padding="16dp"
+    android:elevation="8dp"
+    android:radius="8dp">
+
+    <TextView
+        android:id="@+id/tv_ai_response"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxWidth="300dp"
+        android:maxLines="5"
+        android:ellipsize="end"
+        android:textSize="14sp"
+        android:textColor="@android:color/black"/>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp"
+        android:gravity="end">
+
+        <Button
+            android:id="@+id/btn_close_popup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="关闭"
+            android:textSize="12sp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"/>
+
+        <Button
+            android:id="@+id/btn_view_full"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="查看完整会话"
+            android:textSize="12sp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:layout_marginStart="8dp"/>
+
+    </LinearLayout>
+
+</LinearLayout>

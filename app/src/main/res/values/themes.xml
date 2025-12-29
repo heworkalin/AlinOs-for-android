@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- 定义应用主题 Theme.Alinos，继承 AppCompat 主题 -->
+</resources>
