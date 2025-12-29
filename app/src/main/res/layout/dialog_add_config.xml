@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <!-- AI类型选择 -->
+    <RadioGroup
+        android:id="@+id/rg_type"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="15dp">
+
+        <RadioButton
+            android:id="@+id/rb_openai"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="OpenAI"
+            android:layout_marginRight="20dp"/>
+
+        <RadioButton
+            android:id="@+id/rb_ollama"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ollama"/>
+    </RadioGroup>
+
+    <!-- 模型输入区域（区分OpenAI/Ollama） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginBottom="15dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="模型名称"
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:layout_marginBottom="5dp"/>
+
+        <!-- 模型输入框+Ollama下载按钮 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/et_model"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:hint="如gpt-3.5-turbo/llama3"
+                android:padding="10dp"/>
+
+            <Button
+                android:id="@+id/btn_download_model"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="下载模型"
+                android:layout_marginLeft="10dp"
+                android:visibility="gone"/> <!-- 默认隐藏，Ollama时显示 -->
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="服务器地址"
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:layout_marginBottom="5dp"/>
+
+    <!-- 服务器地址 -->
+    <EditText
+        android:id="@+id/et_server"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="服务器地址（如https://api.openai.com/ollama.localhost）"
+        android:padding="10dp"
+        android:layout_marginBottom="15dp"/>
+
+    <TextView
+            android:id="@+id/tv_key_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="API密钥"
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:layout_marginBottom="5dp"/>
+    <!-- API密钥 -->
+    <EditText
+        android:id="@+id/et_key"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="API密钥（Ollama可留空）"
+        android:padding="10dp"/>
+</LinearLayout>

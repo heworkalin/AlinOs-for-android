@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/float_container"
+    android:layout_width="300dp"
+    android:layout_height="400dp"
+    android:background="@drawable/float_window_background"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:background="@color/colorPrimary"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp">
+
+        <TextView
+            android:id="@+id/tv_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="AI助手"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <!-- 关闭按钮 - 使用矢量图标 -->
+        <ImageView
+            android:id="@+id/iv_close"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:src="@drawable/ic_close"
+            android:tint="@color/white" />
+    </LinearLayout>
+
+    <!-- 模式切换按钮（语音/输入法） -->
+    <LinearLayout
+        android:id="@+id/mode_switch_container"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:background="@color/colorPrimaryLight"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <!-- 语音模式按钮 -->
+        <ImageView
+            android:id="@+id/iv_voice_mode"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:background="@drawable/mode_button_bg_selected"
+            android:padding="8dp"
+            android:src="@drawable/ic_mic"
+            android:tint="@color/white" />
+
+        <!-- 输入法模式按钮 -->
+        <ImageView
+            android:id="@+id/iv_input_mode"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:background="@drawable/mode_button_bg_normal"
+            android:padding="8dp"
+            android:src="@drawable/ic_keyboard"
+            android:tint="@color/white" />
+    </LinearLayout>
+
+    <!-- 内容区域 -->
+    <FrameLayout
+        android:id="@+id/content_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/white">
+
+        <!-- 录音界面（语音模式） -->
+        <LinearLayout
+            android:id="@+id/voice_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="visible">
+
+            <!-- 录音圆环（不使用Lottie） -->
+            <ImageView
+                android:id="@+id/iv_record_circle"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:background="@drawable/circle_background"
+                android:src="@drawable/ic_mic"
+                android:tint="@color/white" />
+
+            <TextView
+                android:id="@+id/tv_record_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="长按中间圆环开始录音"
+                android:textColor="@color/black"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- 输入界面（输入法模式） -->
+        <LinearLayout
+            android:id="@+id/input_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <!-- 在输入模式的按钮区域添加 -->
+            
+
+            <!-- 输入框 -->
+            <EditText
+                android:id="@+id/et_input"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:gravity="top"
+                android:hint="请输入内容..."
+                android:imeOptions="actionSend"
+                android:inputType="textMultiLine"
+                android:padding="12dp"
+                android:textColor="@color/black"
+                android:textSize="14sp" />
+
+            <!-- 底部操作栏 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:background="@color/colorPrimaryLight"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp">
+
+                <!-- 复制按钮 - 使用自定义图标 -->
+                <ImageView
+                    android:id="@+id/iv_copy"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:src="@drawable/ic_copy"
+                    android:tint="@color/white" />
+
+                <!-- 粘贴按钮 - 使用自定义图标 -->
+                <ImageView
+                    android:id="@+id/iv_paste"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_marginStart="16dp"
+                    android:src="@drawable/ic_paste"
+                    android:tint="@color/white" />
+            
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <!-- 发送按钮 - 使用自定义图标 -->
+                <ImageView
+                    android:id="@+id/iv_send"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:src="@drawable/ic_send"
+                    android:tint="@color/white" />
+            </LinearLayout>
+        </LinearLayout>
+
+    </FrameLayout>
+
+    <!-- 底部按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:background="@color/colorPrimary"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+
+        <!-- 左下角：进入ChatActivity -->
+        <ImageView
+            android:id="@+id/iv_open_chat"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:src="@drawable/ic_chat"
+            android:tint="@color/white" />
+
+        <!-- 右下角：展开/收起 -->
+        <ImageView
+            android:id="@+id/iv_expand"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:src="@drawable/ic_expand_more"
+            android:tint="@color/white" />
+    </LinearLayout>
+    
+
+</LinearLayout>

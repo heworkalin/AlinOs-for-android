@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp"
+    tools:context=".TtsTestActivity">
+
+    <!-- 标题 -->
+    <TextView
+        android:id="@+id/tv_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="文字转语音测试"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- 输入文本框 -->
+    <EditText
+        android:id="@+id/et_input_text"
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:layout_marginTop="20dp"
+        android:hint="请输入要朗读的文本..."
+        android:gravity="start|top"
+        android:padding="10dp"
+        android:inputType="textMultiLine"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_title" />
+
+    <!-- 按钮容器（横向线性布局） -->
+    <LinearLayout
+        android:id="@+id/ll_btn_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:spacing="10dp"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/et_input_text">
+
+        <!-- 测试纯中文朗读 -->
+        <Button
+            android:id="@+id/btn_test_cn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="测试纯中文" />
+
+        <!-- 测试纯英文朗读 -->
+        <Button
+            android:id="@+id/btn_test_en"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="测试纯英文" />
+
+        <!-- 测试混合语言朗读 -->
+        <Button
+            android:id="@+id/btn_test_mix"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="测试混合语言" />
+    </LinearLayout>
+
+    <!-- 功能按钮容器 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal"
+        android:spacing="10dp"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/ll_btn_group">
+
+        <!-- 清空输入框 -->
+        <Button
+            android:id="@+id/btn_clear"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="清空输入" />
+        <!-- 开始朗读 -->
+        <Button
+            android:id="@+id/btn_start_speak"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="开始朗读" />
+        <!-- 停止当前朗读 -->
+        <Button
+            android:id="@+id/btn_stop_speak"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="停止朗读" />
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

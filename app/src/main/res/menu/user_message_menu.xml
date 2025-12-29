@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/menu_copy"
+        android:title="复制"/>
+    <item
+        android:id="@+id/menu_resend"
+        android:title="重新发送"/>
+    <item
+        android:id="@+id/menu_delete"
+        android:title="删除本条"/>
+</menu>
