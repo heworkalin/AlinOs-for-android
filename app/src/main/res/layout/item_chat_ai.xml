@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <!-- AI头像+内容容器（删除头像，只保留内容） -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_gravity="start">
+
+        <!-- 直接删除AI头像控件 -->
+
+        <!-- 消息内容+Loading容器 -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- AI消息文本（流式增量刷新） -->
+            <TextView
+                android:id="@+id/tv_ai_content"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="280dp"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:background="#f0f0f0"
+                android:padding="12dp"
+                android:layout_marginBottom="4dp"
+                android:backgroundTint="#f0f0f0"
+                android:radius="12dp"/>
+
+            <!-- 思考中+转圈Loading（默认隐藏） -->
+            <LinearLayout
+                android:id="@+id/ll_ai_loading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone"
+                android:layout_marginLeft="4dp">
+
+                <TextView
+                    android:id="@+id/tv_loading_tips"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="模型正在思考中..."
+                    android:textSize="14sp"
+                    android:textColor="#666666"/>
+
+                <!-- 小圆圈转圈 -->
+                <ProgressBar
+                    android:id="@+id/pb_loading_circle"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="6dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="#666666"
+                    style="?android:attr/progressBarStyleSmall"/>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

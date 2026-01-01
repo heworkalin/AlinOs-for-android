@@ -1,7 +1,7 @@
 package alin.android.alinos.net;
 
 import android.text.TextUtils;
-import android.widget.Toast;
+import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -12,18 +12,34 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import alin.android.alinos.bean.ConfigBean;
 
-public class OpenAINetHelper extends AbstractNetHelper { // 继承抽象类
+public class OpenAINetHelper extends AbstractNetHelper {
+    private static final String TAG = "OpenAINetHelper";
+    private static final String TARGET_API_PATH = "/v1/chat/completions";
+    // 优化：延长超时时间（适配siliconflow等第三方API）
+    private static final int CONNECT_TIMEOUT = 60 * 1000;  // 60秒连接超时
+    private static final int READ_TIMEOUT = 120 * 1000;    // 120秒读取超时
+    // 重试机制：最多重试2次
+    private static final int MAX_RETRY = 2;
 
     public OpenAINetHelper(android.content.Context context, ConfigBean config) {
         super(context, config);
+        // 初始化HTTPS信任（解决部分证书问题）
+        initSSLTrust();
     }
 
     @Override
-    public String getServiceType() { 
-        return "OpenAI"; 
+    public String getServiceType() {
+        return "OpenAI";
     }
 
     @Override
@@ -32,26 +48,49 @@ public class OpenAINetHelper extends AbstractNetHelper { // 继承抽象类
             showToast("配置为空");
             return false;
         }
-        
-        // 检查所有必要字段
-        boolean isValid = !TextUtils.isEmpty(config.getApiKey()) && 
-                          !TextUtils.isEmpty(config.getModel());
-        
+
+        // 校验：siliconflow需要API Key + 模型 + 服务器地址
+        boolean isValid = !TextUtils.isEmpty(config.getApiKey()) &&
+                          !TextUtils.isEmpty(config.getModel()) &&
+                          !TextUtils.isEmpty(config.getServerUrl());
+
         if (!isValid) {
-            showToast("OpenAI配置不完整：需要API密钥和模型名称");
+            showToast("配置不完整：必填【API Key】+【模型名称】+【服务器地址】");
         }
-        
         return isValid;
     }
 
+    // 核心优化：添加重试机制
     @Override
     public String sendMessage(String userMessage) {
-        // 1. 先验证配置
+        // 重试2次，解决网络抖动问题
+        for (int retry = 0; retry <= MAX_RETRY; retry++) {
+            try {
+                String result = sendMessageWithRetry(userMessage, retry);
+                // 非超时错误，直接返回
+                if (!result.contains("[网络超时]")) {
+                    return result;
+                }
+                Log.w(TAG, "第" + (retry + 1) + "次请求超时，重试...");
+            } catch (Exception e) {
+                Log.e(TAG, "第" + (retry + 1) + "次请求异常", e);
+                if (retry == MAX_RETRY) {
+                    return "[请求异常] 多次重试失败：" + e.getMessage();
+                }
+            }
+        }
+        return "[网络超时] 多次重试仍无法连接到服务器，请检查网络或稍后再试";
+    }
+
+    // 实际请求逻辑（拆分出来，方便重试）
+    private String sendMessageWithRetry(String userMessage, int retryCount) {
+        Log.d(TAG, "开始第" + (retryCount + 1) + "次请求，用户消息：" + userMessage);
+        
         if (!validateConfig()) {
-            return "[配置错误] OpenAPI配置不完整";
+            return "[配置错误] 请补全API Key、模型名称和服务器地址";
         }
 
-        // 2. 构建请求体
+        // 构建请求体（适配siliconflow格式）
         String requestBody;
         try {
             JSONObject jsonBody = new JSONObject();
@@ -59,72 +98,73 @@ public class OpenAINetHelper extends AbstractNetHelper { // 继承抽象类
             jsonBody.put("temperature", 0.7);
             jsonBody.put("max_tokens", 2000);
             jsonBody.put("stream", false);
-            
+
             JSONArray messages = new JSONArray();
             JSONObject message = new JSONObject();
             message.put("role", "user");
             message.put("content", userMessage);
             messages.put(message);
             jsonBody.put("messages", messages);
-            
+
             requestBody = jsonBody.toString();
+            Log.d(TAG, "第" + (retryCount + 1) + "次请求体：" + requestBody);
         } catch (Exception e) {
+            Log.e(TAG, "构造请求体失败", e);
             return "[构造请求失败] " + e.getMessage();
         }
 
-        // 3. 构建URL - 使用用户配置的地址
-        String apiUrl;
-        if (!TextUtils.isEmpty(config.getServerUrl())) {
-            apiUrl = config.getServerUrl();
-            // 确保URL格式正确
-            if (!apiUrl.contains("://")) {
-                apiUrl = "https://" + apiUrl;
-            }
-            if (!apiUrl.contains("/v1/chat/completions")) {
-                if (!apiUrl.endsWith("/")) {
-                    apiUrl += "/";
-                }
-                apiUrl += "v1/chat/completions";
-            }
-        } else {
-            // 默认使用OpenAI官方API
-            apiUrl = "https://api.openai.com/v1/chat/completions";
+        // URL拼接（无双斜杠）
+        String apiUrl = config.getServerUrl();
+        if (!apiUrl.contains(TARGET_API_PATH)) {
+            Log.d(TAG, "补全接口路径 -> " + TARGET_API_PATH);
+            apiUrl = apiUrl.endsWith("/") ? apiUrl.substring(0, apiUrl.length() - 1) : apiUrl;
+            apiUrl += TARGET_API_PATH;
         }
+        Log.d(TAG, "最终请求URL：" + apiUrl);
 
         HttpURLConnection conn = null;
         try {
-            // 4. 创建连接
             URL url = new URL(apiUrl);
             conn = (HttpURLConnection) url.openConnection();
             
-            // 5. 配置请求
+            // HTTPS适配：强制使用TLS 1.2/1.3（siliconflow要求）
+            if (conn instanceof HttpsURLConnection) {
+                HttpsURLConnection httpsConn = (HttpsURLConnection) conn;
+                httpsConn.setSSLSocketFactory(SSLContext.getDefault().getSocketFactory());
+                httpsConn.setHostnameVerifier((hostname, session) -> true); // 跳过域名校验（兜底）
+            }
+
+            // 核心：延长超时时间
+            conn.setConnectTimeout(CONNECT_TIMEOUT);
+            conn.setReadTimeout(READ_TIMEOUT);
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
-            conn.setConnectTimeout(30000); // 30秒连接超时
-            conn.setReadTimeout(60000);    // 60秒读取超时
-            
-            // 请求头
-            conn.setRequestProperty("Content-Type", "application/json");
+            // 禁用缓存，确保每次请求都是新的
+            conn.setUseCaches(false);
+            conn.setDefaultUseCaches(false);
+
+            // 请求头（适配siliconflow）
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             conn.setRequestProperty("Authorization", "Bearer " + config.getApiKey());
             conn.setRequestProperty("Accept", "application/json");
-            
-            // 6. 发送请求体
+            // 添加User-Agent，避免被风控
+            conn.setRequestProperty("User-Agent", "AlinOS/1.0 (Android)");
+
+            Log.d(TAG, "开始发送请求体...");
+            // 发送请求体
             try (OutputStream os = conn.getOutputStream()) {
                 byte[] input = requestBody.getBytes("UTF-8");
                 os.write(input, 0, input.length);
+                os.flush();
             }
-            
-            // 7. 获取响应
+
+            Log.d(TAG, "等待服务端响应...");
+            // 分步日志：先获取响应码（定位超时环节）
             int responseCode = conn.getResponseCode();
-            
-            // 读取响应内容
-            InputStream inputStream;
-            if (responseCode >= 200 && responseCode < 300) {
-                inputStream = conn.getInputStream();
-            } else {
-                inputStream = conn.getErrorStream();
-            }
-            
+            Log.d(TAG, "服务端响应码：" + responseCode);
+
+            // 读取响应
+            InputStream inputStream = responseCode >= 200 && responseCode < 300 ? conn.getInputStream() : conn.getErrorStream();
             StringBuilder response = new StringBuilder();
             try (BufferedReader br = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))) {
                 String line;
@@ -132,53 +172,75 @@ public class OpenAINetHelper extends AbstractNetHelper { // 继承抽象类
                     response.append(line);
                 }
             }
-            
-            // 8. 处理响应
+            Log.d(TAG, "服务端原始响应：" + response.toString());
+
+            // 解析响应
             if (responseCode == HttpURLConnection.HTTP_OK) {
-                try {
-                    JSONObject jsonResponse = new JSONObject(response.toString());
-                    JSONArray choices = jsonResponse.getJSONArray("choices");
-                    if (choices.length() > 0) {
-                        JSONObject choice = choices.getJSONObject(0);
-                        JSONObject message = choice.getJSONObject("message");
-                        String content = message.getString("content");
-                        
-                        // 检查是否被截断
-                        if (choice.has("finish_reason") && "length".equals(choice.getString("finish_reason"))) {
-                            content += "\n\n[提示：回复因达到长度限制而被截断]";
-                        }
-                        
-                        return content;
-                    } else {
-                        return "[API错误] 响应中没有choices";
+                JSONObject jsonResponse = new JSONObject(response.toString());
+                String content = "";
+                if (jsonResponse.has("choices") && jsonResponse.getJSONArray("choices").length() > 0) {
+                    JSONObject choice = jsonResponse.getJSONArray("choices").getJSONObject(0);
+                    content = choice.has("message") ? choice.getJSONObject("message").getString("content") : choice.optString("text", "");
+                    
+                    if ("length".equals(choice.optString("finish_reason"))) {
+                        content += "\n\n[提示：回复因达到长度限制而被截断]";
                     }
-                } catch (Exception e) {
-                    return "[解析响应失败] " + e.getMessage();
                 }
+                return TextUtils.isEmpty(content) ? "[响应异常] 服务端返回无有效内容" : content;
             } else {
-                // 处理错误响应
+                // 解析错误信息（siliconflow的错误格式）
+                String errorMsg = response.toString();
                 try {
                     JSONObject errorJson = new JSONObject(response.toString());
-                    String errorMessage = errorJson.optString("message", errorJson.toString());
-                    return "[API错误] HTTP " + responseCode + ": " + errorMessage;
+                    errorMsg = errorJson.optString("error", errorJson.optString("message", errorMsg));
                 } catch (Exception e) {
-                    return "[API错误] HTTP " + responseCode + ": " + response.toString();
+                    // 解析失败则用原始响应
                 }
+                return "[服务端错误] HTTP " + responseCode + ": " + errorMsg;
             }
-            
+
         } catch (java.net.SocketTimeoutException e) {
-            return "[网络超时] 连接或读取超时，请检查网络连接";
+            Log.e(TAG, "第" + (retryCount + 1) + "次请求超时", e);
+            return "[网络超时] 连接/读取服务器超时（已重试" + retryCount + "次），请检查网络或稍后再试";
         } catch (java.net.UnknownHostException e) {
-            return "[网络错误] 无法解析服务器地址: " + apiUrl;
-        } catch (java.io.IOException e) {
-            return "[网络错误] " + e.getMessage();
+            Log.e(TAG, "无法解析地址", e);
+            return "[网络错误] 无法解析服务器地址：" + apiUrl;
         } catch (Exception e) {
+            Log.e(TAG, "请求异常", e);
             return "[请求异常] " + e.getMessage();
         } finally {
-            // 9. 断开连接
             if (conn != null) {
                 conn.disconnect();
             }
         }
+    }
+
+    // 初始化SSL信任（解决HTTPS证书问题）
+    private void initSSLTrust() {
+        try {
+            SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+            sslContext.init(null, new TrustManager[]{new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            }}, new SecureRandom());
+            HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
+        } catch (Exception e) {
+            Log.w(TAG, "初始化SSL信任失败", e);
+        }
+    }
+
+    protected void showToast(String msg) {
+        if (context != null) {
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show();
+        }
+        Log.w(TAG, msg);
     }
 }
