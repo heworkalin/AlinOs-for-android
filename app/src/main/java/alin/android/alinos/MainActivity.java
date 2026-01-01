@@ -52,6 +52,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         CardView cvAccessibility = findViewById(R.id.cv_accessibility);
         CardView cvAdb = findViewById(R.id.cv_adb); // 触发ADB（Shizuku替换）
         CardView cvScreenShare = findViewById(R.id.cv_screen_share);
+        CardView cv_accessibility = findViewById(R.id.chatactivity2_button); // 修改：跳转ChatActivity2
         CardView cvOverlayTest = findViewById(R.id.cv_overlay_test); // 新增：悬浮窗测试
         CardView cvPowerKeyTest = findViewById(R.id.cv_power_key_test); // 新增：电源键测试
         CardView cvBackgroundKeep = findViewById(R.id.cv_background_keep); // 新增：后台保活
@@ -70,6 +71,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         cvAccessibility.setOnClickListener(this);
         cvAdb.setOnClickListener(this);
         cvScreenShare.setOnClickListener(this); // 卡片点击切换开关
+        cv_accessibility.setOnClickListener(this); // 修改：跳转ChatActivity2
         cvOverlayTest.setOnClickListener(this);
         cvPowerKeyTest.setOnClickListener(this);
         cvBackgroundKeep.setOnClickListener(this);
@@ -127,6 +129,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }else if (id == R.id.cv_text_to_voice_test) {
             // 跳转到文字转语音测试页面
             startActivity(new Intent(this, TextToSpeechActivity.class));
+        }else if (id == R.id.chatactivity2_button) {
+            // 修改：跳转到ChatActivity2页面
+            startActivity(new Intent(this, ChatActivity2.class));
         }
     }
 

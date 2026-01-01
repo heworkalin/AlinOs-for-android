@@ -273,4 +273,32 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             db.close();
         }
     }
+
+        // ====== 新增：更新消息内容（修复找不到方法错误）======
+    public void updateRecordContent(long recordId, String newContent) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("content", newContent); // 对应chat_record表的content字段
+        db.update("chat_record", values, "id = ?", new String[]{String.valueOf(recordId)});
+        db.close();
+    }
+
+    // ====== 新增：根据ID获取消息内容（修复找不到方法错误）======
+    public String getRecordContentById(long recordId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        String content = "";
+        Cursor cursor = db.query(
+                "chat_record", 
+                new String[]{"content"}, 
+                "id=?", 
+                new String[]{String.valueOf(recordId)}, 
+                null, null, null
+        );
+        if (cursor.moveToFirst()) {
+            content = cursor.getString(cursor.getColumnIndexOrThrow("content"));
+        }
+        cursor.close();
+        db.close();
+        return content;
+    }
 }
