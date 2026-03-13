@@ -46,6 +46,10 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
     private static final int AGGREGATE_THRESHOLD = 8;
     // 超时兜底：200ms没推送就强制更UI，避免攒批过久
     private static final long PUSH_TIMEOUT = 200;
+    // 超时管理常量（从ChatActivity迁移）
+    private static final long STREAM_TIMEOUT_TIPS_DELAY = 3000;      // 3秒：轻提示（无影响）
+    private static final long STREAM_FINAL_TIMEOUT = 480000;         // 8分钟：全局总超时
+    private static final long STREAM_CHUNK_INTERVAL_TIMEOUT = 180000; // 3分钟：相邻分片间隔超时
 
     private Context mContext;
     private ConfigBean mConfig;
@@ -55,6 +59,16 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
     private long mLastPushTime; // 最后一次推送时间
     private OkHttpClient mOkHttpClient;
     private Call mCurrentCall; // 用于取消请求
+    // 超时管理字段（从ChatActivity迁移）
+    private Handler mTimeoutHandler;
+    private Runnable mTimeoutTipsRunnable;
+    private Runnable mFinalTimeoutRunnable;
+    private Runnable mIntervalTimeoutRunnable;
+    private ChatStreamEventBus.StreamEventListener mStreamEventListener;
+    private int mSessionId;
+    private long mLastChunkReceiveTime = 0L;
+    private boolean mIsFirstChunkReceived = false;
+    private boolean mIsTimeoutTipShowed = false;
 
     // 构造器：初始化OkHttp（核心改造）
     public OpenAIStreamNetHelper(Context context, ConfigBean config) {
@@ -77,6 +91,10 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
                 .build();
 
         Log.d(TAG, "初始化流式助手，配置：type=" + config.getType() + ", url=" + config.getServerUrl());
+
+        // 初始化超时管理
+        mTimeoutHandler = new Handler(Looper.getMainLooper());
+        initTimeoutRunnables();
     }
 
     // ========== 接口实现（保留） ==========
@@ -112,6 +130,72 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
         this.mConfig = config;
     }
 
+    // ========== 超时管理方法 ==========
+    private void initTimeoutRunnables() {
+        // 1. 3秒轻提示
+        mTimeoutTipsRunnable = () -> {
+            if (!mIsStreamRunning || mIsTimeoutTipShowed) return;
+            Log.d(TAG, "流式请求3秒未收到分片，轻提示");
+            mIsTimeoutTipShowed = true;
+            showToast("流式请求已发送，正在等待响应...");
+        };
+
+        // 2. 3分钟间隔超时（每30秒检查一次）
+        mIntervalTimeoutRunnable = () -> {
+            if (!mIsStreamRunning || !mIsFirstChunkReceived) return;
+            long currentTime = System.currentTimeMillis();
+            if ((currentTime - mLastChunkReceiveTime) > STREAM_CHUNK_INTERVAL_TIMEOUT) {
+                Log.e(TAG, "上下文断开异常：相邻分片接收间隔超3分钟");
+                if (mStreamEventListener != null) {
+                    mStreamEventListener.onStreamEvent("stream_chat",
+                            ChatStreamEventBus.StreamEventData.buildError("[断开异常] 上下文缓存更新超时，相邻分片接收间隔超过3分钟，连接断开"));
+                }
+                cancelStream();
+            } else {
+                // 继续检查
+                mTimeoutHandler.postDelayed(mIntervalTimeoutRunnable, 30000);
+            }
+        };
+
+        // 3. 8分钟全局总超时
+        mFinalTimeoutRunnable = () -> {
+            if (!mIsStreamRunning) return;
+            Log.e(TAG, "流式请求8分钟全局总超时");
+            if (mStreamEventListener != null) {
+                mStreamEventListener.onStreamEvent("stream_chat",
+                        ChatStreamEventBus.StreamEventData.buildError("[全局超时异常] 流式请求8分钟总超时，无完整响应"));
+            }
+            cancelStream();
+        };
+    }
+
+    // 启动超时检测
+    private void startTimeoutDetection() {
+        mIsTimeoutTipShowed = false;
+        mLastChunkReceiveTime = 0L;
+        mIsFirstChunkReceived = false;
+
+        mTimeoutHandler.postDelayed(mTimeoutTipsRunnable, STREAM_TIMEOUT_TIPS_DELAY);
+        mTimeoutHandler.postDelayed(mFinalTimeoutRunnable, STREAM_FINAL_TIMEOUT);
+        // 间隔超时需要定期检查，每30秒检查一次
+        mTimeoutHandler.postDelayed(mIntervalTimeoutRunnable, 30000); // 30秒后开始检查间隔超时
+    }
+
+    // 停止超时检测
+    private void stopTimeoutDetection() {
+        mTimeoutHandler.removeCallbacks(mTimeoutTipsRunnable);
+        mTimeoutHandler.removeCallbacks(mFinalTimeoutRunnable);
+        mTimeoutHandler.removeCallbacks(mIntervalTimeoutRunnable);
+        // 清理引用
+        mStreamEventListener = null;
+    }
+
+    // 重置间隔超时计时器（收到分片时调用）
+    private void resetIntervalTimeout() {
+        mTimeoutHandler.removeCallbacks(mIntervalTimeoutRunnable);
+        mTimeoutHandler.postDelayed(mIntervalTimeoutRunnable, 30000); // 重新开始检查
+    }
+
     // ========== 核心：流式请求（替换为OkHttp） ==========
     public void sendStreamMessage(int sessionId, String userMessage, ChatStreamEventBus.StreamEventListener listener) {
         // 前置校验
@@ -124,11 +208,18 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
             return;
         }
 
+        // 保存listener和sessionId用于超时管理
+        mStreamEventListener = listener;
+        mSessionId = sessionId;
+
         // 重置状态
         mIsStreamRunning = true;
         mStreamCache.setLength(0);
         mChunkBuffer.setLength(0);
         mLastPushTime = System.currentTimeMillis();
+
+        // 启动超时检测
+        startTimeoutDetection();
 
         // 构建请求体
         String requestBody = buildRequestBody(userMessage);
@@ -161,6 +252,7 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
                 if (!mIsStreamRunning) return;
                 Log.e(TAG, "流式请求失败：", e);
                 listener.onStreamEvent("stream_chat", ChatStreamEventBus.StreamEventData.buildError("请求失败：" + e.getMessage()));
+                stopTimeoutDetection();
                 mIsStreamRunning = false;
             }
 
@@ -172,6 +264,7 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
                         Log.e(TAG, errorMsg);
                         listener.onStreamEvent("stream_chat", ChatStreamEventBus.StreamEventData.buildError(errorMsg));
                     }
+                    stopTimeoutDetection();
                     mIsStreamRunning = false;
                     return;
                 }
@@ -180,6 +273,7 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
                 ResponseBody responseBody = response.body();
                 if (responseBody == null) {
                     listener.onStreamEvent("stream_chat", ChatStreamEventBus.StreamEventData.buildError("响应体为空"));
+                    stopTimeoutDetection();
                     mIsStreamRunning = false;
                     return;
                 }
@@ -207,6 +301,14 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
                         mStreamCache.append(chunkContent);
                         long currentTime = System.currentTimeMillis();
 
+                        // 更新分片接收时间（用于间隔超时检测）
+                        mLastChunkReceiveTime = currentTime;
+                        if (!mIsFirstChunkReceived) {
+                            mIsFirstChunkReceived = true;
+                        }
+                        // 重置间隔超时计时器
+                        resetIntervalTimeout();
+
                         if (mChunkBuffer.length() >= AGGREGATE_THRESHOLD || (currentTime - mLastPushTime) >= PUSH_TIMEOUT) {
                             listener.onStreamEvent("stream_chat",
                                     ChatStreamEventBus.StreamEventData.buildChunk(sessionId, mChunkBuffer.toString()));
@@ -228,6 +330,7 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
                 listener.onStreamEvent("stream_chat",
                         ChatStreamEventBus.StreamEventData.buildFinish(sessionId, mStreamCache.toString()));
 
+                stopTimeoutDetection();
                 mIsStreamRunning = false;
                 responseBody.close();
             }
@@ -269,6 +372,7 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
     // 取消流式请求（修复内存泄漏）
     public void cancelStream() {
         Log.d(TAG, "取消流式请求");
+        stopTimeoutDetection();
         mIsStreamRunning = false;
         if (mCurrentCall != null && !mCurrentCall.isCanceled()) {
             mCurrentCall.cancel();

@@ -11,17 +11,17 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.List;
 
-import alin.android.alinos.ChatActivity2;
-import alin.android.alinos.ChatActivity2.ChatMessage;
+import alin.android.alinos.ChatActivity;
+import alin.android.alinos.ChatActivity.ChatMessage;
 import alin.android.alinos.R;
 
 // 聊天适配器
 public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private Context mContext;
-    private List<ChatActivity2.ChatMessage> mMessageList;
+    private List<ChatActivity.ChatMessage> mMessageList;
 
     // 构造方法
-    public ChatAdapter(Context context, List<ChatActivity2.ChatMessage> messageList) {
+    public ChatAdapter(Context context, List<ChatActivity.ChatMessage> messageList) {
         this.mContext = context;
         this.mMessageList = messageList;
     }
@@ -29,7 +29,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     // 刷新单条AI消息（流式增量更新）
     public void updateAiMessage(int position, String newContent, boolean isLoading) {
         if (position >= 0 && position < mMessageList.size()) {
-            ChatActivity2.ChatMessage msg = mMessageList.get(position);
+            ChatActivity.ChatMessage msg = mMessageList.get(position);
             if (msg.type == ChatMessage.TYPE_AI) {
                 msg.content = newContent;
                 msg.isLoading = isLoading;
