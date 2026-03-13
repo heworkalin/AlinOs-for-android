@@ -15,4 +15,7 @@
     <string name="background_keep_title">后台饱和配置</string>
     <string name="voice_to_text_test_title">语音转文字测试</string>
     <string name="text_to_voice_test_title">文字转语音测试</string>
+    <string name="mcp_main_name">mcp配置中心</string>
+    <string name="AlinOs_main_name">AI 助手配置中心</string>
+    <string name="not_enablied">未开启</string>
 </resources>

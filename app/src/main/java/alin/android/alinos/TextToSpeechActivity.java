@@ -6,7 +6,6 @@ import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
@@ -25,8 +24,8 @@ public class TextToSpeechActivity extends AppCompatActivity {
     private Button btn_test_cn, btn_test_en, btn_test_mix, btn_clear, btn_start_speak, btn_stop_speak;
 
     // TTS默认配置（可根据需求调整，自动生效）
-    private float DEFAULT_SPEECH_RATE = 1.0f; // 语速（0.5-2.0，1.0为正常）
-    private float DEFAULT_PITCH = 1.0f;       // 音调（0.5-2.0，1.0为正常）
+    private final float DEFAULT_SPEECH_RATE = 1.0f; // 语速（0.5-2.0，1.0为正常）
+    private final float DEFAULT_PITCH = 1.0f;       // 音调（0.5-2.0，1.0为正常）
     private Locale currentLocale = Locale.SIMPLIFIED_CHINESE; // 默认语言
 
     @Override
@@ -82,7 +81,7 @@ public class TextToSpeechActivity extends AppCompatActivity {
     private void checkTtsEngineAvailability() {
         Log.d(TAG, "🔍 开始检查TTS引擎（优先默认引擎）");
 
-        String defaultEngineName = null;
+        String defaultEngineName;
         List<TextToSpeech.EngineInfo> engineList = null;
         boolean hasAvailableEngine = false;
 

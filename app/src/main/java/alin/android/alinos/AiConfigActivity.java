@@ -74,20 +74,17 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
         RadioButton rbOllama = dialogView.findViewById(R.id.rb_ollama);
         EditText etServer = dialogView.findViewById(R.id.et_server);
         EditText etKey = dialogView.findViewById(R.id.et_key);
-        EditText etModel = dialogView.findViewById(R.id.et_model); // 模型输入框
-        Button btnDownloadModel = dialogView.findViewById(R.id.btn_download_model); // Ollama下载按钮
+        EditText etModel = dialogView.findViewById(R.id.et_model);
+        Button btnDownloadModel = dialogView.findViewById(R.id.btn_download_model);
         TextView tvKeyTitle = dialogView.findViewById(R.id.tv_key_label);
 
         boolean isEdit = config.getId() != 0;
 
-        // -------------------- 类型切换逻辑 --------------------
+        // 类型切换逻辑（保持不变）
         rgType.setOnCheckedChangeListener((group, checkedId) -> {
-            // 控制API密钥显示
-            tvKeyTitle.setVisibility(checkedId == R.id.rb_ollama ? View.GONE : View.VISIBLE); // 标题隐藏
+            tvKeyTitle.setVisibility(checkedId == R.id.rb_ollama ? View.GONE : View.VISIBLE);
             etKey.setVisibility(checkedId == R.id.rb_ollama ? View.GONE : View.VISIBLE);
-            // 控制Ollama下载按钮显示
             btnDownloadModel.setVisibility(checkedId == R.id.rb_ollama ? View.VISIBLE : View.GONE);
-            // 调整输入框提示
             if (checkedId == R.id.rb_openai) {
                 etModel.setHint("如gpt-3.5-turbo/gpt-4");
                 etServer.setHint("OpenAI服务器地址（如https://api.openai.com）");
@@ -97,33 +94,30 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
             }
         });
 
-        // -------------------- 编辑模式回显数据 --------------------
+        // 编辑模式回显数据（保持不变）
         if (isEdit) {
-            // 回显类型
             if (config.getType().equals("OpenAI")) {
                 rbOpenai.setChecked(true);
-                tvKeyTitle.setVisibility(View.VISIBLE); // 显示标题
+                tvKeyTitle.setVisibility(View.VISIBLE);
                 etKey.setVisibility(View.VISIBLE);
                 btnDownloadModel.setVisibility(View.GONE);
             } else {
                 rbOllama.setChecked(true);
-                tvKeyTitle.setVisibility(View.GONE); // 隐藏标题
+                tvKeyTitle.setVisibility(View.GONE);
                 etKey.setVisibility(View.GONE);
                 btnDownloadModel.setVisibility(View.VISIBLE);
             }
-            // 回显服务器、密钥、模型
             etServer.setText(config.getServerUrl());
             etKey.setText(config.getApiKey());
             etModel.setText(config.getModel());
         } else {
-            // 新增模式默认值
             rbOpenai.setChecked(true);
-            tvKeyTitle.setVisibility(View.VISIBLE); // 默认显示标题
+            tvKeyTitle.setVisibility(View.VISIBLE);
             etModel.setHint("gpt-3.5-turbo");
             btnDownloadModel.setVisibility(View.GONE);
         }
 
-        // -------------------- Ollama模型下载按钮点击事件 --------------------
+        // Ollama下载按钮点击事件（保持不变）
         btnDownloadModel.setOnClickListener(v -> {
             String serverUrl = etServer.getText().toString().trim();
             String modelName = etModel.getText().toString().trim();
@@ -135,7 +129,6 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
                 Toast.makeText(this, "请填写要下载的模型名称（如llama3）", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // 调用Ollama API下载模型
             OllamaApiClient.downloadModel(serverUrl, modelName, new OllamaApiClient.OnDownloadListener() {
                 @Override
                 public void onSuccess() {
@@ -149,50 +142,65 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
             });
         });
 
-        // -------------------- 保存逻辑 --------------------
-        new AlertDialog.Builder(this)
+        // -------------------- 修改重点：构建并显示对话框，自定义确定按钮点击 --------------------
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(isEdit ? "编辑AI服务配置" : "添加AI服务配置")
                 .setView(dialogView)
-                .setPositiveButton("保存", (dialog, which) -> {
-                    String type = rgType.getCheckedRadioButtonId() == R.id.rb_openai ? "OpenAI" : "Ollama";
-                    String serverUrl = etServer.getText().toString().trim();
-                    String apiKey = etKey.getText().toString().trim();
-                    String model = etModel.getText().toString().trim(); // 获取手动填写的模型名称
+                .setNegativeButton("取消", null);  // 取消按钮使用默认行为（关闭）
 
-                    // 输入校验
-                    if (serverUrl.isEmpty()) {
-                        Toast.makeText(this, "服务器地址不能为空", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    if (model.isEmpty()) {
-                        Toast.makeText(this, "模型名称不能为空", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    if (type.equals("OpenAI") && apiKey.isEmpty()) {
-                        Toast.makeText(this, "OpenAI密钥不能为空", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
+        // 先设置确定按钮文本，监听器留空（后续覆盖）
+        builder.setPositiveButton("保存", null);
+        AlertDialog dialog = builder.create();
 
-                    // 新增/编辑区分
-                    if (isEdit) {
-                        config.setType(type);
-                        config.setServerUrl(serverUrl);
-                        config.setApiKey(apiKey);
-                        config.setModel(model); // 保存模型名称
-                        mDbHelper.updateConfig(config);
-                        Toast.makeText(this, "配置修改成功", Toast.LENGTH_SHORT).show();
-                    } else {
-                        boolean isDefault = mConfigList.isEmpty();
-                        ConfigBean newConfig = new ConfigBean(type, serverUrl, apiKey, model, isDefault);
-                        mDbHelper.addConfig(newConfig);
-                        Toast.makeText(this, "配置添加成功", Toast.LENGTH_SHORT).show();
-                    }
+        // 对话框显示后，获取确定按钮并设置自定义点击监听
+        dialog.setOnShowListener(dialogInterface -> {
+            Button positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            positiveButton.setOnClickListener(v -> {
+                // 获取输入内容
+                String type = rgType.getCheckedRadioButtonId() == R.id.rb_openai ? "OpenAI" : "Ollama";
+                String serverUrl = etServer.getText().toString().trim();
+                String apiKey = etKey.getText().toString().trim();
+                String model = etModel.getText().toString().trim();
 
-                    // 刷新列表
-                    refreshConfigList();
-                })
-                .setNegativeButton("取消", null)
-                .show();
+                // 输入校验（失败时只弹Toast，不关闭对话框）
+                if (model.isEmpty()) {
+                    Toast.makeText(AiConfigActivity.this, "模型名称不能为空", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (serverUrl.isEmpty()) {
+                    Toast.makeText(AiConfigActivity.this, "服务器地址不能为空", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                
+                if (type.equals("OpenAI") && apiKey.isEmpty()) {
+                    Toast.makeText(AiConfigActivity.this, "OpenAI密钥不能为空", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                // 校验通过，执行保存操作
+                if (isEdit) {
+                    config.setType(type);
+                    config.setServerUrl(serverUrl);
+                    config.setApiKey(apiKey);
+                    config.setModel(model);
+                    mDbHelper.updateConfig(config);
+                    Toast.makeText(AiConfigActivity.this, "配置修改成功", Toast.LENGTH_SHORT).show();
+                } else {
+                    boolean isDefault = mConfigList.isEmpty();
+                    ConfigBean newConfig = new ConfigBean(type, serverUrl, apiKey, model, isDefault);
+                    mDbHelper.addConfig(newConfig);
+                    Toast.makeText(AiConfigActivity.this, "配置添加成功", Toast.LENGTH_SHORT).show();
+                }
+
+                // 刷新列表
+                refreshConfigList();
+
+                // 保存成功后关闭对话框
+                dialog.dismiss();
+            });
+        });
+
+        dialog.show();
     }
 
     // 刷新配置列表
