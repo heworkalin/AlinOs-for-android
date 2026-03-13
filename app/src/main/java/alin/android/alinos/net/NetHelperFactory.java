@@ -23,12 +23,13 @@ public class NetHelperFactory {
         switch (type) {
             case "openai":
                 return new OpenAINetHelper(context, config);
-            case "ollama":
-                // 稍后实现Ollama支持
-                Log.w(TAG, "暂未实现Ollama同步助手");
-                return null;
             case "openai_stream":
                 return new OpenAIStreamNetHelper(context, config);
+            case "ollama":
+                return new OllamaNetHelper(context, config);
+            case "ollama_stream":
+                Log.w(TAG, "待实现");
+                return null;
             default:
                 Log.w(TAG, "不支持的同步助手类型：" + type);
                 return null;
