@@ -373,14 +373,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                 mCurrentSessionId, 1, mCurrentConfig.getType() + "[流式]", "", System.currentTimeMillis()
         );
         mStreamRecordId = mChatDbHelper.addRecord(loadingRecord);
-
-        // 新增校验：确保recordId生成成功
-        if (mStreamRecordId == -1) {
-            Log.e(TAG, "流式记录入库失败：addRecord返回-1");
-            Toast.makeText(this, "流式记录入库失败", Toast.LENGTH_SHORT).show();
-        } else {
-            Log.d(TAG, "流式loading记录入库成功，recordId=" + mStreamRecordId);
-        }
+        Log.d(TAG, "流式loading记录入库，recordId=" + mStreamRecordId);
 
         // 标记流式加载中
         isStreamLoading = true;
