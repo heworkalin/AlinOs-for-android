@@ -52,9 +52,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         CardView cvAccessibility = findViewById(R.id.cv_accessibility);
         CardView cvAdb = findViewById(R.id.cv_adb); // 触发ADB（Shizuku替换）
         CardView cvScreenShare = findViewById(R.id.cv_screen_share);
-        CardView cv_accessibility = findViewById(R.id.chatactivity2_button); // 修改：跳转ChatActivity2
+        CardView cv_ChatActivity = findViewById(R.id.cv_ChatActivity); // 修改：跳转ChatActivity2
         CardView cvOverlayTest = findViewById(R.id.cv_overlay_test); // 新增：悬浮窗测试
-        CardView cvPowerKeyTest = findViewById(R.id.cv_power_key_test); // 新增：电源键测试
         CardView cvBackgroundKeep = findViewById(R.id.cv_background_keep); // 新增：后台保活
         CardView cvMcpConfig = findViewById(R.id.cv_mcp_config); // 新增：MCP配置
         CardView cvVoiceToTextTest = findViewById(R.id.cv_voice_to_text_test); // 新增：语音转文字测试
@@ -71,9 +70,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         cvAccessibility.setOnClickListener(this);
         cvAdb.setOnClickListener(this);
         cvScreenShare.setOnClickListener(this); // 卡片点击切换开关
-        cv_accessibility.setOnClickListener(this); // 修改：跳转ChatActivity2
+        cv_ChatActivity.setOnClickListener(this); // 修改：跳转ChatActivity2
         cvOverlayTest.setOnClickListener(this);
-        cvPowerKeyTest.setOnClickListener(this);
         cvBackgroundKeep.setOnClickListener(this);
         cvMcpConfig.setOnClickListener(this);
         cvVoiceToTextTest.setOnClickListener(this);
@@ -114,9 +112,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         } else if (id == R.id.cv_overlay_test) {
             // 悬浮窗权限测试，长按电源键调用AI测试
             testOverlayPermission();
-        } else if (id == R.id.cv_power_key_test) {
-            // 会话AI测试
-            testPowerKeyTrigger();
+        } else if (id == R.id.cv_ChatActivity ) {
+            // 会话AI测试，跳转到ChatActivity2
+            startActivity(new Intent(this, ChatActivity.class));
+            Toast.makeText(this, "已唤起AI助手会话", Toast.LENGTH_SHORT).show();
+        
         } else if (id == R.id.cv_background_keep) {
             // 后台饱和配置（保活引导）
             guideBackgroundKeepAlive();
@@ -129,10 +129,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }else if (id == R.id.cv_text_to_voice_test) {
             // 跳转到文字转语音测试页面
             startActivity(new Intent(this, TextToSpeechActivity.class));
-        }else if (id == R.id.chatactivity2_button) {
-            // 修改：跳转到ChatActivity2页面
-            startActivity(new Intent(this, ChatActivity2.class));
         }
+
     }
 
     /**
@@ -207,14 +205,7 @@ private void testOverlayPermission() {
         Toast.makeText(this, "悬浮窗已显示", Toast.LENGTH_SHORT).show();
     }
 }
-    /**
-     * 测试电源键唤起AI
-     */
-    private void testPowerKeyTrigger() {
-
-        startActivity(new Intent(this, ChatActivity.class));
-        Toast.makeText(this, "已唤起AI助手会话", Toast.LENGTH_SHORT).show();
-        }
+ 
 
     /**
      * 引导后台保活配置

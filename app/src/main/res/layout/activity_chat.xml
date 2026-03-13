@@ -17,7 +17,7 @@
         <!-- 状态栏占位 -->
         <Space
             android:layout_width="match_parent"
-            android:layout_height="30dp" />
+            android:layout_height="15dp" />
 
         <!-- 标题栏 - 优化图标和添加模型切换 -->
         <LinearLayout

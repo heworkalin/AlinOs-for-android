@@ -189,10 +189,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                     if (holder instanceof ChatAdapter.AiViewHolder) {
                         ((ChatAdapter.AiViewHolder) holder).tvLoadingTips.setText("响应时间较长，请耐心等待...");
                     }
-                });
-            }
-        };
-
 
     // 初始化会话列表
     private void initSessionList() {
@@ -470,7 +466,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
             Toast.makeText(this, "流式回复完成（已保存到数据库）", Toast.LENGTH_SHORT).show();
         }
     }
-
 
     // 流式完成的处理方法
     private void handleStreamFinish() {
@@ -905,8 +900,12 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     public void setKeyboardShowing(boolean keyboardShowing) {
         isKeyboardShowing = keyboardShowing;
     }
+});
+            }
+        };
 
-    // -------------------- 会话列表适配器 --------------------
+
+// -------------------- 会话列表适配器 --------------------
     private static class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionViewHolder> {
         private final List<ChatSessionBean> mList;
         private final OnSessionSelectListener mSelectListener;
