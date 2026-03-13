@@ -83,6 +83,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     private boolean isStreamLoading = false;
     private boolean isStreamFinished = false;   // 标记流式是否真正完成
     private final Handler mStreamHandler = new Handler(Looper.getMainLooper()); // 用于错误重试
+    private int retryCount = 0; // 503错误重试计数器
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,8 +100,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         initViews();
         // 初始化适配器
         initAdapter();
-        // 初始化超时Runnable
-        initTimeoutRunnable();
         // 初始化会话列表
         initSessionList();
 
@@ -184,11 +183,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         // 会话列表适配器
         rvSessionList.setLayoutManager(new LinearLayoutManager(this));
     }
-
-    // 初始化超时提示Runnable
-                    if (holder instanceof ChatAdapter.AiViewHolder) {
-                        ((ChatAdapter.AiViewHolder) holder).tvLoadingTips.setText("响应时间较长，请耐心等待...");
-                    }
 
     // 初始化会话列表
     private void initSessionList() {
@@ -900,10 +894,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     public void setKeyboardShowing(boolean keyboardShowing) {
         isKeyboardShowing = keyboardShowing;
     }
-});
-            }
-        };
-
 
 // -------------------- 会话列表适配器 --------------------
     private static class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionViewHolder> {
