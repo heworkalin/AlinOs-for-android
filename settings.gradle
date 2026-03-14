@@ -25,9 +25,12 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         mavenLocal()
-        // maven { url "https://jitpack.io" } // 注释保留，后续需要可启用
+        maven { url "https://jitpack.io" } // 注释保留，后续需要可启用
     }
 }
 
 rootProject.name = "AlinOs"
 include ':app'
+include ":terminal-view"
+include ":termux-shared"
+include ":terminal-emulator"
