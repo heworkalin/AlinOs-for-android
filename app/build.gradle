@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'alin.android.alinos'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "alin.android.alinos"
         minSdk 24
-        targetSdk 34
+        targetSdk 36
         versionCode 1
         versionName "1.0"
 
@@ -54,7 +54,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'com.airbnb.android:lottie:6.1.0'
-    implementation 'androidx.core:core:1.12.0'
+    implementation 'androidx.core:core:1.17.0'
     implementation 'androidx.media3:media3-exoplayer:1.2.0'
     implementation 'androidx.media3:media3-extractor:1.2.0'
     implementation 'androidx.media3:media3-datasource-okhttp:1.2.0'
@@ -71,4 +71,7 @@ dependencies {
 
     // ✅ 移除单独的 JNA 依赖，Vosk AAR 已经包含了正确的 JNA
     // implementation 'net.java.dev.jna:jna:5.14.0@aar'
+    implementation 'androidx.preference:preference:1.2.0'
+    implementation project(':termux-shared')
+    implementation project(':terminal-view')
 }

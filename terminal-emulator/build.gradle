@@ -1,0 +1,26 @@
+apply plugin: 'com.android.library'
+
+android {
+    // 核心修改 1：将 namespace 移至 android 节点直接子属性（符合 AGP 官方规范）
+    namespace "com.termux.emulator"
+    compileSdkVersion 36
+
+    // 核心修改 2：删除过时的 buildToolsVersion "21.1.0" 配置（消除构建警告）
+    // AGP 自动匹配兼容版本，无需手动配置
+
+    defaultConfig {
+        minSdk 23
+        targetSdk 36
+
+        // 核心修改 3：升级 targetSdk 至 34（与 compileSdkVersion 差距缩小，提升兼容性）
+
+        versionCode 1020
+        versionName "0.119.0-beta.1"
+    }
+}
+
+dependencies {
+    // 核心修改 4：修正 JAR 通配符（添加 *），使其能正确匹配 provider 目录下的所有 JAR 文件
+    compileOnly fileTree(dir: 'provider', include: ['*.jar'])
+    implementation "androidx.annotation:annotation:1.9.1"
+}

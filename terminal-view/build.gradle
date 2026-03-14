@@ -1,0 +1,31 @@
+// 核心修改 1：将应用模块插件替换为库模块插件（com.android.library），适配子模块被依赖的场景
+apply plugin: 'com.android.library'
+
+android {
+    // 核心修改 2：添加 AGP 7.0+ 必填的 namespace，与模块功能统一（com.termux.view）
+    // 这是解决「Namespace not specified」报错的关键
+    namespace "com.termux.view"
+    // 保留 compileSdkVersion 36，与主模块保持一致，提升兼容性
+    compileSdkVersion 36
+
+    // 核心修改 3：删除过时的 buildToolsVersion "21.1.0" 配置
+    // AGP 7.0+ 自动匹配兼容版本，手动配置低版本会引发冲突，直接删除
+
+    defaultConfig {
+        minSdk 23
+
+        // 核心修改 4：库模块无需配置 applicationId（仅应用模块需要），直接删除该配置
+        // applicationId "com.termux.view" （库模块无此属性，配置无效）
+        // 可选：添加 targetSdkVersion 36，与 compileSdkVersion 保持一致，提升兼容性
+        targetSdkVersion 36
+        versionCode 1020
+        versionName "0.119.0-beta.1"
+    }
+}
+
+dependencies {
+    // 核心修改 5：修正 JAR 文件匹配通配符（添加 *），使其能正确匹配 provider 目录下的所有 JAR 文件
+    compileOnly fileTree(dir: 'provider', include: ['.jar'])
+    implementation "androidx.annotation:annotation:1.9.1"
+    api project(":terminal-emulator")
+}
