@@ -55,6 +55,7 @@ public class FloatWindowManager {
     private static final int RESPONSE_LENGTH_THRESHOLD = 100;
     private static final int POPUP_WIDTH_RESERVE = 300;
     private static final int POPUP_AUTO_CLOSE_DELAY = 5000;
+    private static final int DRAG_THRESHOLD = 10; // 拖动阈值（像素）
     
     private static FloatWindowManager instance;
     private final Context context;
@@ -89,12 +90,12 @@ public class FloatWindowManager {
 
     // 语音识别相关
     private VoiceRecognitionTool voiceRecognitionTool;
-    private boolean isRecording = false;
-    private boolean isRecognizing = false;
+    private volatile boolean isRecording = false;
+    private volatile boolean isRecognizing = false;
     private long recordingStartTime = 0;
     private String currentModel = "vosk-model-small-cn-0.22";
     private boolean hasRecordPermission = false;
-    private boolean hasValidRecognitionResult = false;
+    private volatile boolean hasValidRecognitionResult = false;
     
     // 线程安全的识别结果
     private String currentRecognitionResult = "";
@@ -102,6 +103,7 @@ public class FloatWindowManager {
     // 位置记录
     private float startX, startY;
     private float touchX, touchY;
+    private boolean isDragging = false;
 
     private FloatWindowManager(Context context) {
         this.context = context.getApplicationContext();
@@ -174,10 +176,29 @@ public class FloatWindowManager {
 
             @Override
             public void onModelError(String errorMessage) {
+                // 同步更新状态
+                resultLock.lock();
+                try {
+                    isRecognizing = false;
+                    isRecording = false;
+                } finally {
+                    resultLock.unlock();
+                }
+
+                // 取消可能正在进行的识别
+                if (voiceRecognitionTool != null) {
+                    voiceRecognitionTool.cancelRecognition();
+                }
+
+                // 立即启用按钮
+                mainHandler.post(() -> {
+                    setModeButtonsEnabled(true);
+                });
+
                 mainHandler.post(() -> {
                     Toast.makeText(context, "模型加载失败: " + errorMessage, Toast.LENGTH_LONG).show();
                     Log.e(TAG, "模型错误: " + errorMessage);
-                    resetAllStates();
+                    resetRecognitionStatesOnly();
                 });
             }
 
@@ -248,48 +269,106 @@ public class FloatWindowManager {
 
             @Override
             public void onFinalResult(String text, String jsonRaw) {
+                // 同步更新识别状态和结果
+                boolean shouldProcess = false;
+                boolean hasValidResult = false;
+                String finalResult = "";
+
                 resultLock.lock();
                 try {
+                    // 记录当前状态以便日志
+                    boolean wasRecording = isRecording;
+                    boolean wasRecognizing = isRecognizing;
+
+                    Log.d(TAG, "onFinalResult调用 - 录音状态: " + wasRecording + ", 识别状态: " + wasRecognizing +
+                          ", 结果: " + (TextUtils.isEmpty(text) ? "空" : text));
+
+                    // 无论当前状态如何，都处理最终结果（防止状态不一致）
+                    // 总是更新识别状态为false
+                    isRecognizing = false;
+
                     Log.d(TAG, "最终识别结果: " + (TextUtils.isEmpty(text) ? "无" : text));
-                    
+
                     // 只更新非空结果，忽略cancel触发的空结果
                     if (!TextUtils.isEmpty(text)) {
                         currentRecognitionResult = text;
                         hasValidRecognitionResult = true;
+                        hasValidResult = true;
+                        finalResult = text;
                     } else if (!hasValidRecognitionResult) {
                         currentRecognitionResult = "";
+                        finalResult = "";
                     } else {
                         Log.d(TAG, "忽略空结果，保留之前的有效结果: " + currentRecognitionResult);
+                        hasValidResult = true;
+                        finalResult = currentRecognitionResult;
                     }
+
+                    shouldProcess = true;
                 } finally {
                     resultLock.unlock();
                 }
-                
+
+                if (!shouldProcess) {
+                    Log.w(TAG, "onFinalResult跳过处理");
+                    return;
+                }
+
+                // 在主线程中执行所有UI更新（确保原子性）
+                boolean finalHasValidResult = hasValidResult;
+                String finalResult2 = finalResult;
+                var ref = new Object() {
+                    final String finalResult1 = finalResult2;
+                };
                 mainHandler.post(() -> {
+                    // 立即启用按钮
+                    setModeButtonsEnabled(true);
+
                     // 切换到输入模式并填充结果
-                    switchMode(MODE_INPUT, hasValidRecognitionResult);
-                    
+                    switchMode(MODE_INPUT, finalHasValidResult);
+
                     // 提示结果（日志与Toast信息一致）
-                    if (!TextUtils.isEmpty(currentRecognitionResult)) {
-                        Toast.makeText(context, "识别完成: " + currentRecognitionResult, Toast.LENGTH_SHORT).show();
-                        Log.d(TAG, "识别完成: " + currentRecognitionResult);
+                    if (!TextUtils.isEmpty(ref.finalResult1)) {
+                        Toast.makeText(context, "识别完成: " + ref.finalResult1, Toast.LENGTH_SHORT).show();
+                        Log.d(TAG, "识别完成: " + ref.finalResult1);
                     } else {
+                        // 只有在确实有识别过程但没有结果时才显示提示
                         String emptyTip = "未识别到有效语音（可能音量过小或模型不匹配）";
                         Toast.makeText(context, emptyTip, Toast.LENGTH_SHORT).show();
                         Log.d(TAG, emptyTip);
                     }
-                    
-                    resetAllStates();
+
+                    // 重要：识别完成后只重置识别相关状态，不清除输入模式状态
+                    // 不清除输入框焦点，不隐藏键盘（用户可能需要输入或编辑）
+                    resetRecognitionStatesOnly();
                 });
             }
 
             @Override
             public void onRecognitionError(String errorMessage) {
+                // 同步更新识别状态
+                resultLock.lock();
+                try {
+                    isRecognizing = false;
+                } finally {
+                    resultLock.unlock();
+                }
+
+                // 取消可能正在进行的识别
+                if (voiceRecognitionTool != null) {
+                    voiceRecognitionTool.cancelRecognition();
+                }
+
+                // 立即启用按钮
+                mainHandler.post(() -> {
+                    setModeButtonsEnabled(true);
+                });
+
                 mainHandler.post(() -> {
                     Log.e(TAG, "识别错误: " + errorMessage);
                     Toast.makeText(context, "识别错误: " + errorMessage, Toast.LENGTH_SHORT).show();
                     switchMode(MODE_INPUT, false);
-                    resetAllStates();
+                    resetRecognitionStatesOnly();
                 });
             }
 
@@ -311,7 +390,8 @@ public class FloatWindowManager {
             Log.d(TAG, "已拥有录音权限");
         } else {
             hasRecordPermission = false;
-            Log.d(TAG, "未拥有录音权限，需请求");
+            Log.d(TAG, "未拥有录音权限");
+            // 不再自动请求权限，由MainActivity处理权限请求
         }
     }
 
@@ -442,32 +522,55 @@ public class FloatWindowManager {
     }
 
     private void setupListeners() {
-        // 核心修复：拖动逻辑返回true，消费事件
+        // 优化拖动逻辑：允许按钮点击，只有真正拖动时才消费事件
+        // 修改：只在录音时禁止拖动，识别过程中允许移动
         floatView.setOnTouchListener((v, event) -> {
-            if (isRecognizing || isRecording) return false;
-            
+            if (isRecording) return false;
+
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     startX = event.getRawX();
                     startY = event.getRawY();
                     touchX = layoutParams.x;
                     touchY = layoutParams.y;
-                    break;
+                    isDragging = false;
+                    return false; // 让子视图有机会处理点击事件
+
                 case MotionEvent.ACTION_MOVE:
-                    float dx = event.getRawX() - startX;
-                    float dy = event.getRawY() - startY;
-                    layoutParams.x = (int) (touchX + dx);
-                    layoutParams.y = (int) (touchY + dy);
-                    try {
-                        if (floatView != null && floatView.isAttachedToWindow()) {
-                            windowManager.updateViewLayout(floatView, layoutParams);
+                    if (!isDragging) {
+                        // 检查移动距离是否超过阈值
+                        float dx = event.getRawX() - startX;
+                        float dy = event.getRawY() - startY;
+                        float distance = (float) Math.sqrt(dx * dx + dy * dy);
+                        if (distance > DRAG_THRESHOLD) {
+                            isDragging = true;
                         }
-                    } catch (Exception e) {
-                        Log.e(TAG, "移动悬浮窗失败", e);
                     }
-                    break;
+
+                    if (isDragging) {
+                        float dx = event.getRawX() - startX;
+                        float dy = event.getRawY() - startY;
+                        layoutParams.x = (int) (touchX + dx);
+                        layoutParams.y = (int) (touchY + dy);
+                        try {
+                            if (floatView != null && floatView.isAttachedToWindow()) {
+                                windowManager.updateViewLayout(floatView, layoutParams);
+                            }
+                        } catch (Exception e) {
+                            Log.e(TAG, "移动悬浮窗失败", e);
+                        }
+                        return true; // 拖动时消费事件
+                    }
+                    return false; // 未达到拖动阈值，继续传递事件
+
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    isDragging = false;
+                    return false;
+
+                default:
+                    return false;
             }
-            return true; // 修复：返回true消费事件，防止触发下层View
         });
 
         ivClose.setOnClickListener(v -> {
@@ -492,18 +595,44 @@ public class FloatWindowManager {
 
         // 模式切换（增加状态检查）
         ivVoiceMode.setOnClickListener(v -> {
-            if (!isRecognizing && !isRecording) {
+            // 只在录音时禁止切换，识别过程中允许切换（会自动取消识别）
+            if (!isRecording) {
+                // 检查当前是否为输入模式
+                if (currentMode == MODE_INPUT && etInput != null) {
+                    String inputText = etInput.getText().toString();
+                    if (!TextUtils.isEmpty(inputText)) {
+                        // 输入框有内容，提示用户需要清空才能切换
+                        Toast.makeText(context, "请先清空输入框内容才能切换到语音模式", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                }
+                // 如果正在识别，先取消识别
+                if (isRecognizing && voiceRecognitionTool != null) {
+                    voiceRecognitionTool.cancelRecognition();
+                    isRecognizing = false;
+                }
+                // 输入框为空或当前已经是语音模式，切换并重置状态
                 switchMode(MODE_VOICE, false);
+                // 重要：执行和发送按钮一致的重置逻辑，确保状态完全重置
+                resetAllStates();
             } else {
-                Toast.makeText(context, "当前操作中，无法切换模式", Toast.LENGTH_SHORT).show();
+                Toast.makeText(context, "正在录音中，无法切换模式", Toast.LENGTH_SHORT).show();
             }
         });
         
         ivInputMode.setOnClickListener(v -> {
-            if (!isRecognizing && !isRecording) {
+            // 只在录音时禁止切换，识别过程中允许切换（会自动取消识别）
+            if (!isRecording) {
+                // 如果正在识别，先取消识别
+                if (isRecognizing && voiceRecognitionTool != null) {
+                    voiceRecognitionTool.cancelRecognition();
+                    isRecognizing = false;
+                }
                 switchMode(MODE_INPUT, false);
+                // 切换到输入模式时重置识别状态
+                resetRecognitionStatesOnly();
             } else {
-                Toast.makeText(context, "当前操作中，无法切换模式", Toast.LENGTH_SHORT).show();
+                Toast.makeText(context, "正在录音中，无法切换模式", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -904,36 +1033,62 @@ public class FloatWindowManager {
 
     private void resetAllStates() {
         Log.d(TAG, "执行状态重置");
-        
+
+        // 先取消可能正在进行的识别
+        if (voiceRecognitionTool != null) {
+            if (isRecording || isRecognizing) {
+                Log.w(TAG, "强制终止正在进行的录音/识别");
+                voiceRecognitionTool.cancelRecognition();
+            }
+        }
+
         // 重置本地状态
         isRecording = false;
         isRecognizing = false;
         recordingStartTime = 0;
-        
-        // 只在录音/识别中时才cancel
-        if (voiceRecognitionTool != null && (isRecording || isRecognizing)) {
-            Log.w(TAG, "当前仍在录音/识别中，强制终止");
-            voiceRecognitionTool.cancelRecognition();
-        }
-        
+        isDragging = false;
+
         // 启用按钮
         setModeButtonsEnabled(true);
-        
+
         // 重置UI
         if (ivRecordCircle != null) {
             ivRecordCircle.setBackgroundResource(R.drawable.circle_background);
         }
-        
+
         // 重置输入框
         if (etInput != null) {
             etInput.clearFocus();
         }
-        
+
         // 隐藏键盘
         hideKeyboard();
-        
+
         // 延迟重置有效结果标记
         mainHandler.postDelayed(() -> hasValidRecognitionResult = false, 500);
+    }
+
+    /**
+     * 只重置识别相关状态，不影响输入模式
+     * 注意：调用者负责取消正在进行的识别
+     */
+    private void resetRecognitionStatesOnly() {
+        Log.d(TAG, "执行识别状态重置（仅识别相关）");
+
+        // 重置识别相关状态（不取消识别，调用者负责）
+        isRecording = false;
+        isRecognizing = false;
+        recordingStartTime = 0;
+
+        // 重置录音圈UI
+        if (ivRecordCircle != null) {
+            ivRecordCircle.setBackgroundResource(R.drawable.circle_background);
+        }
+
+        // 延迟重置有效结果标记
+        mainHandler.postDelayed(() -> hasValidRecognitionResult = false, 500);
+
+        Log.d(TAG, "识别状态重置完成");
     }
 
     private void setModeButtonsEnabled(boolean enabled) {

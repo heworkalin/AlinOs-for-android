@@ -344,8 +344,8 @@ public final class TermuxConstants {
 	public static final String TERMUX_APP_NAME = "Termux"; // Default: "Termux"
 
 	/** Termux package name */
-	public static final String TERMUX_PACKAGE_NAME_TERMUX = "com.termux";
-	public static final String TERMUX_PACKAGE_NAME = getPackageName();
+	public static final String TERMUX_PACKAGE_NAME_TERMUX = "alin.android.alinos";
+	public static final String TERMUX_PACKAGE_NAME = TERMUX_PACKAGE_NAME_TERMUX;
 
 	// 安卓用户兼容
 	private static final String TERMUX_DATA_PREFIX = getTermuxDataPrefix();

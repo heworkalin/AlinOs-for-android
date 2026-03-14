@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <!DOCTYPE resources [
-    <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
-    <!ENTITY TERMUX_APP_NAME "Termux">
+    <!ENTITY TERMUX_PACKAGE_NAME "alin.android.alinos">
+    <!ENTITY TERMUX_APP_NAME "AlinOs">
     <!ENTITY TERMUX_API_APP_NAME "Termux:API">
     <!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
     <!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
@@ -245,7 +245,8 @@
     <string name="ai_config_title">AI Configuration</string>
     <string name="arrow_right">→</string>
     <string name="accessibility_title">Accessibility</string>
-    <string name="not_enablied">Not Enabled</string>
+    <string name="not_enabled">Not Enabled</string>
+    <string name="enabled">Enabled</string>
     <string name="adb_title">ADB Debugging</string>
     <string name="screen_share_title">Screen Share</string>
     <string name="overlay_test_title">Overlay Test</string>

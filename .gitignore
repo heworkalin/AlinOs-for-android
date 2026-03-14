@@ -15,3 +15,6 @@
 local.properties
 .claude/
 .vscode/
+terminal-emulator/build
+terminal-view/build
+termux-shared/build

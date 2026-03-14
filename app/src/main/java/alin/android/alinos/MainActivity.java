@@ -16,6 +16,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import alin.android.alinos.manager.ConsentDialogManager;
 import alin.android.alinos.manager.FloatWindowManager;
 import alin.android.alinos.manager.ShizukuManager;
@@ -29,6 +31,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     // 管理类
     private ShizukuManager shizukuManager;
     private ConsentDialogManager consentDialogManager;
+
+    // 权限请求码
+    private static final int REQUEST_RECORD_AUDIO_PERMISSION = 1001;
+    // 标记是否等待权限结果以显示悬浮窗
+    private boolean pendingShowFloatWindow = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -151,12 +158,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     getApplicationContext().getContentResolver(),
                     Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
             if (settingValue != null && settingValue.contains(serviceName)) {
-                tvAccessibilityStatus.setText("已开启");
+                tvAccessibilityStatus.setText(getString(R.string.enabled));
                 tvAccessibilityStatus.setTextColor(Color.parseColor("#00C851"));
                 return;
             }
         }
-        tvAccessibilityStatus.setText("未开启");
+        tvAccessibilityStatus.setText(getString(R.string.not_enabled));
         tvAccessibilityStatus.setTextColor(Color.parseColor("#FF4444"));
     }
 
@@ -182,11 +189,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 private void testOverlayPermission() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         if (Settings.canDrawOverlays(this)) {
-            // 已授权，显示悬浮窗
-            FloatWindowManager.getInstance(this).showFloatWindow();
-            Toast.makeText(this, "悬浮窗已显示", Toast.LENGTH_SHORT).show();
+            // 已授权悬浮窗权限，检查录音权限
+            checkAndRequestRecordAudioPermission();
         } else {
-            // 引导申请权限
+            // 引导申请悬浮窗权限
             consentDialogManager.showConsentDialog(
                     "悬浮窗权限申请",
                     "悬浮窗用于快速唤起AI助手，是否前往开启？",
@@ -199,12 +205,58 @@ private void testOverlayPermission() {
             );
         }
     } else {
-        // Android 6.0以下默认允许
-        FloatWindowManager.getInstance(this).showFloatWindow();
-        Toast.makeText(this, "悬浮窗已显示", Toast.LENGTH_SHORT).show();
+        // Android 6.0以下默认允许悬浮窗权限
+        checkAndRequestRecordAudioPermission();
     }
 }
  
+
+    /**
+     * 检查并请求录音权限
+     */
+    private void checkAndRequestRecordAudioPermission() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            // 已有录音权限，显示悬浮窗
+            showFloatWindow();
+        } else {
+            // 请求录音权限
+            pendingShowFloatWindow = true;
+            ActivityCompat.requestPermissions(this,
+                    new String[]{android.Manifest.permission.RECORD_AUDIO},
+                    REQUEST_RECORD_AUDIO_PERMISSION);
+        }
+    }
+
+    /**
+     * 显示悬浮窗
+     */
+    private void showFloatWindow() {
+        FloatWindowManager.getInstance(this).showFloatWindow();
+        Toast.makeText(this, "悬浮窗已显示", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode == REQUEST_RECORD_AUDIO_PERMISSION) {
+            // 先更新FloatWindowManager的权限状态
+            FloatWindowManager.getInstance(this).onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+            // 处理录音权限请求结果
+            if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                // 权限被授予
+                if (pendingShowFloatWindow) {
+                    showFloatWindow();
+                }
+            } else {
+                // 权限被拒绝
+                Toast.makeText(this, "录音权限被拒绝，将无法使用语音识别功能", Toast.LENGTH_LONG).show();
+            }
+            pendingShowFloatWindow = false;
+        }
+    }
 
     /**
      * 引导后台保活配置

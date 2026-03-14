@@ -6,6 +6,7 @@ import android.view.View;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
+
 public class McpConfigActivity extends AppCompatActivity {
 
     @Override
@@ -21,6 +22,8 @@ public class McpConfigActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 try {
+                    // import alin.android.alinos.mcp.AmApkInstaller;修复 TermuxAm APK，am.apk 是 TermuxAm 的核心组件，必须确保它被正确安装
+                    //AmApkInstaller.installIfNeeded(this);
                     // 构建跳转到 Termux 主界面的 Intent
                     Intent termuxIntent = new Intent();
                     // 指定 Termux 主界面的完整类名

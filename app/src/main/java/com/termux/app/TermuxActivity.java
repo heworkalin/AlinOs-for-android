@@ -29,6 +29,7 @@ import android.widget.RelativeLayout;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
@@ -66,7 +67,8 @@ import com.termux.view.TerminalView;
 import com.termux.view.TerminalViewClient;
 
 import java.util.Arrays;
-
+import java.util.Objects;
+import alin.android.alinos.mcp.AmApkInstaller;
 /**
  * A terminal emulator activity.
  * <p/>
@@ -204,7 +206,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onCreate(Bundle savedInstanceState) {
         // 内嵌兼容
 		TermuxApplication.init(this);
-		
+
 		Logger.logDebug(LOG_TAG, "onCreate");
         mIsOnResumeAfterOnCreate = true;
 
@@ -409,6 +411,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxService.isTermuxSessionsEmpty()) {
             if (mIsVisible) {
                 TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
+                    // 修复 TermuxAm APK，am.apk 是 TermuxAm 的核心组件，必须确保它被正确安装
+                    //目的 修复termux的am命令，原因默认包名不一致
+                    AmApkInstaller.installIfNeeded(this);
                     if (mTermuxService == null) return; // Activity might have been destroyed.
                     try {
                         boolean launchFailsafe = false;
@@ -937,6 +942,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         context.sendBroadcast(stylingIntent);
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     private void registerTermuxActivityBroadcastReceiver() {
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(TERMUX_ACTIVITY.ACTION_NOTIFY_APP_CRASH);
@@ -968,20 +974,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mIsVisible) {
                 fixTermuxActivityBroadcastReceiverIntent(intent);
 
-                switch (intent.getAction()) {
-                    case TERMUX_ACTIVITY.ACTION_NOTIFY_APP_CRASH:
-                        Logger.logDebug(LOG_TAG, "Received intent to notify app crash");
-                        TermuxCrashUtils.notifyAppCrashFromCrashLogFile(context, LOG_TAG);
-                        return;
-                    case TERMUX_ACTIVITY.ACTION_RELOAD_STYLE:
-                        Logger.logDebug(LOG_TAG, "Received intent to reload styling");
-                        reloadActivityStyling(intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
-                        return;
-                    case TERMUX_ACTIVITY.ACTION_REQUEST_PERMISSIONS:
-                        Logger.logDebug(LOG_TAG, "Received intent to request storage permissions");
-                        requestStoragePermission(false);
-                        return;
-                    default:
+                String action = Objects.requireNonNull(intent.getAction());
+                if (action.equals(TERMUX_ACTIVITY.ACTION_NOTIFY_APP_CRASH)) {
+                    Logger.logDebug(LOG_TAG, "Received intent to notify app crash");
+                    TermuxCrashUtils.notifyAppCrashFromCrashLogFile(context, LOG_TAG);
+                    return;
+                } else if (action.equals(TERMUX_ACTIVITY.ACTION_RELOAD_STYLE)) {
+                    Logger.logDebug(LOG_TAG, "Received intent to reload styling");
+                    reloadActivityStyling(intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
+                    return;
+                } else if (action.equals(TERMUX_ACTIVITY.ACTION_REQUEST_PERMISSIONS)) {
+                    Logger.logDebug(LOG_TAG, "Received intent to request storage permissions");
+                    requestStoragePermission(false);
+                    return;
                 }
             }
         }
