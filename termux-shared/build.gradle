@@ -40,7 +40,7 @@ dependencies {
     // 依赖 terminal-view 模块（已注册，注意：此处存在依赖闭环，app 也依赖该模块，若无需可移除）
     implementation project(":terminal-view")
 
-    // implementation project(':termux-am-library')
-    implementation "com.github.termux:termux-am-library:v2.0.0"
+    implementation project(':TermuxAm')
+    //implementation "com.github.termux:termux-am-library:v2.0.0"
     // implementation "com.termux:termux-am-library:v2.0.0"
 }

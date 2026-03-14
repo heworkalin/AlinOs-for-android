@@ -95,7 +95,7 @@
                         android:id="@+id/tv_accessibility_status"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/not_enablied"
+                        android:text="@string/not_enabled"
                         android:textColor="#FF4444"/>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>

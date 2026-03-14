@@ -137,26 +137,20 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         }
 
         if (action != null) {
-            switch (action) {
-                case TERMUX_SERVICE.ACTION_STOP_SERVICE:
-                    Logger.logDebug(LOG_TAG, "ACTION_STOP_SERVICE intent received");
-                    actionStopService();
-                    break;
-                case TERMUX_SERVICE.ACTION_WAKE_LOCK:
-                    Logger.logDebug(LOG_TAG, "ACTION_WAKE_LOCK intent received");
-                    actionAcquireWakeLock();
-                    break;
-                case TERMUX_SERVICE.ACTION_WAKE_UNLOCK:
-                    Logger.logDebug(LOG_TAG, "ACTION_WAKE_UNLOCK intent received");
-                    actionReleaseWakeLock(true);
-                    break;
-                case TERMUX_SERVICE.ACTION_SERVICE_EXECUTE:
-                    Logger.logDebug(LOG_TAG, "ACTION_SERVICE_EXECUTE intent received");
-                    actionServiceExecute(intent);
-                    break;
-                default:
-                    Logger.logError(LOG_TAG, "Invalid action: \"" + action + "\"");
-                    break;
+            if (action.equals(TERMUX_SERVICE.ACTION_STOP_SERVICE)) {
+                Logger.logDebug(LOG_TAG, "ACTION_STOP_SERVICE intent received");
+                actionStopService();
+            } else if (action.equals(TERMUX_SERVICE.ACTION_WAKE_LOCK)) {
+                Logger.logDebug(LOG_TAG, "ACTION_WAKE_LOCK intent received");
+                actionAcquireWakeLock();
+            } else if (action.equals(TERMUX_SERVICE.ACTION_WAKE_UNLOCK)) {
+                Logger.logDebug(LOG_TAG, "ACTION_WAKE_UNLOCK intent received");
+                actionReleaseWakeLock(true);
+            } else if (action.equals(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE)) {
+                Logger.logDebug(LOG_TAG, "ACTION_SERVICE_EXECUTE intent received");
+                actionServiceExecute(intent);
+            } else {
+                Logger.logError(LOG_TAG, "Invalid action: \"" + action + "\"");
             }
         }
 

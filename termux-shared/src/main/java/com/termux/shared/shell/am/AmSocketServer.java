@@ -7,7 +7,8 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.am.Am;
+import com.termux.termuxam.Am;
+import com.termux.termuxam.FakeContext;
 import com.termux.shared.R;
 import com.termux.shared.android.PackageUtils;
 import com.termux.shared.android.PermissionUtils;
@@ -223,7 +224,21 @@ public class AmSocketServer {
                     PackageUtils.getAppNameForPackage(context)));
             }
 
-            new Am(stdoutPrintStream, stderrPrintStream, (Application) context.getApplicationContext()).run(amCommandArray);
+            // Save original streams and package name
+            PrintStream originalOut = System.out;
+            PrintStream originalErr = System.err;
+            String originalPackageName = FakeContext.PACKAGE_NAME;
+            FakeContext.PACKAGE_NAME = context.getPackageName();
+
+            System.setOut(stdoutPrintStream);
+            System.setErr(stderrPrintStream);
+            try {
+                new Am().run(amCommandArray);
+            } finally {
+                System.setOut(originalOut);
+                System.setErr(originalErr);
+                FakeContext.PACKAGE_NAME = originalPackageName;
+            }
 
             // Set stdout to value set by am command in stdoutPrintStream
             stdoutPrintStream.flush();
