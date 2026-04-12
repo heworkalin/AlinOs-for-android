@@ -64,6 +64,9 @@ public class ChatStreamEventBus {
         private boolean isFinish;
         private boolean isError;
         private String errorMsg;
+        private int promptTokens;
+        private int completionTokens;
+        private int totalTokens;
 
         // 快速构建增量消息
         public static StreamEventData buildChunk(int sessionId, String chunkContent) {
@@ -94,6 +97,18 @@ public class ChatStreamEventBus {
             return data;
         }
 
+        // 快速构建Usage消息
+        public static StreamEventData buildUsage(int sessionId, int promptTokens, int completionTokens, int totalTokens) {
+            StreamEventData data = new StreamEventData();
+            data.sessionId = sessionId;
+            data.promptTokens = promptTokens;
+            data.completionTokens = completionTokens;
+            data.totalTokens = totalTokens;
+            data.isFinish = false;
+            data.isError = false;
+            return data;
+        }
+
         // Getter方法（补全缺失的getter）
         public int getSessionId() { return sessionId; }
         public String getChunkContent() { return chunkContent; }
@@ -101,5 +116,8 @@ public class ChatStreamEventBus {
         public boolean isFinish() { return isFinish; }
         public boolean isError() { return isError; }
         public String getErrorMsg() { return errorMsg; }
+        public int getPromptTokens() { return promptTokens; }
+        public int getCompletionTokens() { return completionTokens; }
+        public int getTotalTokens() { return totalTokens; }
     }
 }

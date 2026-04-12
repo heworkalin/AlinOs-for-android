@@ -192,7 +192,7 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
 			environment.put("LD_LIBRARY_PATH", nativeLibraryDir);
 		}
 
-		//自定义参数，来自其他应用，随时更正，不是目前项目的，迁移时的遗留的，可改成ai cli tools调用方法
+		//自定义参数，来自其他应用，随时更正，不是目前项目的，迁移时的遗留的，可改成ai cli tools调用方法  ///
 		environment.put("ANDROID_HOME", TermuxConstants.TERMUX_HOME_DIR_PATH + "/android-sdk");
 		environment.put("GRADLE_HOME", TermuxConstants.TERMUX_HOME_DIR_PATH + "/.gradle");
 		environment.put("GRADLE", "bash ./gradlew -Pandroid.aapt2FromMavenOverride="

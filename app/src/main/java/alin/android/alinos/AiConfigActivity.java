@@ -75,6 +75,9 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
         EditText etServer = dialogView.findViewById(R.id.et_server);
         EditText etKey = dialogView.findViewById(R.id.et_key);
         EditText etModel = dialogView.findViewById(R.id.et_model);
+        EditText etMaxResponseTokens = dialogView.findViewById(R.id.et_max_response_tokens);
+        EditText etUserInputCharLimit = dialogView.findViewById(R.id.et_user_input_char_limit);
+        EditText etModelContextWindow = dialogView.findViewById(R.id.et_model_context_window);
         Button btnDownloadModel = dialogView.findViewById(R.id.btn_download_model);
         TextView tvKeyTitle = dialogView.findViewById(R.id.tv_key_label);
 
@@ -110,6 +113,9 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
             etServer.setText(config.getServerUrl());
             etKey.setText(config.getApiKey());
             etModel.setText(config.getModel());
+            etMaxResponseTokens.setText(String.valueOf(config.getMaxResponseTokens()));
+            etUserInputCharLimit.setText(String.valueOf(config.getUserInputCharLimit()));
+            etModelContextWindow.setText(String.valueOf(config.getModelContextWindow()));
         } else {
             rbOpenai.setChecked(true);
             tvKeyTitle.setVisibility(View.VISIBLE);
@@ -161,6 +167,10 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
                 String serverUrl = etServer.getText().toString().trim();
                 String apiKey = etKey.getText().toString().trim();
                 String model = etModel.getText().toString().trim();
+                // 解析三个整数字段
+                int maxResponseTokens = parseIntegerWithDefault(etMaxResponseTokens.getText().toString().trim(), 1024);
+                int userInputCharLimit = parseIntegerWithDefault(etUserInputCharLimit.getText().toString().trim(), 2000);
+                int modelContextWindow = parseIntegerWithDefault(etModelContextWindow.getText().toString().trim(), 4096);
 
                 // 输入校验（失败时只弹Toast，不关闭对话框）
                 if (model.isEmpty()) {
@@ -177,17 +187,44 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
                     return;
                 }
 
+                // 验证三个参数之间的逻辑关系
+                // 1. 最大回复消息不能超过模型上下文窗口
+                if (maxResponseTokens > modelContextWindow) {
+                    Toast.makeText(AiConfigActivity.this,
+                        "最大回复消息(" + maxResponseTokens + ")不能超过模型上下文窗口(" + modelContextWindow + ")",
+                        Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                // 2. 估算用户输入字符限制对应的token数（假设1个token≈4个字符）
+                // 用户输入字符限制转换为token估算：userInputCharLimit / 4
+                int estimatedInputTokens = (int) Math.ceil(userInputCharLimit / 4.0);
+
+                // 3. 验证：估算的用户输入token + 最大回复token ≤ 模型上下文窗口
+                if (estimatedInputTokens + maxResponseTokens > modelContextWindow) {
+                    Toast.makeText(AiConfigActivity.this,
+                        "配置不合理：用户输入限制(约" + estimatedInputTokens + "token) + 最大回复(" + maxResponseTokens +
+                        "token) 超过模型上下文窗口(" + modelContextWindow + "token)\n" +
+                        "建议：减少用户输入字符限制或增加模型上下文窗口",
+                        Toast.LENGTH_LONG).show();
+                    return;
+                }
+
                 // 校验通过，执行保存操作
                 if (isEdit) {
                     config.setType(type);
                     config.setServerUrl(serverUrl);
                     config.setApiKey(apiKey);
                     config.setModel(model);
+                    config.setMaxResponseTokens(maxResponseTokens);
+                    config.setUserInputCharLimit(userInputCharLimit);
+                    config.setModelContextWindow(modelContextWindow);
                     mDbHelper.updateConfig(config);
                     Toast.makeText(AiConfigActivity.this, "配置修改成功", Toast.LENGTH_SHORT).show();
                 } else {
                     boolean isDefault = mConfigList.isEmpty();
-                    ConfigBean newConfig = new ConfigBean(type, serverUrl, apiKey, model, isDefault);
+                    ConfigBean newConfig = new ConfigBean(type, serverUrl, apiKey, model, isDefault,
+                            maxResponseTokens, userInputCharLimit, modelContextWindow);
                     mDbHelper.addConfig(newConfig);
                     Toast.makeText(AiConfigActivity.this, "配置添加成功", Toast.LENGTH_SHORT).show();
                 }
@@ -256,6 +293,17 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
 
         public boolean isChatActivityVisible() {
             return isChatActivityVisible;
+        }
+    }
+
+    private int parseIntegerWithDefault(String text, int defaultValue) {
+        if (text == null || text.trim().isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
         }
     }
 }

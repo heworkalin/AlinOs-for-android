@@ -14,7 +14,7 @@ import alin.android.alinos.bean.ConfigBean;
 public class ConfigDBHelper extends SQLiteOpenHelper {
     // 数据库名和版本
     private static final String DB_NAME = "ai_config.db";
-    private static final int DB_VERSION = 2; // 版本号升级为2（原1）
+    private static final int DB_VERSION = 3; // 版本号升级为3（原2）
     // 表名和字段
     private static final String TABLE_NAME = "config";
     public static final String COLUMN_ID = "id";
@@ -23,6 +23,9 @@ public class ConfigDBHelper extends SQLiteOpenHelper {
     public static final String COLUMN_API_KEY = "api_key";
     public static final String COLUMN_IS_DEFAULT = "is_default";
     public static final String COLUMN_MODEL = "model"; // 新增：智慧体型号（如gpt-3.5-turbo/llama3）
+    public static final String COLUMN_MAX_RESPONSE_TOKENS = "max_response_tokens"; // 模型最大回复消息
+    public static final String COLUMN_USER_INPUT_CHAR_LIMIT = "user_input_char_limit"; // 用户输入字符限制
+    public static final String COLUMN_MODEL_CONTEXT_WINDOW = "model_context_window"; // 模型最高极限上下文
 
     public ConfigDBHelper(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
@@ -37,19 +40,34 @@ public class ConfigDBHelper extends SQLiteOpenHelper {
                 COLUMN_SERVER_URL + " TEXT NOT NULL, " +
                 COLUMN_API_KEY + " TEXT, " +
                 COLUMN_MODEL + " TEXT NOT NULL, " + // 新增字段
+                COLUMN_MAX_RESPONSE_TOKENS + " INTEGER DEFAULT 1024, " + // 模型最大回复消息
+                COLUMN_USER_INPUT_CHAR_LIMIT + " INTEGER DEFAULT 2000, " + // 用户输入字符限制
+                COLUMN_MODEL_CONTEXT_WINDOW + " INTEGER DEFAULT 4096, " + // 模型最高极限上下文
                 COLUMN_IS_DEFAULT + " INTEGER DEFAULT 0)"; // 0=否，1=是
         db.execSQL(createTable);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // 版本1→2：新增model字段（保留旧数据）
-        if (oldVersion == 1 && newVersion == 2) {
-            db.execSQL("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + COLUMN_MODEL + " TEXT NOT NULL DEFAULT 'gpt-3.5-turbo'");
-        } else {
-            // 其他版本直接重建表（实际项目可扩展多版本迁移）
-            db.execSQL("DROP TABLE IF EXISTS " + TABLE_NAME);
-            onCreate(db);
+        // 逐步升级，避免数据丢失
+        for (int version = oldVersion; version < newVersion; version++) {
+            switch (version) {
+                case 1:
+                    // 版本1→2：新增model字段
+                    db.execSQL("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + COLUMN_MODEL + " TEXT NOT NULL DEFAULT 'gpt-3.5-turbo'");
+                    break;
+                case 2:
+                    // 版本2→3：新增三个限制字段
+                    db.execSQL("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + COLUMN_MAX_RESPONSE_TOKENS + " INTEGER DEFAULT 1024");
+                    db.execSQL("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + COLUMN_USER_INPUT_CHAR_LIMIT + " INTEGER DEFAULT 2000");
+                    db.execSQL("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + COLUMN_MODEL_CONTEXT_WINDOW + " INTEGER DEFAULT 4096");
+                    break;
+                default:
+                    // 未知版本，重建表
+                    db.execSQL("DROP TABLE IF EXISTS " + TABLE_NAME);
+                    onCreate(db);
+                    return;
+            }
         }
     }
 
@@ -61,6 +79,9 @@ public class ConfigDBHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SERVER_URL, config.getServerUrl());
         values.put(COLUMN_API_KEY, config.getApiKey());
         values.put(COLUMN_MODEL, config.getModel()); // 新增字段赋值
+        values.put(COLUMN_MAX_RESPONSE_TOKENS, config.getMaxResponseTokens());
+        values.put(COLUMN_USER_INPUT_CHAR_LIMIT, config.getUserInputCharLimit());
+        values.put(COLUMN_MODEL_CONTEXT_WINDOW, config.getModelContextWindow());
         values.put(COLUMN_IS_DEFAULT, config.isDefault() ? 1 : 0);
         long id = db.insert(TABLE_NAME, null, values);
         db.close();
@@ -83,6 +104,9 @@ public class ConfigDBHelper extends SQLiteOpenHelper {
             config.setServerUrl(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SERVER_URL)));
             config.setApiKey(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_API_KEY)));
             config.setModel(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MODEL)));
+            config.setMaxResponseTokens(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MAX_RESPONSE_TOKENS)));
+            config.setUserInputCharLimit(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_USER_INPUT_CHAR_LIMIT)));
+            config.setModelContextWindow(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MODEL_CONTEXT_WINDOW)));
             config.setDefault(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_IS_DEFAULT)) == 1);
         }
         cursor.close();
@@ -105,6 +129,9 @@ public class ConfigDBHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SERVER_URL, config.getServerUrl());
         values.put(COLUMN_API_KEY, config.getApiKey());
         values.put(COLUMN_MODEL, config.getModel()); // 新增字段赋值
+        values.put(COLUMN_MAX_RESPONSE_TOKENS, config.getMaxResponseTokens());
+        values.put(COLUMN_USER_INPUT_CHAR_LIMIT, config.getUserInputCharLimit());
+        values.put(COLUMN_MODEL_CONTEXT_WINDOW, config.getModelContextWindow());
         values.put(COLUMN_IS_DEFAULT, config.isDefault() ? 1 : 0);
         db.update(TABLE_NAME, values, COLUMN_ID + "=?", new String[]{String.valueOf(config.getId())});
         db.close();
@@ -137,6 +164,9 @@ public class ConfigDBHelper extends SQLiteOpenHelper {
                 config.setServerUrl(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SERVER_URL)));
                 config.setApiKey(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_API_KEY)));
                 config.setModel(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MODEL))); // 读取model
+                config.setMaxResponseTokens(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MAX_RESPONSE_TOKENS)));
+                config.setUserInputCharLimit(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_USER_INPUT_CHAR_LIMIT)));
+                config.setModelContextWindow(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MODEL_CONTEXT_WINDOW)));
                 config.setDefault(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_IS_DEFAULT)) == 1);
                 list.add(config);
             } while (cursor.moveToNext());
@@ -158,6 +188,9 @@ public class ConfigDBHelper extends SQLiteOpenHelper {
             config.setServerUrl(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SERVER_URL)));
             config.setApiKey(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_API_KEY)));
             config.setModel(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MODEL))); // 读取model
+            config.setMaxResponseTokens(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MAX_RESPONSE_TOKENS)));
+            config.setUserInputCharLimit(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_USER_INPUT_CHAR_LIMIT)));
+            config.setModelContextWindow(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MODEL_CONTEXT_WINDOW)));
             config.setDefault(true);
         }
         cursor.close();
@@ -227,6 +260,9 @@ public ConfigBean getFirstConfig() {
         config.setServerUrl(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SERVER_URL)));
         config.setApiKey(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_API_KEY)));
         config.setModel(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MODEL)));
+        config.setMaxResponseTokens(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MAX_RESPONSE_TOKENS)));
+        config.setUserInputCharLimit(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_USER_INPUT_CHAR_LIMIT)));
+        config.setModelContextWindow(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MODEL_CONTEXT_WINDOW)));
         config.setDefault(cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_IS_DEFAULT)) == 1);
     }
     

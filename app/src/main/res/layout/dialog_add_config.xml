@@ -98,4 +98,55 @@
         android:layout_height="48dp"
         android:hint="API密钥（Ollama可留空）"
         android:padding="10dp"/>
+
+    <!-- 模型最大回复消息 -->
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="最大回复消息（max_response_tokens）"
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:layout_marginTop="15dp"
+            android:layout_marginBottom="5dp"/>
+    <EditText
+        android:id="@+id/et_max_response_tokens"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="默认1024"
+        android:inputType="number"
+        android:padding="10dp"/>
+
+    <!-- 用户输入字符限制 -->
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="用户输入字符限制（user_input_char_limit）"
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:layout_marginTop="15dp"
+            android:layout_marginBottom="5dp"/>
+    <EditText
+        android:id="@+id/et_user_input_char_limit"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="默认2000"
+        android:inputType="number"
+        android:padding="10dp"/>
+
+    <!-- 模型最高极限上下文 -->
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="模型上下文窗口（model_context_window）"
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:layout_marginTop="15dp"
+            android:layout_marginBottom="5dp"/>
+    <EditText
+        android:id="@+id/et_model_context_window"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="默认4096"
+        android:inputType="number"
+        android:padding="10dp"/>
 </LinearLayout>
