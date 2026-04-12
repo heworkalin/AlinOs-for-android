@@ -292,38 +292,7 @@
                         android:contentDescription="@string/arrow_right"/>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
-
-            <!-- 9. 语音转文字 -->
-            <androidx.cardview.widget.CardView
-                android:id="@+id/cv_voice_to_text_test"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="4dp"
-                app:cardBackgroundColor="#FFFFFF">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="16dp"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/voice_to_text_test_title"
-                        android:textSize="18sp"/>
-
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/ic_arrow_right"
-                        android:contentDescription="@string/arrow_right"/>
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            
 
             <!-- 10. 文字转语音 -->
             <androidx.cardview.widget.CardView

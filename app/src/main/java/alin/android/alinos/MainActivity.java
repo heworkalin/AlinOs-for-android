@@ -62,7 +62,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         CardView cvOverlayTest = findViewById(R.id.cv_overlay_test); // 新增：悬浮窗测试
         CardView cvBackgroundKeep = findViewById(R.id.cv_background_keep); // 新增：后台保活
         CardView cvMcpConfig = findViewById(R.id.cv_mcp_config); // 新增：MCP配置
-        CardView cvVoiceToTextTest = findViewById(R.id.cv_voice_to_text_test); // 新增：语音转文字测试
+        
         CardView cvTextToVoiceTest = findViewById(R.id.cv_text_to_voice_test); // 新增：文字转语音测试
 
         tvAccessibilityStatus = findViewById(R.id.tv_accessibility_status);
@@ -80,7 +80,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         cvOverlayTest.setOnClickListener(this);
         cvBackgroundKeep.setOnClickListener(this);
         cvMcpConfig.setOnClickListener(this);
-        cvVoiceToTextTest.setOnClickListener(this);
+       
         cvTextToVoiceTest.setOnClickListener(this);
         // 屏幕共享开关逻辑
         swScreenShare.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -129,9 +129,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         } else if (id == R.id.cv_mcp_config) {
             // 跳转到MCP服务配置页面
             startActivity(new Intent(this, McpConfigActivity.class));
-        }else if (id == R.id.cv_voice_to_text_test) {
-            // 跳转到语音转文字测试页面
-            startActivity(new Intent(this, VoiceRecognitionActivity.class));
         }else if (id == R.id.cv_text_to_voice_test) {
             // 跳转到文字转语音测试页面
             startActivity(new Intent(this, TextToSpeechActivity.class));

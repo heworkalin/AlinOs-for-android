@@ -186,8 +186,9 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
 
     // 初始化会话列表
     private void initSessionList() {
-        mSessionList = mChatDbHelper.getAllSessions();
-        mSessionAdapter = new SessionAdapter(mSessionList, this::selectSession, this::showSessionLongClickMenu);
+        mSessionList = getAllSessionsFromDb();
+        mSessionAdapter = new SessionAdapter(mSessionList, this::selectSession, this::showSessionLongClickMenu,
+                this::getConfigTypeByConfigIdFromDb, this::getModelNameByConfigIdFromDb);
         rvSessionList.setAdapter(mSessionAdapter);
     }
 
@@ -195,11 +196,11 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     private void selectSession(ChatSessionBean session) {
         mCurrentSessionId = session.getId();
         // 通过configId获取模型名称，显示在标题栏
-        String modelName = mConfigDbHelper.getModelNameByConfigId(session.getConfigId());
+        String modelName = getModelNameByConfigIdFromDb(session.getConfigId());
         tvSessionName.setText(session.getSessionName());
         tvModelName.setText(modelName);
         // 获取当前会话的配置（含模型、服务器地址等）
-        mCurrentConfig = mConfigDbHelper.getConfigById(session.getConfigId());
+        mCurrentConfig = getConfigByIdFromDb(session.getConfigId());
         // 加载聊天记录
         loadChatRecords(session.getId());
         // 关闭侧边栏
@@ -208,7 +209,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
 
     // 加载聊天记录（通过会话ID）
     private void loadChatRecords(int sessionId) {
-        List<ChatRecordBean> records = mChatDbHelper.getRecordsBySessionId(sessionId);
+        List<ChatRecordBean> records = getRecordsBySessionIdFromDb(sessionId);
         mMessageList.clear();
         for (ChatRecordBean record : records) {
             if (TextUtils.isEmpty(record.getContent())) continue;
@@ -292,7 +293,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                 content,
                 System.currentTimeMillis()
         );
-        mChatDbHelper.addRecord(userRecord);
+        addRecordToDb(userRecord);
         etInput.setText("");
 
         // 在新线程中生成AI回复
@@ -314,7 +315,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                         aiReply,
                         System.currentTimeMillis()
                 );
-                mChatDbHelper.addRecord(aiRecord);
+                addRecordToDb(aiRecord);
             });
         }).start();
     }
@@ -359,7 +360,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         ChatRecordBean userRecord = new ChatRecordBean(
                 mCurrentSessionId, 0, "我", content, System.currentTimeMillis()
         );
-        mChatDbHelper.addRecord(userRecord);
+        addRecordToDb(userRecord);
         etInput.setText("");
 
         // 添加AI占位消息（显示loading）
@@ -372,7 +373,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         ChatRecordBean loadingRecord = new ChatRecordBean(
                 mCurrentSessionId, 1, mCurrentConfig.getType() + "[流式]", "", System.currentTimeMillis()
         );
-        mStreamRecordId = mChatDbHelper.addRecord(loadingRecord);
+        mStreamRecordId = addRecordToDb(loadingRecord);
         Log.d(TAG, "流式loading记录入库，recordId=" + mStreamRecordId);
 
         // 标记流式加载中
@@ -383,7 +384,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         if (mStreamNetHelper == null) {
             resetStreamLoadingState();
             mChatAdapter.updateAiMessage(mAiMessagePosition, "[错误] 不支持OpenAI流式请求", false);
-            mChatDbHelper.updateRecordContent(mStreamRecordId, "[错误] 不支持OpenAI流式请求");
+            updateRecordContentInDb(mStreamRecordId, "[错误] 不支持OpenAI流式请求");
             return;
         }
 
@@ -511,7 +512,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     // 新增：抽离写库逻辑，统一正常/异常场景，减少冗余
     private void writeStreamRecordToDb(String content) {
         if (mStreamRecordId != -1) {
-            mChatDbHelper.updateRecordContent(mStreamRecordId, content);
+            updateRecordContentInDb(mStreamRecordId, content);
         } else {
             ChatRecordBean record = new ChatRecordBean(
                     mCurrentSessionId,
@@ -520,13 +521,13 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                     content,
                     System.currentTimeMillis()
             );
-            mChatDbHelper.addRecord(record);
+            addRecordToDb(record);
         }
     }
 
     // 新建会话：选择AI配置（含模型）
     private void createNewSession() {
-        List<ConfigBean> configList = mConfigDbHelper.getAllConfigs();
+        List<ConfigBean> configList = getAllConfigsFromDb();
         if (configList.isEmpty()) {
             Toast.makeText(this, "暂无AI配置，请先添加", Toast.LENGTH_SHORT).show();
             return;
@@ -561,7 +562,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                                         selectConfig.getId(),
                                         System.currentTimeMillis()
                                 );
-                                long sessionId = mChatDbHelper.addSession(session);
+                                long sessionId = addSessionToDb(session);
                                 // 刷新会话列表并选中新会话
                                 initSessionList();
                                 for (ChatSessionBean s : mSessionList) {
@@ -584,7 +585,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
             return;
         }
 
-        List<ConfigBean> configList = mConfigDbHelper.getAllConfigs();
+        List<ConfigBean> configList = getAllConfigsFromDb();
         if (configList.isEmpty()) {
             Toast.makeText(this, "暂无AI配置，请先添加", Toast.LENGTH_SHORT).show();
             return;
@@ -612,6 +613,8 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
             currentSession.setConfigId(newConfig.getId());
             // 更新数据库
             updateSessionInDb(currentSession);
+            // 刷新会话列表侧边栏
+            initSessionList();
             // 重新加载当前会话
             selectSession(currentSession);
             Toast.makeText(this, "已切换模型为：" + newConfig.getModel(), Toast.LENGTH_SHORT).show();
@@ -628,16 +631,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         return null;
     }
 
-    // 更新数据库中的会话
-    private void updateSessionInDb(ChatSessionBean session) {
-        if (session == null || mChatDbHelper == null) return;
-
-        // 使用新增的updateSession方法
-        mChatDbHelper.updateSession(session);
-
-        // 刷新列表
-        initSessionList();
-    }
 
     // 显示会话长按菜单 - 修复锚点问题
     private void showSessionLongClickMenu(ChatSessionBean session, int position) {
@@ -709,7 +702,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                     session.setSessionName(newName);
 
                     // 更新数据库
-                    mChatDbHelper.updateSession(session);
+                    updateSessionInDb(session);
 
                     // 刷新会话列表
                     initSessionList();
@@ -737,7 +730,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                 .setMessage("确定删除会话《" + session.getSessionName() + "》吗？删除后无法恢复。")
                 .setPositiveButton("删除", (dialog, which) -> {
                     // 从数据库中删除
-                    mChatDbHelper.deleteSession(session.getId());
+                    deleteSessionFromDb(session.getId());
 
                     // 从内存列表中移除
                     for (int i = 0; i < mSessionList.size(); i++) {
@@ -864,7 +857,190 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         }
     }
 
+    // ==============================================
+    // 数据库操作封装（增加安全性和封装性）
+    // ==============================================
+
+    /**
+     * 获取所有会话列表
+     */
+    private List<ChatSessionBean> getAllSessionsFromDb() {
+        if (mChatDbHelper == null) {
+            Log.e(TAG, "ChatDBHelper未初始化");
+            return new ArrayList<>();
+        }
+        try {
+            return mChatDbHelper.getAllSessions();
+        } catch (Exception e) {
+            Log.e(TAG, "获取会话列表失败", e);
+            Toast.makeText(this, "加载会话列表失败", Toast.LENGTH_SHORT).show();
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 根据会话ID获取聊天记录
+     */
+    private List<ChatRecordBean> getRecordsBySessionIdFromDb(int sessionId) {
+        if (mChatDbHelper == null) {
+            Log.e(TAG, "ChatDBHelper未初始化");
+            return new ArrayList<>();
+        }
+        try {
+            return mChatDbHelper.getRecordsBySessionId(sessionId);
+        } catch (Exception e) {
+            Log.e(TAG, "获取聊天记录失败", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 添加聊天记录到数据库
+     * @return 记录ID，失败返回-1
+     */
+    private long addRecordToDb(ChatRecordBean record) {
+        if (mChatDbHelper == null || record == null) {
+            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            return -1;
+        }
+        try {
+            return mChatDbHelper.addRecord(record);
+        } catch (Exception e) {
+            Log.e(TAG, "添加聊天记录失败", e);
+            return -1;
+        }
+    }
+
+    /**
+     * 更新聊天记录内容
+     */
+    private void updateRecordContentInDb(long recordId, String newContent) {
+        if (mChatDbHelper == null || recordId <= 0 || newContent == null) {
+            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            return;
+        }
+        try {
+            mChatDbHelper.updateRecordContent(recordId, newContent);
+        } catch (Exception e) {
+            Log.e(TAG, "更新聊天记录内容失败", e);
+        }
+    }
+
+    /**
+     * 添加新会话
+     * @return 会话ID，失败返回-1
+     */
+    private long addSessionToDb(ChatSessionBean session) {
+        if (mChatDbHelper == null || session == null) {
+            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            return -1;
+        }
+        try {
+            return mChatDbHelper.addSession(session);
+        } catch (Exception e) {
+            Log.e(TAG, "添加会话失败", e);
+            return -1;
+        }
+    }
+
+    /**
+     * 更新会话信息
+     */
+    private void updateSessionInDb(ChatSessionBean session) {
+        if (mChatDbHelper == null || session == null) {
+            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            return;
+        }
+        try {
+            mChatDbHelper.updateSession(session);
+        } catch (Exception e) {
+            Log.e(TAG, "更新会话失败", e);
+        }
+    }
+
+    /**
+     * 删除会话（包括关联的聊天记录）
+     */
+    private void deleteSessionFromDb(int sessionId) {
+        if (mChatDbHelper == null || sessionId <= 0) {
+            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            return;
+        }
+        try {
+            mChatDbHelper.deleteSession(sessionId);
+        } catch (Exception e) {
+            Log.e(TAG, "删除会话失败", e);
+            Toast.makeText(this, "删除会话失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 获取所有AI配置
+     */
+    private List<ConfigBean> getAllConfigsFromDb() {
+        if (mConfigDbHelper == null) {
+            Log.e(TAG, "ConfigDBHelper未初始化");
+            return new ArrayList<>();
+        }
+        try {
+            return mConfigDbHelper.getAllConfigs();
+        } catch (Exception e) {
+            Log.e(TAG, "获取AI配置失败", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 根据配置ID获取AI配置
+     */
+    private ConfigBean getConfigByIdFromDb(int configId) {
+        if (mConfigDbHelper == null || configId <= 0) {
+            Log.e(TAG, "参数错误或ConfigDBHelper未初始化");
+            return null;
+        }
+        try {
+            return mConfigDbHelper.getConfigById(configId);
+        } catch (Exception e) {
+            Log.e(TAG, "获取AI配置失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * 根据配置ID获取模型名称
+     */
+    private String getModelNameByConfigIdFromDb(int configId) {
+        if (mConfigDbHelper == null || configId <= 0) {
+            Log.e(TAG, "参数错误或ConfigDBHelper未初始化");
+            return "未知模型";
+        }
+        try {
+            return mConfigDbHelper.getModelNameByConfigId(configId);
+        } catch (Exception e) {
+            Log.e(TAG, "获取模型名称失败", e);
+            return "未知模型";
+        }
+    }
+
+    /**
+     * 根据配置ID获取AI类型
+     */
+    private String getConfigTypeByConfigIdFromDb(int configId) {
+        if (mConfigDbHelper == null || configId <= 0) {
+            Log.e(TAG, "参数错误或ConfigDBHelper未初始化");
+            return "未知类型";
+        }
+        try {
+            return mConfigDbHelper.getConfigTypeByConfigId(configId);
+        } catch (Exception e) {
+            Log.e(TAG, "获取AI类型失败", e);
+            return "未知类型";
+        }
+    }
+
+    // ==============================================
     // 菜单：新建会话入口
+    // ==============================================
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.chat_menu, menu);
@@ -893,13 +1069,19 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         private final List<ChatSessionBean> mList;
         private final OnSessionSelectListener mSelectListener;
         private final OnSessionLongClickListener mLongClickListener;
+        private final java.util.function.Function<Integer, String> mConfigTypeProvider;
+        private final java.util.function.Function<Integer, String> mModelNameProvider;
 
         public SessionAdapter(List<ChatSessionBean> list,
                               OnSessionSelectListener selectListener,
-                              OnSessionLongClickListener longClickListener) {
+                              OnSessionLongClickListener longClickListener,
+                              java.util.function.Function<Integer, String> configTypeProvider,
+                              java.util.function.Function<Integer, String> modelNameProvider) {
             mList = list;
             mSelectListener = selectListener;
             mLongClickListener = longClickListener;
+            mConfigTypeProvider = configTypeProvider;
+            mModelNameProvider = modelNameProvider;
         }
 
         @NonNull
@@ -915,12 +1097,9 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
             ChatSessionBean session = mList.get(position);
             holder.tvSessionName.setText(session.getSessionName());
 
-            // 创建ConfigDBHelper实例
-            ConfigDBHelper configDbHelper = new ConfigDBHelper(holder.itemView.getContext());
-
-            // 通过configId获取AI类型和模型名称
-            String configType = configDbHelper.getConfigTypeByConfigId(session.getConfigId());
-            String modelName = configDbHelper.getModelNameByConfigId(session.getConfigId());
+            // 通过configId获取AI类型和模型名称（使用提供的函数）
+            String configType = mConfigTypeProvider.apply(session.getConfigId());
+            String modelName = mModelNameProvider.apply(session.getConfigId());
             holder.tvConfigType.setText("AI类型：" + configType + " | 模型：" + modelName);
 
             // 点击选中会话
@@ -941,7 +1120,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
             return mList == null ? 0 : mList.size();
         }
 
-        static class SessionViewHolder extends RecyclerView.ViewHolder {
+        class SessionViewHolder extends RecyclerView.ViewHolder {
             TextView tvSessionName, tvConfigType;
 
             public SessionViewHolder(@NonNull View itemView) {

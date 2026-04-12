@@ -1,5 +1,6 @@
 package com.termux.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
@@ -9,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -31,6 +33,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
 import alin.android.alinos.R;
@@ -312,7 +316,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences.isTerminalMarginAdjustmentEnabled())
             addTermuxActivityRootViewGlobalLayoutListener();
 
-        registerTermuxActivityBroadcastReceiver();
+        // 在 TermuxActivity.java 的 onCreate 方法中添加
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        1001);
+            }
+        }
     }
 
     @Override
@@ -354,8 +366,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         removeTermuxActivityRootViewGlobalLayoutListener();
 
-        unregisterTermuxActivityBroadcastReceiver();
-        getDrawer().closeDrawers();
+        try {
+            unregisterTermuxActivityBroadcastReceiver();
+        } catch (Exception e) {
+            // 忽略任何异常
+            Logger.logDebug(LOG_TAG, "Error unregistering broadcast receiver: " + e.getMessage());
+        }
+
+        try {
+            DrawerLayout drawer = getDrawer();
+            if (drawer != null) {
+                drawer.closeDrawers();
+            }
+        } catch (Exception e) {
+            // 忽略任何异常
+            Logger.logDebug(LOG_TAG, "Error closing drawers: " + e.getMessage());
+        }
     }
 
     @Override
@@ -801,7 +827,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 // If permission is granted, then also setup storage symlinks.
                 if(PermissionUtils.checkAndRequestLegacyOrManageExternalStoragePermission(
-                    TermuxActivity.this, requestCode, true, !isPermissionCallback)) {
+                    TermuxActivity.this, requestCode, false, !isPermissionCallback)) {
                     if (isPermissionCallback)
                         Logger.logInfoAndShowToast(TermuxActivity.this, LOG_TAG,
                             getString(com.termux.shared.R.string.msg_storage_permission_granted_on_request));
@@ -953,7 +979,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void unregisterTermuxActivityBroadcastReceiver() {
-        unregisterReceiver(mTermuxActivityBroadcastReceiver);
+        try {
+            unregisterReceiver(mTermuxActivityBroadcastReceiver);
+        } catch (IllegalArgumentException e) {
+            // Ignore if receiver was not registered
+            Logger.logDebug(LOG_TAG, "Broadcast receiver was not registered, skipping unregister");
+        }
     }
 
     private void fixTermuxActivityBroadcastReceiverIntent(Intent intent) {
