@@ -43,18 +43,16 @@ import alin.android.alinos.db.ChatDBHelper;
 import alin.android.alinos.db.ConfigDBHelper;
 
 import alin.android.alinos.manager.EventBus;
-import alin.android.alinos.net.BaseNetHelper;
 import alin.android.alinos.net.MessageSender;
-import alin.android.alinos.net.NetHelperFactory;
-import alin.android.alinos.net.OpenAIStreamNetHelper;
 import alin.android.alinos.manager.ChatStreamEventBus;
+import alin.android.alinos.prompt.PromptService;
 
 public class ChatActivity extends AppCompatActivity implements EventBus.EventListener {
 
     // 新增日志TAG
     private static final String TAG = "ChatActivity_Stream";
 
-    ////ChatActivity是原本的克隆,流式式聊天界面,用于测试和备用////
+
     // 控件声明
     private DrawerLayout drawerLayout;
     private RecyclerView rvSessionList, rvChat;
@@ -76,7 +74,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     private boolean isKeyboardShowing = false;
 
     // 流式相关控制
-    private OpenAIStreamNetHelper mStreamNetHelper;
     private long mStreamRecordId = -1; // 流式消息ID（隔离原有ID）
     private final StringBuilder mStreamContentBuffer = new StringBuilder();
     private int mAiMessagePosition = -1; // AI消息在列表中的位置
@@ -84,6 +81,7 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     private boolean isStreamFinished = false;   // 标记流式是否真正完成
     private final Handler mStreamHandler = new Handler(Looper.getMainLooper()); // 用于错误重试
     private int retryCount = 0; // 503错误重试计数器
+    private PromptService mPromptService; // 统一的提示词服务
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -93,6 +91,8 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         // 初始化数据库
         mChatDbHelper = new ChatDBHelper(this);
         mConfigDbHelper = new ConfigDBHelper(this);
+        // 初始化提示词服务
+        mPromptService = new PromptService(this);
 
         // 注册事件监听器
         EventBus.getInstance().register(this);
@@ -223,47 +223,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         }
     }
 
-    /**
-     * 生成AI回复 - 普通请求
-     */
-    private String generateAIResponse(String userInput) {
-        if (mCurrentConfig == null) {
-            return "[错误] 未配置AI服务";
-        }
-
-        // 检查是否有网络助手
-        BaseNetHelper netHelper = null;
-        try {
-            netHelper = NetHelperFactory.createNetHelper(this, mCurrentConfig);
-        } catch (Exception e) {
-            return "[错误] 创建网络助手失败: " + e.getMessage();
-        }
-
-        if (netHelper == null) {
-            return "[错误] 不支持的AI服务类型：" + mCurrentConfig.getType();
-        }
-
-        try {
-            // 调用网络接口
-            String response = netHelper.sendMessage(userInput);
-
-            // 检查是否是错误响应
-            if (response == null || response.trim().isEmpty()) {
-                return "[错误] AI返回空响应";
-            }
-
-            // 检查错误格式
-            if (response.startsWith("[错误]") || response.startsWith("[配置错误]")) {
-                return response;
-            }
-
-            return response;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "[错误] AI服务异常：" + e.getMessage();
-        }
-    }
 
     // 普通发送消息
     private void sendMessage() {
@@ -277,6 +236,12 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
 
         if (mCurrentSessionId == -1 || mCurrentConfig == null) {
             Toast.makeText(this, "请先选择会话并配置AI服务", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // 校验用户输入长度
+        int charLimit = mCurrentConfig.getUserInputCharLimit();
+        if (content.length() > charLimit) {
+            Toast.makeText(this, "输入内容超过限制（最多" + charLimit + "字符），请缩短内容", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -296,28 +261,56 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         addRecordToDb(userRecord);
         etInput.setText("");
 
-        // 在新线程中生成AI回复
-        new Thread(() -> {
-            String aiReply = generateAIResponse(content);
+        // 使用提示词服务异步生成AI回复（支持历史上下文）
+        mPromptService.sendMessageWithHistoryAsync(mCurrentConfig, mCurrentSessionId, content, null, new PromptService.Callback() {
+            @Override
+            public void onResult(String aiReply) {
+                // 回到主线程处理
+                runOnUiThread(() -> {
+                    // 添加AI回复到UI
+                    mMessageList.add(new ChatMessage(aiReply, ChatMessage.TYPE_AI, false));
+                    mChatAdapter.notifyItemInserted(mMessageList.size() - 1);
+                    rvChat.scrollToPosition(mMessageList.size() - 1);
 
-            // 回到主线程处理
-            runOnUiThread(() -> {
-                // 添加AI回复到UI
-                mMessageList.add(new ChatMessage(aiReply, ChatMessage.TYPE_AI, false));
-                mChatAdapter.notifyItemInserted(mMessageList.size() - 1);
-                rvChat.scrollToPosition(mMessageList.size() - 1);
+                    // 保存AI回复到数据库（没有token信息）
+                    ChatRecordBean aiRecord = new ChatRecordBean(
+                            mCurrentSessionId,
+                            1,
+                            mCurrentConfig.getType(),
+                            aiReply,
+                            System.currentTimeMillis()
+                    );
+                    addRecordToDb(aiRecord);
+                });
+            }
 
-                // 保存AI回复到数据库
-                ChatRecordBean aiRecord = new ChatRecordBean(
-                        mCurrentSessionId,
-                        1,
-                        mCurrentConfig.getType(),
-                        aiReply,
-                        System.currentTimeMillis()
-                );
-                addRecordToDb(aiRecord);
-            });
-        }).start();
+            @Override
+            public void onResultWithTokens(String aiReply, int promptTokens, int completionTokens, int totalTokens) {
+                // 回到主线程处理
+                runOnUiThread(() -> {
+                    // 添加AI回复到UI
+                    mMessageList.add(new ChatMessage(aiReply, ChatMessage.TYPE_AI, false));
+                    mChatAdapter.notifyItemInserted(mMessageList.size() - 1);
+                    rvChat.scrollToPosition(mMessageList.size() - 1);
+
+                    // 保存AI回复到数据库（包含token信息）
+                    ChatRecordBean aiRecord = new ChatRecordBean(
+                            mCurrentSessionId,
+                            1,
+                            mCurrentConfig.getType(),
+                            aiReply,
+                            System.currentTimeMillis()
+                    );
+                    // 设置token信息
+                    aiRecord.setPromptTokens(promptTokens);
+                    aiRecord.setCompletionTokens(completionTokens);
+                    aiRecord.setTotalTokens(totalTokens);
+                    // 计算消息内容本身的token数
+                    int tokenCount = aiRecord.getTokenCount(); // 构造器中已计算
+                    addRecordToDb(aiRecord);
+                });
+            }
+        });
     }
 
     // 流式发送消息
@@ -329,24 +322,16 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
             Log.w(TAG, "触发流式发送失败：" + toastMsg);
             return;
         }
+        // 校验用户输入长度
+        int charLimit = mCurrentConfig.getUserInputCharLimit();
+        if (content.length() > charLimit) {
+            Toast.makeText(this, "输入内容超过限制（最多" + charLimit + "字符），请缩短内容", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
         // 重置流式状态
         resetStreamLoadingState();
 
-        // ===================== 核心2行：识别 + 正则替换 =====================
-        String originType = mCurrentConfig.getType().toLowerCase();
-        String targetType = originType.replaceAll("^openai$", "openai_stream");
-        ConfigBean streamConfig = new ConfigBean(mCurrentConfig);
-        streamConfig.setType(targetType);
-        // ==================================================================
-
-        // 校验：处理替换后的type，兼容原有逻辑
-        if (!"openai_stream".equalsIgnoreCase(streamConfig.getType())) {
-            String errorMsg = "仅支持type=openai/openai_stream的配置，当前type：" + originType;
-            Toast.makeText(this, errorMsg, Toast.LENGTH_SHORT).show();
-            Log.e(TAG, "触发流式发送失败：" + errorMsg);
-            return;
-        }
 
         // 日志打印：流式发送触发信息
         Log.d(TAG, "触发流式发送，会话ID：" + mCurrentSessionId + "，输入内容长度：" + content.length());
@@ -379,17 +364,8 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         // 标记流式加载中
         isStreamLoading = true;
 
-        // 调用工厂原有方法，传入替换后的配置
-        mStreamNetHelper = (OpenAIStreamNetHelper) NetHelperFactory.createNetHelper(this, streamConfig);
-        if (mStreamNetHelper == null) {
-            resetStreamLoadingState();
-            mChatAdapter.updateAiMessage(mAiMessagePosition, "[错误] 不支持OpenAI流式请求", false);
-            updateRecordContentInDb(mStreamRecordId, "[错误] 不支持OpenAI流式请求");
-            return;
-        }
-
-        // 发起流式请求：仅传必要参数，回调处理UI
-        mStreamNetHelper.sendStreamMessage(mCurrentSessionId, content, (eventType, data) -> {
+        // 使用提示词服务发起流式请求
+        mPromptService.sendStreamMessage(mCurrentConfig, mCurrentSessionId, content, (eventType, data) -> {
             runOnUiThread(() -> handleStreamEvent(data));
         });
     }
@@ -400,12 +376,12 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         if (data.isError()) {
             Log.e(TAG, "流式错误：" + data.getErrorMsg());
 
-            // 处理503错误的重试逻辑
-            if (data.getErrorMsg().contains("503") && retryCount < 3) {
+            // 处理503错误和超时错误的重试逻辑
+            if ((data.getErrorMsg().contains("503") || data.getErrorMsg().contains("[超时重试]")) && retryCount < 3) {
                 retryCount++;
                 Log.d(TAG, "503服务不可用，第" + retryCount + "次重试...");
                 mStreamHandler.postDelayed(() -> {
-                    mStreamNetHelper.sendStreamMessage(mCurrentSessionId, etInput.getText().toString().trim(), (eventType, retryData) -> {
+                    mPromptService.sendStreamMessage(mCurrentConfig, mCurrentSessionId, etInput.getText().toString().trim(), (eventType, retryData) -> {
                         runOnUiThread(() -> handleStreamEvent(retryData));
                     });
                 }, 1000L * retryCount);
@@ -425,6 +401,8 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
 
         // 增量缓存，不立即更库
         if (!data.isFinish() && !TextUtils.isEmpty(data.getChunkContent())) {
+            Log.d(TAG, "收到分片事件，长度=" + data.getChunkContent().length() +
+                  ", 累计缓存=" + mStreamContentBuffer.length());
             long currentReceiveTime = System.currentTimeMillis();
 
             // 超时管理已迁移到OpenAIStreamNetHelper
@@ -442,9 +420,10 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         // 流式结束：先更新数据库，再处理UI（核心修复）
         if (data.isFinish()) {
             Log.d(TAG, "流式完成，总长度：" + mStreamContentBuffer.length());
-            String finalContent = mStreamContentBuffer.toString().trim();
+            String finalContent = data.getFullContent() != null ? data.getFullContent().trim() : mStreamContentBuffer.toString().trim();
             if (TextUtils.isEmpty(finalContent)) {
                 finalContent = "[空回复] 服务端未返回有效内容";
+                Log.w(TAG, "流式完成但内容为空，使用mStreamContentBuffer: " + mStreamContentBuffer.length());
             }
             writeStreamRecordToDb(finalContent); // 复用方法
             handleStreamFinish();
@@ -818,8 +797,8 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         }
 
         // 取消流式请求，防止内存泄漏
-        if (mStreamNetHelper != null) {
-            mStreamNetHelper.cancelStream();
+        if (mPromptService != null) {
+            mPromptService.cancelStream();
         }
 
         // 移除所有handler回调

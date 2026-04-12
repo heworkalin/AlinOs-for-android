@@ -23,6 +23,41 @@ import javax.net.ssl.X509TrustManager;
 import alin.android.alinos.bean.ConfigBean;
 
 public class OpenAINetHelper extends AbstractNetHelper {
+
+    /**
+     * OpenAI响应包装类，包含响应内容和Token使用情况
+     */
+    public static class OpenAIResponse {
+        private String content;
+        private int promptTokens;
+        private int completionTokens;
+        private int totalTokens;
+        private boolean hasUsage;
+
+        public OpenAIResponse(String content) {
+            this.content = content;
+            this.hasUsage = false;
+        }
+
+        public OpenAIResponse(String content, int promptTokens, int completionTokens, int totalTokens) {
+            this.content = content;
+            this.promptTokens = promptTokens;
+            this.completionTokens = completionTokens;
+            this.totalTokens = totalTokens;
+            this.hasUsage = true;
+        }
+
+        public String getContent() { return content; }
+        public int getPromptTokens() { return promptTokens; }
+        public int getCompletionTokens() { return completionTokens; }
+        public int getTotalTokens() { return totalTokens; }
+        public boolean hasUsage() { return hasUsage; }
+
+        @Override
+        public String toString() {
+            return content; // 保持向后兼容
+        }
+    }
     private static final String TAG = "OpenAINetHelper";
     private static final String TARGET_API_PATH = "/v1/chat/completions";
     // 优化：延长超时时间（适配siliconflow等第三方API）
@@ -66,10 +101,10 @@ public class OpenAINetHelper extends AbstractNetHelper {
         // 重试2次，解决网络抖动问题
         for (int retry = 0; retry <= MAX_RETRY; retry++) {
             try {
-                String result = sendMessageWithRetry(userMessage, retry);
+                OpenAIResponse result = sendMessageWithRetry(userMessage, retry);
                 // 非超时错误，直接返回
-                if (!result.contains("[网络超时]")) {
-                    return result;
+                if (!result.getContent().contains("[网络超时]")) {
+                    return result.getContent();
                 }
                 Log.w(TAG, "第" + (retry + 1) + "次请求超时，重试...");
             } catch (Exception e) {
@@ -82,12 +117,37 @@ public class OpenAINetHelper extends AbstractNetHelper {
         return "[网络超时] 多次重试仍无法连接到服务器，请检查网络或稍后再试";
     }
 
+    /**
+     * 发送消息（支持历史上下文）
+     * @param messages 预构建的messages JSONArray
+     * @return AI回复内容
+     */
+    public OpenAIResponse sendMessageWithMessages(JSONArray messages) {
+        // 重试2次，解决网络抖动问题
+        for (int retry = 0; retry <= MAX_RETRY; retry++) {
+            try {
+                OpenAIResponse result = sendMessageWithRetry(messages, retry);
+                // 非超时错误，直接返回
+                if (!result.getContent().contains("[网络超时]")) {
+                    return result;
+                }
+                Log.w(TAG, "第" + (retry + 1) + "次请求超时，重试...");
+            } catch (Exception e) {
+                Log.e(TAG, "第" + (retry + 1) + "次请求异常", e);
+                if (retry == MAX_RETRY) {
+                    return new OpenAIResponse("[请求异常] 多次重试失败：" + e.getMessage());
+                }
+            }
+        }
+        return new OpenAIResponse("[网络超时] 多次重试仍无法连接到服务器，请检查网络或稍后再试");
+    }
+
     // 实际请求逻辑（拆分出来，方便重试）
-    private String sendMessageWithRetry(String userMessage, int retryCount) {
+    private OpenAIResponse sendMessageWithRetry(String userMessage, int retryCount) {
         Log.d(TAG, "开始第" + (retryCount + 1) + "次请求，用户消息：" + userMessage);
-        
+
         if (!validateConfig()) {
-            return "[配置错误] 请补全API Key、模型名称和服务器地址";
+            return new OpenAIResponse("[配置错误] 请补全API Key、模型名称和服务器地址");
         }
 
         // 构建请求体（适配siliconflow格式）
@@ -96,7 +156,7 @@ public class OpenAINetHelper extends AbstractNetHelper {
             JSONObject jsonBody = new JSONObject();
             jsonBody.put("model", config.getModel());
             jsonBody.put("temperature", 0.7);
-            jsonBody.put("max_tokens", 2000);
+            jsonBody.put("max_tokens", config.getMaxResponseTokens());
             jsonBody.put("stream", false);
 
             JSONArray messages = new JSONArray();
@@ -110,7 +170,7 @@ public class OpenAINetHelper extends AbstractNetHelper {
             Log.d(TAG, "第" + (retryCount + 1) + "次请求体：" + requestBody);
         } catch (Exception e) {
             Log.e(TAG, "构造请求体失败", e);
-            return "[构造请求失败] " + e.getMessage();
+            return new OpenAIResponse("[构造请求失败] " + e.getMessage());
         }
 
         // URL拼接（无双斜杠）
@@ -186,7 +246,22 @@ public class OpenAINetHelper extends AbstractNetHelper {
                         content += "\n\n[提示：回复因达到长度限制而被截断]";
                     }
                 }
-                return TextUtils.isEmpty(content) ? "[响应异常] 服务端返回无有效内容" : content;
+
+                // 检查是否有usage字段
+                if (TextUtils.isEmpty(content)) {
+                    return new OpenAIResponse("[响应异常] 服务端返回无有效内容");
+                }
+
+                if (jsonResponse.has("usage")) {
+                    JSONObject usage = jsonResponse.getJSONObject("usage");
+                    int promptTokens = usage.optInt("prompt_tokens", 0);
+                    int completionTokens = usage.optInt("completion_tokens", 0);
+                    int totalTokens = usage.optInt("total_tokens", 0);
+                    return new OpenAIResponse(content, promptTokens, completionTokens, totalTokens);
+                } else {
+                    // 没有usage字段，返回仅包含内容的响应
+                    return new OpenAIResponse(content);
+                }
             } else {
                 // 解析错误信息（siliconflow的错误格式）
                 String errorMsg = response.toString();
@@ -196,18 +271,165 @@ public class OpenAINetHelper extends AbstractNetHelper {
                 } catch (Exception e) {
                     // 解析失败则用原始响应
                 }
-                return "[服务端错误] HTTP " + responseCode + ": " + errorMsg;
+                return new OpenAIResponse("[服务端错误] HTTP " + responseCode + ": " + errorMsg);
             }
 
         } catch (java.net.SocketTimeoutException e) {
             Log.e(TAG, "第" + (retryCount + 1) + "次请求超时", e);
-            return "[网络超时] 连接/读取服务器超时（已重试" + retryCount + "次），请检查网络或稍后再试";
+            return new OpenAIResponse("[网络超时] 连接/读取服务器超时（已重试" + retryCount + "次），请检查网络或稍后再试");
         } catch (java.net.UnknownHostException e) {
             Log.e(TAG, "无法解析地址", e);
-            return "[网络错误] 无法解析服务器地址：" + apiUrl;
+            return new OpenAIResponse("[网络错误] 无法解析服务器地址：" + apiUrl);
         } catch (Exception e) {
             Log.e(TAG, "请求异常", e);
-            return "[请求异常] " + e.getMessage();
+            return new OpenAIResponse("[请求异常] " + e.getMessage());
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    /**
+     * 实际请求逻辑（支持预构建的messages）
+     * @param messages 预构建的messages JSONArray
+     * @param retryCount 重试次数
+     * @return AI回复内容
+     */
+    private OpenAIResponse sendMessageWithRetry(JSONArray messages, int retryCount) {
+        Log.d(TAG, "开始第" + (retryCount + 1) + "次请求，使用预构建的messages，数量：" + messages.length());
+
+        if (!validateConfig()) {
+            return new OpenAIResponse("[配置错误] 请补全API Key、模型名称和服务器地址");
+        }
+
+        // 构建请求体（适配siliconflow格式）
+        String requestBody;
+        try {
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("model", config.getModel());
+            jsonBody.put("temperature", 0.7);
+            jsonBody.put("max_tokens", config.getMaxResponseTokens());
+            jsonBody.put("stream", false);
+            jsonBody.put("messages", messages);
+
+            requestBody = jsonBody.toString();
+            Log.d(TAG, "第" + (retryCount + 1) + "次请求体：" + requestBody);
+        } catch (Exception e) {
+            Log.e(TAG, "构造请求体失败", e);
+            return new OpenAIResponse("[构造请求失败] " + e.getMessage());
+        }
+
+        // URL拼接（无双斜杠）
+        String apiUrl = config.getServerUrl();
+        if (!apiUrl.contains(TARGET_API_PATH)) {
+            Log.d(TAG, "补全接口路径 -> " + TARGET_API_PATH);
+            apiUrl = apiUrl.endsWith("/") ? apiUrl.substring(0, apiUrl.length() - 1) : apiUrl;
+            apiUrl += TARGET_API_PATH;
+        }
+        Log.d(TAG, "最终请求URL：" + apiUrl);
+
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(apiUrl);
+            conn = (HttpURLConnection) url.openConnection();
+
+            // HTTPS适配：强制使用TLS 1.2/1.3（siliconflow要求）
+            if (conn instanceof HttpsURLConnection) {
+                HttpsURLConnection httpsConn = (HttpsURLConnection) conn;
+                httpsConn.setSSLSocketFactory(SSLContext.getDefault().getSocketFactory());
+                httpsConn.setHostnameVerifier((hostname, session) -> true); // 跳过域名校验（兜底）
+            }
+
+            // 核心：延长超时时间
+            conn.setConnectTimeout(CONNECT_TIMEOUT);
+            conn.setReadTimeout(READ_TIMEOUT);
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            // 禁用缓存，确保每次请求都是新的
+            conn.setUseCaches(false);
+            conn.setDefaultUseCaches(false);
+
+            // 请求头（适配siliconflow）
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            conn.setRequestProperty("Authorization", "Bearer " + config.getApiKey());
+            conn.setRequestProperty("Accept", "application/json");
+            // 添加User-Agent，避免被风控
+            conn.setRequestProperty("User-Agent", "AlinOS/1.0 (Android)");
+
+            Log.d(TAG, "开始发送请求体...");
+            // 发送请求体
+            try (OutputStream os = conn.getOutputStream()) {
+                byte[] input = requestBody.getBytes("UTF-8");
+                os.write(input, 0, input.length);
+                os.flush();
+            }
+
+            Log.d(TAG, "等待服务端响应...");
+            // 分步日志：先获取响应码（定位超时环节）
+            int responseCode = conn.getResponseCode();
+            Log.d(TAG, "服务端响应码：" + responseCode);
+
+            // 读取响应
+            InputStream inputStream = responseCode >= 200 && responseCode < 300 ? conn.getInputStream() : conn.getErrorStream();
+            StringBuilder response = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    response.append(line);
+                }
+            }
+            Log.d(TAG, "服务端原始响应：" + response.toString());
+
+            // 解析响应
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                JSONObject jsonResponse = new JSONObject(response.toString());
+                String content = "";
+                if (jsonResponse.has("choices") && jsonResponse.getJSONArray("choices").length() > 0) {
+                    JSONObject choice = jsonResponse.getJSONArray("choices").getJSONObject(0);
+                    content = choice.has("message") ? choice.getJSONObject("message").getString("content") : choice.optString("text", "");
+
+                    if ("length".equals(choice.optString("finish_reason"))) {
+                        content += "\n\n[提示：回复因达到长度限制而被截断]";
+                    }
+                }
+
+                // 检查是否有usage字段
+                if (TextUtils.isEmpty(content)) {
+                    return new OpenAIResponse("[响应异常] 服务端返回无有效内容");
+                }
+
+                if (jsonResponse.has("usage")) {
+                    JSONObject usage = jsonResponse.getJSONObject("usage");
+                    int promptTokens = usage.optInt("prompt_tokens", 0);
+                    int completionTokens = usage.optInt("completion_tokens", 0);
+                    int totalTokens = usage.optInt("total_tokens", 0);
+                    return new OpenAIResponse(content, promptTokens, completionTokens, totalTokens);
+                } else {
+                    // 没有usage字段，返回仅包含内容的响应
+                    return new OpenAIResponse(content);
+                }
+            } else {
+                // 解析错误信息（siliconflow的错误格式）
+                String errorMsg = response.toString();
+                try {
+                    JSONObject errorJson = new JSONObject(response.toString());
+                    errorMsg = errorJson.optString("error", errorJson.optString("message", errorMsg));
+                } catch (Exception e) {
+                    // 解析失败则用原始响应
+                }
+                return new OpenAIResponse("[服务端错误] HTTP " + responseCode + ": " + errorMsg);
+            }
+
+        } catch (java.net.SocketTimeoutException e) {
+            Log.e(TAG, "第" + (retryCount + 1) + "次请求超时", e);
+            return new OpenAIResponse("[网络超时] 连接/读取服务器超时（已重试" + retryCount + "次），请检查网络或稍后再试");
+        } catch (java.net.UnknownHostException e) {
+            Log.e(TAG, "无法解析地址", e);
+            return new OpenAIResponse("[网络错误] 无法解析服务器地址：" + apiUrl);
+        } catch (Exception e) {
+            Log.e(TAG, "请求异常", e);
+            return new OpenAIResponse("[请求异常] " + e.getMessage());
         } finally {
             if (conn != null) {
                 conn.disconnect();
