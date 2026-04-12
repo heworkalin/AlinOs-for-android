@@ -17,7 +17,7 @@ android {
 
         // ✅ 简化 NDK 配置
         ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
+            abiFilters 'arm64-v8a', 'x86_64'// 仅包含需要的 ABI，减少 APK 大小'
         }
     }
 
@@ -35,8 +35,10 @@ android {
 
     // ✅ 移除所有 JNI 相关的手动配置，让 Gradle 自动处理
     packagingOptions {
-        pickFirst 'lib/arm64-v8a/libvosk.so'
-        pickFirst 'lib/armeabi-v7a/libvosk.so'
+        pickFirst 'lib/arm64-v8a/*'
+        pickFirst 'lib/arm64-v8a/libtalloc.so.2'
+        pickFirst 'lib/x86_64/*'
+        pickFirst 'lib/x86_64/libtalloc.so.2'
     }
 }
 

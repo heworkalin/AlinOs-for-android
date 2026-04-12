@@ -175,9 +175,7 @@
         <activity
             android:name="alin.android.alinos.McpConfigActivity"
             android:exported="false" />
-        <activity
-            android:name="alin.android.alinos.VoiceRecognitionActivity"
-            android:exported="true"/>
+        
         <activity
             android:name="alin.android.alinos.TextToSpeechActivity"
             android:exported="true"/>

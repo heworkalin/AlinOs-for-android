@@ -282,14 +282,37 @@ public class PermissionUtils {
                                                                                  boolean showErrorMessage) {
         Logger.logVerbose(LOG_TAG, "Checking storage permission");
 
-        String errmsg;
-        Boolean requestLegacyStoragePermission = null;
+        // 检测是否为AlinOs系统
+        String brand = Build.BRAND != null ? Build.BRAND.toLowerCase() : "";
+        String manufacturer = Build.MANUFACTURER != null ? Build.MANUFACTURER.toLowerCase() : "";
+        String model = Build.MODEL != null ? Build.MODEL.toLowerCase() : "";
+        boolean isAlinOsSystem = brand.contains("alin") || manufacturer.contains("alin") ||
+                                 model.contains("alin") || brand.contains("alios") ||
+                                 manufacturer.contains("alios") || model.contains("alios");
 
-        if (prioritizeManageExternalStoragePermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+        String errmsg;
+        boolean requestLegacyStoragePermission;
+
+        // 严格按照Android版本分级（Termux官方规范）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+ (API 30+): 必须使用MANAGE_EXTERNAL_STORAGE
+            // 根据Android官方规范，requestLegacyExternalStorage在此版本完全失效
             requestLegacyStoragePermission = false;
 
-        if (requestLegacyStoragePermission == null)
+            if (isAlinOsSystem) {
+                Logger.logVerbose(LOG_TAG, "Detected AlinOs system on Android 11+, following official MANAGE_EXTERNAL_STORAGE requirement");
+            }
+        } else {
+            // Android 10及以下：MANAGE_EXTERNAL_STORAGE权限在此版本不可用
+            // 必须使用传统权限（READ/WRITE_EXTERNAL_STORAGE）
             requestLegacyStoragePermission = isLegacyExternalStoragePossible(context);
+
+            // AlinOs特殊处理：在Android 10及以下，强制使用传统权限以确保兼容性
+            if (isAlinOsSystem && Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                Logger.logVerbose(LOG_TAG, "Detected AlinOs system on Android 10 or below, using legacy storage permission for compatibility");
+                requestLegacyStoragePermission = true;
+            }
+        }
 
         boolean checkIfHasRequestedLegacyExternalStorage = checkIfHasRequestedLegacyExternalStorage(context);
 
@@ -309,9 +332,22 @@ public class PermissionUtils {
 
 
         errmsg = context.getString(R.string.msg_storage_permission_not_granted);
-        Logger.logError(LOG_TAG, errmsg);
-        if (showErrorMessage)
-            Logger.showToast(context, errmsg, false);
+
+        // 为AlinOs系统添加更详细的错误信息
+        if (isAlinOsSystem && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            String alinOsErrMsg = errmsg + "\n\nAlinOs系统需要授予'所有文件访问权限'：\n" +
+                    "1. 前往系统设置 → 应用 → Termux\n" +
+                    "2. 进入权限管理\n" +
+                    "3. 开启'所有文件访问'或类似选项\n" +
+                    "4. 返回Termux重试termux-setup-storage";
+            Logger.logError(LOG_TAG, "AlinOs storage permission error: " + alinOsErrMsg);
+            if (showErrorMessage)
+                Logger.showToast(context, alinOsErrMsg, false);
+        } else {
+            Logger.logError(LOG_TAG, errmsg);
+            if (showErrorMessage)
+                Logger.showToast(context, errmsg, false);
+        }
 
         if (requestCode < 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.M)
             return false;
@@ -319,7 +355,14 @@ public class PermissionUtils {
         if (requestLegacyStoragePermission || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             requestLegacyStorageExternalPermission(context, requestCode);
         } else {
-            requestManageStorageExternalPermission(context, requestCode);
+            // Android 11+ 必须使用MANAGE权限
+            if (isAlinOsSystem) {
+                Logger.logVerbose(LOG_TAG, "AlinOs系统正在请求MANAGE_EXTERNAL_STORAGE权限，将打开系统设置页");
+            }
+            Error error = requestManageStorageExternalPermission(context, requestCode);
+            if (error != null && isAlinOsSystem) {
+                Logger.logErrorExtended(LOG_TAG, "AlinOs系统MANAGE权限请求失败: " + error.toString());
+            }
         }
 
         return false;

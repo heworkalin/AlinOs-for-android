@@ -197,7 +197,12 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     /** Make service run in foreground mode. */
     private void runStartForeground() {
         setupNotificationChannel();
-        startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
+        Notification notification = buildNotification();
+        if (notification != null) {
+            startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
+        } else {
+            Logger.logError(LOG_TAG, "Failed to build notification for foreground service");
+        }
     }
 
     /** Make service leave foreground mode. */
@@ -848,7 +853,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
 
         NotificationUtils.setupNotificationChannel(this, TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_ID,
-            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW);
+            TermuxConstants.TERMUX_APP_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
     }
 
     /** Update the shown foreground service notification after making any changes that affect it. */
