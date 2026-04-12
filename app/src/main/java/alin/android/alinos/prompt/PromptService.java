@@ -157,7 +157,7 @@ public class PromptService {
             }
             return;
         }
-
+        Log.d(TAG, "=== DEBUG: sendStreamMessageWithMessages 新版本已生效 ===");
         // 发起流式请求（使用预构建的messages）
         mStreamNetHelper.sendStreamMessageWithMessages(sessionId, messages, listener);
     }
