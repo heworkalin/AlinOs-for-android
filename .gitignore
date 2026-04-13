@@ -18,3 +18,4 @@ local.properties
 terminal-emulator/build
 terminal-view/build
 termux-shared/build
+TermuxAm/build
