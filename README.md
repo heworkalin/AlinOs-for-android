@@ -3,7 +3,7 @@
 
 ### 致谢
 诚挚感谢所有助力项目开发的伙伴：
-- 感谢 **DeepSeek**网页版及通过 API 对接的 **Claude** [Anthropic API](https://api-docs.deepseek.com/zh-cn/guides/anthropic_api)，从2026年03月份开始的后续推送和更新**Claude**均基于这个执行，主导核心代码生成、接口逻辑重构与云端 API 对接调试，攻克复杂模块开发难点；
+- 感谢 **DeepSeek**网页版及通过 API 对接的 **Claude工具** [DeepSeek 提供兼容 Anthropic（Claude）格式的 API 服务](https://api-docs.deepseek.com/zh-cn/guides/anthropic_api)，从2026年03月份开始的后续推送和更新**Claude**均基于这个执行，主导核心代码生成、接口逻辑重构与云端 API 对接调试，攻克复杂模块开发难点；
 - 感谢 **豆包** 网页版全程提供技术方案咨询、接口规范梳理与问题定位建议，支撑项目框架搭建与架构设计；
 - 感谢 **Kimi** 网页版完成全量代码整合与拼接，打通安卓应用、Termux 环境与云端 API 的联动逻辑，保障代码整体完整性。
 
