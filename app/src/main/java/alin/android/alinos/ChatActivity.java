@@ -46,6 +46,7 @@ import alin.android.alinos.manager.EventBus;
 import alin.android.alinos.net.MessageSender;
 import alin.android.alinos.manager.ChatStreamEventBus;
 import alin.android.alinos.prompt.PromptService;
+import alin.android.alinos.utils.TokenEstimator;
 
 public class ChatActivity extends AppCompatActivity implements EventBus.EventListener {
 
@@ -305,8 +306,8 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                     aiRecord.setPromptTokens(promptTokens);
                     aiRecord.setCompletionTokens(completionTokens);
                     aiRecord.setTotalTokens(totalTokens);
-                    // 计算消息内容本身的token数
-                    int tokenCount = aiRecord.getTokenCount(); // 构造器中已计算
+                    // 设置消息内容本身的token数为completionTokens（实际值）
+                    aiRecord.setTokenCount(completionTokens);
                     addRecordToDb(aiRecord);
                 });
             }
@@ -490,9 +491,18 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
 
     // 新增：抽离写库逻辑，统一正常/异常场景，减少冗余
     private void writeStreamRecordToDb(String content) {
+        // 估算内容的token数
+        int estimatedTokens = TokenEstimator.estimateTokens(content);
+
         if (mStreamRecordId != -1) {
+            // 更新现有记录的内容和token信息
             updateRecordContentInDb(mStreamRecordId, content);
+            // 更新token信息（对于流式AI回复，tokenCount就是估算的token数）
+            if (mChatDbHelper != null) {
+                mChatDbHelper.updateRecordTokens(mStreamRecordId, estimatedTokens, 0, estimatedTokens, estimatedTokens);
+            }
         } else {
+            // 创建新记录，设置token信息
             ChatRecordBean record = new ChatRecordBean(
                     mCurrentSessionId,
                     1,
@@ -500,6 +510,10 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
                     content,
                     System.currentTimeMillis()
             );
+            // 设置token信息（对于流式AI回复，使用估算值）
+            record.setTokenCount(estimatedTokens);
+            record.setCompletionTokens(estimatedTokens);
+            record.setTotalTokens(estimatedTokens);
             addRecordToDb(record);
         }
     }
