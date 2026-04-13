@@ -139,8 +139,8 @@ public class PromptService {
             return;
         }
 
-        // 检查Token限制（使用原始配置的上下文窗口）
-        if (isExceedingContextWindow(config, messages, userInput)) {
+        // 检查Token限制（使用原始配置的上下文窗口，优先使用数据库存储的Token值）
+        if (checkContextWindow(config, sessionId, userInput, null)) {
             if (listener != null) {
                 listener.onStreamEvent("stream_chat",
                         ChatStreamEventBus.StreamEventData.buildError("消息长度超出模型上下文窗口限制，请缩短消息或清除部分历史记录"));
@@ -197,6 +197,25 @@ public class PromptService {
     }
 
     /**
+     * 获取最近10条历史消息（经过角色映射过滤）
+     * @param sessionId 会话ID
+     * @return 过滤后的历史消息列表（最多10条）
+     */
+    private List<ChatRecordBean> getRecentHistory(int sessionId) {
+        List<ChatRecordBean> history = getChatHistory(sessionId);
+        List<ChatRecordBean> filtered = new ArrayList<>();
+        for (ChatRecordBean record : history) {
+            String role = mapToOpenAIRole(record.getMsgType(), record.getSender());
+            if (role != null) {
+                filtered.add(record);
+            }
+        }
+        // 只保留最近10条
+        int startIndex = Math.max(0, filtered.size() - 10);
+        return new ArrayList<>(filtered.subList(startIndex, filtered.size()));
+    }
+
+    /**
      * 构建符合OpenAI标准的messages数组
      * 格式：system + 最近10条历史消息（user/assistant交替） + 当前用户消息
      * @param sessionId 会话ID（用于获取历史消息）
@@ -218,34 +237,19 @@ public class PromptService {
             Log.e(TAG, "构建system消息失败", e);
         }
 
-        // 2. 获取历史消息
-        List<ChatRecordBean> history = getChatHistory(sessionId);
-
-        // 3. 过滤并转换历史消息为OpenAI格式
-        List<JSONObject> historyMessages = new ArrayList<>();
-        for (ChatRecordBean record : history) {
+        // 2. 获取最近10条历史消息（已经过角色映射过滤）
+        List<ChatRecordBean> recentHistory = getRecentHistory(sessionId);
+        for (ChatRecordBean record : recentHistory) {
             try {
                 JSONObject msg = new JSONObject();
-
-                // 根据msgType和sender确定角色
+                // 角色已经在getRecentHistory中验证过，直接使用mapToOpenAIRole获取
                 String role = mapToOpenAIRole(record.getMsgType(), record.getSender());
-                if (role == null) {
-                    continue; // 跳过无法映射的消息
-                }
-
                 msg.put("role", role);
                 msg.put("content", record.getContent());
-                historyMessages.add(msg);
+                messages.put(msg);
             } catch (Exception e) {
                 Log.e(TAG, "转换历史消息失败: " + record.getId(), e);
             }
-        }
-
-        // 4. 只保留最近10条历史消息（5轮对话）
-        // 注意：历史消息已经是按时间升序排列的（getRecordsBySessionId返回ASC）
-        int startIndex = Math.max(0, historyMessages.size() - 10); // 最多10条
-        for (int i = startIndex; i < historyMessages.size(); i++) {
-            messages.put(historyMessages.get(i));
         }
 
         // 5. 添加当前用户消息
@@ -308,6 +312,69 @@ public class PromptService {
     }
 
     /**
+     * 计算总Token数（优先使用数据库中存储的Token值）
+     * @param sessionId 会话ID
+     * @param currentUserMessage 当前用户消息
+     * @param systemPrompt 系统提示词（可为空）
+     * @return 总Token数
+     */
+    private int calculateTotalTokens(int sessionId, String currentUserMessage, String systemPrompt) {
+        // 系统提示词
+        String systemContent = systemPrompt != null ? systemPrompt : "你是一个AI助手，回答简洁专业。";
+        int systemTokens = TokenEstimator.estimateTokens(systemContent);
+        int totalTokens = systemTokens;
+
+        // 历史记录（优先使用存储的Token值，仅最近10条）
+        List<ChatRecordBean> recentHistory = getRecentHistory(sessionId);
+        int historyTokens = 0;
+        for (ChatRecordBean record : recentHistory) {
+            int tokenCount = record.getEstimatedTokens();
+            historyTokens += tokenCount;
+            Log.d(TAG, "历史消息Token: id=" + record.getId() + ", type=" + record.getMsgType() +
+                  ", content_len=" + (record.getContent() != null ? record.getContent().length() : 0) +
+                  ", tokens=" + tokenCount + " (存储值: tokenCount=" + record.getTokenCount() +
+                  ", completionTokens=" + record.getCompletionTokens() + ")");
+        }
+        totalTokens += historyTokens;
+
+        // 当前用户消息
+        int userMessageTokens = TokenEstimator.estimateTokens(currentUserMessage);
+        totalTokens += userMessageTokens;
+
+        Log.d(TAG, "calculateTotalTokens: 系统提示词=" + systemContent.length() + " chars/" + systemTokens + " tokens, " +
+              "历史记录条数=" + recentHistory.size() + "/" + historyTokens + " tokens, " +
+              "当前用户消息=" + currentUserMessage.length() + " chars/" + userMessageTokens + " tokens, " +
+              "总Token数=" + totalTokens);
+        return totalTokens;
+    }
+
+    /**
+     * 检查上下文窗口限制（优先使用数据库中存储的Token值）
+     * @param config AI配置
+     * @param sessionId 会话ID
+     * @param currentUserMessage 当前用户消息
+     * @param systemPrompt 系统提示词（可为空）
+     * @return 是否超出限制，true表示超出
+     */
+    private boolean checkContextWindow(ConfigBean config, int sessionId, String currentUserMessage, String systemPrompt) {
+        if (config == null) {
+            return false;
+        }
+        int totalTokens = calculateTotalTokens(sessionId, currentUserMessage, systemPrompt);
+        int contextWindow = config.getModelContextWindow();
+        if (contextWindow <= 0) {
+            contextWindow = 4096; // 默认值
+        }
+        boolean isExceeding = totalTokens > contextWindow;
+        if (isExceeding) {
+            Log.w(TAG, "消息超出上下文窗口限制: " + totalTokens + " > " + contextWindow + " tokens");
+        } else {
+            Log.d(TAG, "消息Token估算: " + totalTokens + " / " + contextWindow + " tokens");
+        }
+        return isExceeding;
+    }
+
+    /**
      * 估算文本的Token数（使用TokenEstimator工具类）
      * @param text 输入文本
      * @return 估算的Token数
@@ -366,8 +433,8 @@ public class PromptService {
             return new AIResponse("[错误] 构建消息失败: " + e.getMessage());
         }
 
-        // 检查Token限制
-        if (isExceedingContextWindow(config, messages, userInput)) {
+        // 检查Token限制（优先使用数据库存储的Token值）
+        if (checkContextWindow(config, sessionId, userInput, systemPrompt)) {
             return new AIResponse("[错误] 消息长度超出模型上下文窗口限制，请缩短消息或清除部分历史记录");
         }
 
