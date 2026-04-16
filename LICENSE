@@ -1,21 +1,105 @@
+other
+
+AlinOs-for-android 开源协议声明
+
+1. 项目总体声明
+
+本项目为基于 termux/termux-app 的早期原型整合版本。本项目不适用单一开源协议，其不同代码模块分别受 MIT、GPLv3、Apache 2.0 等多份协议约束。
+
+重要警告：
+
+您必须自行审查所有上游组件的原始协议文本，特别是 GPLv3 的传染性条款。本作者不提供任何商业可用性担保，也不对您因未遵守第三方协议而产生的法律风险负责。若您计划分发（包括 Release APK 或源代码）或商业使用本项目，请务必自行排查各模块的强制性协议要求。
+
+1. 代码模块与协议归属（仅供参考，请以实际上游为准）
+
+模块路径或组件：app/src/main/java/alin/android/alinos
+上游项目：原创代码
+协议：MIT License
+说明：详见本文件末尾附录。
+
+模块路径或组件：app/src/main/java/com/termux/app
+上游项目：termux/termux-app
+协议：GPLv3 only
+说明：强 Copyleft。若分发此部分代码，整个项目必须开源且使用 GPLv3。
+
+模块路径或组件：terminal-emulator / terminal-view
+上游项目：jackpal/Android-Terminal-Emulator
+协议：Apache License 2.0
+说明：需保留原作者版权声明。
+
+模块路径或组件：termux-shared（核心子目录 com/termux/shared/termux/）
+上游项目：termux/termux-app
+协议：GPLv3 only（部分）
+说明：主体为 MIT License，但上述核心子目录受 GPLv3 only 约束。
+
+以上信息仅供快速参考，不保证完整或准确。您必须自行查阅各上游源码仓库的 LICENSE 文件。
+
+1. 使用者义务
+
+自行排查：您需逐一确认所有使用的上游代码是否存在强制性协议（如 GPLv3、AGPL 等）。自行承担风险：若您违反 GPLv3（例如闭源分发核心模块），后果由您自负。本声明不替代专业法律咨询。
+
+附录：原创代码 MIT 协议原文
+
 MIT License
 
 Copyright (c) 2025 heworkalin
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+English Version
+
+AlinOs-for-android Open Source License Statement
+
+1. Project Overview
+
+This project is an early prototype integration based on termux/termux-app. No single open source license applies to the whole project. Different code modules are governed by multiple licenses, including MIT, GPLv3, Apache 2.0, etc.
+
+Critical Warning:
+
+You must independently review the original license texts of all upstream components, especially the viral nature of GPLv3. The author provides no warranty of commercial usability and assumes no liability for your failure to comply with third-party license terms. If you plan to distribute (including release APK or source code) or commercially use this project, you must personally verify the mandatory license requirements of each module.
+
+1. Code Modules and License Breakdown (Reference Only - Always Check Upstream)
+
+Module Path or Component: app/src/main/java/alin/android/alinos
+Upstream Project: Original code
+License: MIT License
+Description: See appendix at the end of this file.
+
+Module Path or Component: app/src/main/java/com/termux/app
+Upstream Project: termux/termux-app
+License: GPLv3 only
+Description: Strong Copyleft. Distributing this part forces the entire project to be open source under GPLv3.
+
+Module Path or Component: terminal-emulator / terminal-view
+Upstream Project: jackpal/Android-Terminal-Emulator
+License: Apache License 2.0
+Description: Attribution required.
+
+Module Path or Component: termux-shared (core subdirectory com/termux/shared/termux/)
+Upstream Project: termux/termux-app
+License: GPLv3 only (partial)
+Description: The main body is under MIT License, but the above core subdirectory is bound by GPLv3 only.
+
+The above information is for quick reference only and may be incomplete or inaccurate. You must check the actual LICENSE files in each upstream repository.
+
+1. User Obligations
+
+Self-audit: You must verify the license terms of all upstream code you use, especially copyleft licenses (GPLv3, AGPL, etc.). Assume all risks: If you violate GPLv3 (e.g., distributing core modules in closed source), you bear full legal responsibility. This statement does not replace professional legal counsel.
+
+Appendix: MIT License for Original Code
+
+MIT License
+
+Copyright (c) 2025 heworkalin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
