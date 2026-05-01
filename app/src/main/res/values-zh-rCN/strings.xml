@@ -245,10 +245,10 @@
     <string name="screen_share_title">屏幕共享</string>
     <string name="overlay_test_title">悬浮窗测试</string>
     <string name="chat_activity_title">聊天界面</string>
-    <string name="mcp_config_title">MCP 配置</string>
+    <string name="agent_config_title">Agent 配置</string>
     <string name="background_keep_title">后台保活</string>
     <string name="voice_to_text_test_title">语音转文字测试</string>
     <string name="text_to_voice_test_title">文字转语音测试</string>
-    <string name="mcp_main_name">MCP 主程序</string>
+    <string name="agent_main_name">Agent 主程序</string>
     <string name="accessibility_service_description">AlinOs 的无障碍服务</string>
 </resources>

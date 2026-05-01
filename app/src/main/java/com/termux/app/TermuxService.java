@@ -199,7 +199,18 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         setupNotificationChannel();
         Notification notification = buildNotification();
         if (notification != null) {
-            startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
+            try {
+                startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, notification);
+            } catch (SecurityException e) {
+                Logger.logError(LOG_TAG, "Security exception when calling startForeground: " + e.getMessage());
+                // 可能缺少 FOREGROUND_SERVICE 权限或 AppOps 限制
+                // 记录错误但继续运行，服务可能无法保持在前台
+            } catch (IllegalStateException e) {
+                Logger.logError(LOG_TAG, "Illegal state when calling startForeground: " + e.getMessage());
+                // 可能应用处于后台限制状态
+            } catch (Exception e) {
+                Logger.logError(LOG_TAG, "Failed to start foreground: " + e.getMessage());
+            }
         } else {
             Logger.logError(LOG_TAG, "Failed to build notification for foreground service");
         }

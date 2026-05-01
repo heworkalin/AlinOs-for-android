@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F5F5F5"
+    android:fitsSystemWindows="true">
+
+    <!-- 标题栏 (紧贴状态栏) -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Termux Shell 测试"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="2dp"/>
+
+    <!-- 环境状态提示 -->
+    <LinearLayout
+        android:id="@+id/layout_env_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="0dp">
+
+        <View
+            android:id="@+id/view_env_indicator"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/circle_dot_gray" />
+
+        <TextView
+            android:id="@+id/tv_env_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="检测 Termux 环境中..."
+            android:textSize="14sp"
+            android:textColor="#666666" />
+    </LinearLayout>
+
+    <!-- 模式选择 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="0dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="执行模式:"
+            android:textSize="15sp"
+            android:textColor="#333333"
+            android:layout_marginEnd="16dp" />
+
+        <RadioGroup
+            android:id="@+id/rg_mode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rb_temp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="临时 (3s超时)"
+                android:textSize="14sp"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/rb_perm"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="永久 (会话ID)"
+                android:textSize="14sp"
+                android:layout_marginStart="16dp" />
+        </RadioGroup>
+    </LinearLayout>
+
+    <!-- 会话管理区域 (永久模式) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/card_session"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp"
+        android:visibility="gone"
+        app:cardCornerRadius="6dp"
+        app:cardElevation="2dp"
+        app:cardBackgroundColor="#FFFFFF">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="4dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="会话管理"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:paddingBottom="2dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <EditText
+                    android:id="@+id/et_session_id"
+                    android:layout_width="0dp"
+                    android:layout_height="32dp"
+                    android:layout_weight="1"
+                    android:hint="会话ID (留空自动生成)"
+                    android:textSize="12sp"
+                    android:background="@drawable/shape_edittext"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="2dp"
+                    android:inputType="text" />
+
+                <Button
+                    android:id="@+id/btn_new_session"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:text="新建"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="8dp"
+                    android:layout_marginStart="4dp"
+                    android:backgroundTint="#4CAF50" />
+
+                <Button
+                    android:id="@+id/btn_connect_session"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:text="连接"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="8dp"
+                    android:layout_marginStart="4dp"
+                    android:backgroundTint="#2196F3" />
+
+                <Button
+                    android:id="@+id/btn_close_session"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:text="关闭"
+                    android:textSize="11sp"
+                    android:paddingHorizontal="8dp"
+                    android:layout_marginStart="4dp"
+                    android:backgroundTint="#F44336" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_active_sessions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="当前无活跃会话"
+                android:textSize="10sp"
+                android:textColor="#999999"
+                android:paddingTop="2dp" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- ======== 输出结果区域 (可滚动, 占据剩余空间) ======== -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp"
+        app:cardCornerRadius="6dp"
+        app:cardElevation="2dp"
+        app:cardBackgroundColor="#FFFFFF">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="测试结果"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingBottom="4dp" />
+
+            <ScrollView
+                android:id="@+id/sv_result"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true">
+
+                <TextView
+                    android:id="@+id/tv_result"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="等待测试..."
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:background="#F0F0F0"
+                    android:padding="8dp"
+                    android:gravity="top"
+                    android:textIsSelectable="true" />
+            </ScrollView>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+
+    <!-- 虚拟终端按键 (永久模式) — 严格 4 行, 每行 4 键等宽 -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/card_keypad"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginBottom="2dp"
+        android:visibility="gone"
+        app:cardCornerRadius="6dp"
+        app:cardElevation="2dp"
+        app:cardBackgroundColor="#FFFFFF">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="4dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp">
+
+            <!-- Row 1: ESC  ALT  CTRL  PGDN -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="0dp">
+
+                <Button android:id="@+id/btn_key_esc"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="ESC"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#FFCC80" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_alt"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="ALT"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_ctrl"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="CTRL"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_pgdn"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="PGDN"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:minHeight="0dp" android:gravity="center" />
+            </LinearLayout>
+
+            <!-- Row 2: TAB  FN  DEL  PGUP -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="0dp">
+
+                <Button android:id="@+id/btn_key_tab"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="TAB"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_fn"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="FN"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_del"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="DEL"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#EF9A9A" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_pgup"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="PGUP"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:minHeight="0dp" android:gravity="center" />
+            </LinearLayout>
+
+            <!-- Row 3: HOME  ↑  END  ⌫ -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="0dp">
+
+                <Button android:id="@+id/btn_key_home"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="HOME"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_up"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="↑"
+                    android:textSize="18sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_end"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="END"
+                    android:textSize="10sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_bksp"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="⌫"
+                    android:textSize="18sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:minHeight="0dp" android:gravity="center" />
+            </LinearLayout>
+
+            <!-- Row 4: ←  ↓  →  ENTER -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <Button android:id="@+id/btn_key_left"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="←"
+                    android:textSize="18sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_down"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="↓"
+                    android:textSize="18sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_right"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="→"
+                    android:textSize="18sp" android:textStyle="bold"
+                    android:backgroundTint="#E0E0E0" android:textColor="#333333"
+                    android:padding="0dp" android:layout_marginEnd="3dp"
+                    android:minHeight="0dp" android:gravity="center" />
+
+                <Button android:id="@+id/btn_key_enter"
+                    android:layout_width="0dp" android:layout_height="36dp"
+                    android:layout_weight="1" android:text="↵"
+                    android:textSize="18sp" android:textStyle="bold"
+                    android:backgroundTint="#81C784" android:textColor="#333333"
+                    android:padding="0dp" android:minHeight="0dp" android:gravity="center" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 输入区域 (最底部) -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginBottom="8dp"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="4dp"
+        app:cardBackgroundColor="#FFFFFF">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="8dp">
+
+            <EditText
+                android:id="@+id/et_command"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:hint="例如: echo hello"
+                android:textSize="13sp"
+                android:inputType="text"
+                android:background="@drawable/shape_edittext"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:gravity="center_vertical" />
+
+            <Button
+                android:id="@+id/btn_test"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:layout_marginStart="6dp"
+                android:text="发送"
+                android:textSize="14sp"
+                android:paddingHorizontal="16dp"
+                android:backgroundTint="#2196F3" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+</LinearLayout>
