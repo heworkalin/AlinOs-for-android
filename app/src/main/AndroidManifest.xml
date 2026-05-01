@@ -173,12 +173,16 @@
             android:name="alin.android.alinos.AiConfigActivity"
             android:exported="false" />
         <activity
-            android:name="alin.android.alinos.McpConfigActivity"
+            android:name="alin.android.alinos.AgentConfigActivity"
             android:exported="false" />
         
         <activity
             android:name="alin.android.alinos.TextToSpeechActivity"
             android:exported="true"/>
+        <activity
+            android:name="alin.android.alinos.TermuxShellTestActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <activity
             android:name="alin.android.alinos.ChatActivity"
             android:launchMode="singleTask"
@@ -198,6 +202,13 @@
             android:theme="@style/Theme.TermuxActivity.DayNight.NoActionBar"
             tools:targetApi="n">
             <!-- 移除 LAUNCHER 分类，仅保留 LEANBACK 适配 -->
+            <!-- 允许第三方应用跳转启动的关键 -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!-- 如果你还想要 TV 启动，可以保留下面这段 -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
@@ -280,7 +291,7 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- ========== Termux 提供者/接收器/服务（保留 proot/MCP 核心能力） ========== -->
+        <!-- ========== Termux 提供者/接收器/服务（保留 proot 核心能力） ========== -->
         <provider
             android:name="com.termux.filepicker.TermuxDocumentsProvider"
             android:authorities="${applicationId}.documents"
@@ -315,7 +326,7 @@
             android:name="com.termux.shared.activities.ReportActivity$ReportActivityBroadcastReceiver"
             android:exported="false" />
 
-        <!-- Termux 核心服务（proot/MCP 运行依赖） -->
+        <!-- Termux 核心服务（proot运行依赖） -->
         <service
             android:name="com.termux.app.TermuxService"
             android:foregroundServiceType="specialUse"

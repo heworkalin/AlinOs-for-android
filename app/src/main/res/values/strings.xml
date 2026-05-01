@@ -251,10 +251,10 @@
     <string name="screen_share_title">Screen Share</string>
     <string name="overlay_test_title">Overlay Test</string>
     <string name="chat_activity_title">Chat Activity</string>
-    <string name="mcp_config_title">MCP Configuration</string>
+    <string name="agent_config_title">Agent Configuration</string>
     <string name="background_keep_title">Background Keep</string>
     <string name="voice_to_text_test_title">Voice to Text Test</string>
     <string name="text_to_voice_test_title">Text to Voice Test</string>
-    <string name="mcp_main_name">MCP Main</string>
+    <string name="agent_main_name">Agent Main</string>
     <string name="accessibility_service_description">Accessibility Service for AlinOs</string>
 </resources>

@@ -229,9 +229,9 @@
             </androidx.cardview.widget.CardView>
 
 
-            <!-- 7. MCP服务配置 -->
+            <!-- 7. Agent 配置 -->
             <androidx.cardview.widget.CardView
-                android:id="@+id/cv_mcp_config"
+                android:id="@+id/cv_agent_config"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
@@ -250,7 +250,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/mcp_config_title"
+                        android:text="@string/agent_config_title"
                         android:textSize="18sp"/>
 
                     <ImageView

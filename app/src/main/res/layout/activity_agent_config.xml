@@ -15,7 +15,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/mcp_main_name"
+        android:text="@string/agent_main_name"
         android:textSize="22sp"
         android:textStyle="bold"
         android:paddingHorizontal="16dp"
@@ -60,6 +60,49 @@
                         android:layout_weight="1"
                         android:text="初始化 Termux 环境"
                         android:textSize="18sp" />
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="@string/arrow_right"
+                        android:src="@drawable/ic_arrow_right" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- 2. Termux Shell 测试 -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cv_termux_test"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Termux Shell 测试"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="输入命令并查看返回参数"
+                        android:textSize="12sp"
+                        android:textColor="#999999"
+                        android:layout_marginEnd="8dp" />
 
                     <ImageView
                         android:layout_width="24dp"

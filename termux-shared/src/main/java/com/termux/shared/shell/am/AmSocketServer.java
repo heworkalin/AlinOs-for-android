@@ -3,6 +3,9 @@ package com.termux.shared.shell.am;
 import android.Manifest;
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -196,6 +199,7 @@ public class AmSocketServer {
         return null;
     }
 
+
     /**
      * Call termux-am-library to run the am command.
      *
@@ -224,21 +228,7 @@ public class AmSocketServer {
                     PackageUtils.getAppNameForPackage(context)));
             }
 
-            // Save original streams and package name
-            PrintStream originalOut = System.out;
-            PrintStream originalErr = System.err;
-            String originalPackageName = FakeContext.PACKAGE_NAME;
-            FakeContext.PACKAGE_NAME = context.getPackageName();
-
-            System.setOut(stdoutPrintStream);
-            System.setErr(stderrPrintStream);
-            try {
-                new Am().run(amCommandArray);
-            } finally {
-                System.setOut(originalOut);
-                System.setErr(originalErr);
-                FakeContext.PACKAGE_NAME = originalPackageName;
-            }
+            new Am(stdoutPrintStream, stderrPrintStream, (Application) context.getApplicationContext()).run(amCommandArray);
 
             // Set stdout to value set by am command in stdoutPrintStream
             stdoutPrintStream.flush();

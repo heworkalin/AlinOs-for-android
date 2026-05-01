@@ -10,8 +10,12 @@ public class AmApkInstaller {
 
     private static final String TAG = "AmApkInstaller";
     private static final String ASSET_APK_NAME = "TermuxAm-debug.apk";
-
-    // 目标路径
+    // 开发备注：ColorOS 平台 am 调用特殊限制，由于作者的设备就是这个导致排查了时间非常长最后发现居然是这个问题，特此备注：
+    // 1. 普通发行版用户无任何影响，默认非调试环境，am 调用完全正常；
+    // 2. 开发者调试时：若当前应用被系统标记为【调试应用】，ColorOS 底层防护机制会拦截 am 组件调用、篡改环境解析，直接导致进程异常崩溃；
+    // 3. 核心根因：与 exec 劫持、LD_PRELOAD 无关，仅受系统调试模式管控；
+    // 4. 开发调试必做：开发者选项 → 选择调试应用，取消本应用调试标记（设为「无」），am 即可正常调用。
+    // 目标路径，的目的只是去修复AM，核心原因是因为原版内置的和我们的应用包名不一致，导致AM无法正常工作
     public static String getTargetPath(Context ctx) {
         return ctx.getFilesDir().getAbsolutePath()
                 + "/usr/libexec/termux-am/am.apk";

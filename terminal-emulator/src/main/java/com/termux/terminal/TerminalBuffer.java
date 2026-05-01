@@ -152,6 +152,21 @@ public final class TerminalBuffer {
         return mActiveTranscriptRows + mScreenRows;
     }
 
+    /** Returns the number of visible columns on the screen. */
+    public int getColumns() {
+        return mColumns;
+    }
+
+    /**
+     * Returns the {@link TerminalRow} for a given external row index, or {@code null} if no data exists at that row.
+     *
+     * @param externalRow External row coordinate (from {@code -getActiveTranscriptRows()} to {@code getScreenRows()-1}).
+     * @return the TerminalRow at that position, or {@code null} if unallocated.
+     */
+    public TerminalRow getRowOrNull(int externalRow) {
+        return mLines[externalToInternalRow(externalRow)];
+    }
+
     /**
      * Convert a row value from the public external coordinate system to our internal private coordinate system.
      *

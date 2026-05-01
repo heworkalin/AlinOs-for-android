@@ -25,6 +25,7 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.shell.command.ExecutionCommand.Runner;
+import com.termux.shared.android.PermissionUtils;
 
 /**
  * A service that receives {@link RUN_COMMAND_SERVICE#ACTION_RUN_COMMAND} intent from third party apps and
@@ -230,10 +231,35 @@ public class RunCommandService extends Service {
         }
 
         // Start TERMUX_SERVICE and pass it execution intent
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            this.startForegroundService(execIntent);
-        } else {
-            this.startService(execIntent);
+        try {
+            // 检查 Android 10+ 的悬浮窗权限，避免后台启动限制
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (!PermissionUtils.validateDisplayOverOtherAppsPermissionForPostAndroid10(this, true)) {
+                    Logger.logWarn(LOG_TAG, "Display over other apps permission not granted. Foreground service start may be restricted on Android 10+.");
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                this.startForegroundService(execIntent);
+            } else {
+                this.startService(execIntent);
+            }
+        } catch (SecurityException e) {
+            Logger.logError(LOG_TAG, "Security exception when starting foreground service: " + e.getMessage());
+            // 尝试普通 startService 作为备选
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Logger.logDebug(LOG_TAG, "Falling back to startService() due to security restriction");
+                this.startService(execIntent);
+            }
+        } catch (IllegalStateException e) {
+            Logger.logError(LOG_TAG, "Illegal state when starting foreground service: " + e.getMessage());
+            // 可能应用处于后台限制状态，记录警告但继续执行
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                this.startService(execIntent);
+            }
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Failed to start foreground service: " + e.getMessage());
+            throw e; // 重新抛出，让上层处理
         }
 
         return stopService();
@@ -247,7 +273,22 @@ public class RunCommandService extends Service {
     private void runStartForeground() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             setupNotificationChannel();
-            startForeground(TermuxConstants.TERMUX_RUN_COMMAND_NOTIFICATION_ID, buildNotification());
+            Notification notification = buildNotification();
+            if (notification != null) {
+                try {
+                    startForeground(TermuxConstants.TERMUX_RUN_COMMAND_NOTIFICATION_ID, notification);
+                } catch (SecurityException e) {
+                    Logger.logError(LOG_TAG, "Security exception when calling startForeground: " + e.getMessage());
+                    // 可能缺少 FOREGROUND_SERVICE 权限或 AppOps 限制
+                } catch (IllegalStateException e) {
+                    Logger.logError(LOG_TAG, "Illegal state when calling startForeground: " + e.getMessage());
+                    // 可能应用处于后台限制状态
+                } catch (Exception e) {
+                    Logger.logError(LOG_TAG, "Failed to start foreground: " + e.getMessage());
+                }
+            } else {
+                Logger.logError(LOG_TAG, "Failed to build notification for foreground service");
+            }
         }
     }
 
