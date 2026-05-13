@@ -165,6 +165,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 mActivity.showToast(toToastTitle(finishedSession) + " - exited", true);
         }
 
+        // Do NOT auto-remove permanent sessions — they must be closed manually from
+        // TermuxShellTestActivity
+        if (termuxSession != null && termuxSession.getExecutionCommand().isPermanent) {
+            return;
+        }
+
         if (mActivity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
             // On Android TV devices we need to use older behaviour because we may
             // not be able to have multiple launcher icons.

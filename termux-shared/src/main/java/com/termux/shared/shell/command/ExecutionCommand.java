@@ -198,6 +198,9 @@ public class ExecutionCommand {
     /** Whether to set {@link ExecutionCommand} shell environment. */
     public boolean setShellCommandShellEnvironment;
 
+    /** If the {@link ExecutionCommand} is for a permanent session that cannot be killed by notification exit action. */
+    public boolean isPermanent;
+
 
 
 
