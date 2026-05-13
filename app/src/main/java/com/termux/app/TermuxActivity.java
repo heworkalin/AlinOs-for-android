@@ -18,6 +18,7 @@ import android.os.IBinder;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -72,7 +73,7 @@ import com.termux.view.TerminalViewClient;
 
 import java.util.Arrays;
 import java.util.Objects;
-import alin.android.alinos.mcp.AmApkInstaller;
+import alin.android.alinos.tools.AmApkInstaller;
 /**
  * A terminal emulator activity.
  * <p/>
@@ -640,6 +641,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
 
 
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP) {
+            DrawerLayout drawer = getDrawer();
+            if (drawer != null) {
+                if (drawer.isDrawerOpen(Gravity.LEFT)) {
+                    drawer.closeDrawers();
+                } else {
+                    drawer.openDrawer(Gravity.LEFT);
+                }
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
 
     @SuppressLint("RtlHardcoded")
     @Override

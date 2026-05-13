@@ -1,4 +1,4 @@
-package alin.android.alinos.mcp;
+package alin.android.alinos.tools;
 
 import android.content.Context;
 import android.util.Log;
@@ -16,6 +16,7 @@ public class AmApkInstaller {
     // 3. 核心根因：与 exec 劫持、LD_PRELOAD 无关，仅受系统调试模式管控；
     // 4. 开发调试必做：开发者选项 → 选择调试应用，取消本应用调试标记（设为「无」），am 即可正常调用。
     // 目标路径，的目的只是去修复AM，核心原因是因为原版内置的和我们的应用包名不一致，导致AM无法正常工作
+    // 这个虽然是工具，但是请注意这个。只是用于修复am的不需要把它做到tools搜索服务中
     public static String getTargetPath(Context ctx) {
         return ctx.getFilesDir().getAbsolutePath()
                 + "/usr/libexec/termux-am/am.apk";

@@ -50,7 +50,9 @@ import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A service holding a list of {@link TermuxSession} in {@link TermuxShellManager#mTermuxSessions} and background {@link AppShell}
@@ -68,7 +70,7 @@ import java.util.List;
 public final class TermuxService extends Service implements AppShell.AppShellClient, TermuxSession.TermuxSessionClient {
 
     /** This service is only bound from inside the same process and never uses IPC. */
-    class LocalBinder extends Binder {
+    public class LocalBinder extends Binder {
         public final TermuxService service = TermuxService.this;
     }
 
@@ -104,6 +106,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     /** If the user has executed the {@link TERMUX_SERVICE#ACTION_STOP_SERVICE} intent. */
     boolean mWantsToStop = false;
+
+    /** Handles of permanent sessions that cannot be killed by notification exit. */
+    private final Set<String> mPermanentSessionHandles = new HashSet<>();
 
     private static final String LOG_TAG = "TermuxService";
 
@@ -283,6 +288,10 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
         for (int i = 0; i < termuxSessions.size(); i++) {
             ExecutionCommand executionCommand = termuxSessions.get(i).getExecutionCommand();
+
+            // Skip permanent sessions — they must be closed manually from within TermuxShellTestActivity
+            if (executionCommand.isPermanent) continue;
+
             processResult = mWantsToStop || executionCommand.isPluginExecutionCommandWithPendingResult();
             termuxSessions.get(i).killIfExecuting(this, processResult);
             if (!processResult)
@@ -653,6 +662,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
             Logger.logVerbose(LOG_TAG, "The onTermuxSessionExited() callback called for \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession command");
 
+            // Clean up permanent session handle
+            mPermanentSessionHandles.remove(termuxSession.getTerminalSession().mHandle);
+
             // If the execution command was started for a plugin, then process the results
             if (executionCommand != null && executionCommand.isPluginExecutionCommand)
                 TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
@@ -869,12 +881,26 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     /** Update the shown foreground service notification after making any changes that affect it. */
     private synchronized void updateNotification() {
-        if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()) {
-            // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
-            requestStopService();
+        if (mWakeLock == null && getNonPermanentSessionCount() == 0 && mShellManager.mTermuxTasks.isEmpty()) {
+            // Exit if we are updating after the user disabled all locks with no non-permanent sessions
+            // or tasks running. Permanent sessions keep the service alive but hidden from Exit action.
+            if (mShellManager.mTermuxSessions.isEmpty()) {
+                requestStopService();
+            } else {
+                // Only permanent sessions remain — still show the notification
+                ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
+            }
         } else {
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
         }
+    }
+
+    private int getNonPermanentSessionCount() {
+        int count = 0;
+        for (TermuxSession s : mShellManager.mTermuxSessions) {
+            if (!s.getExecutionCommand().isPermanent) count++;
+        }
+        return count;
     }
 
 
@@ -967,6 +993,48 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
                 return termuxSession;
         }
         return null;
+    }
+
+
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Permanent session management
+    // ────────────────────────────────────────────────────────────────────
+
+    /** Mark a session handle as permanent (protected from notification Exit). */
+    public void addPermanentSessionHandle(String handle) {
+        if (handle != null) mPermanentSessionHandles.add(handle);
+    }
+
+    /** Remove a session handle from the permanent set. */
+    public void removePermanentSessionHandle(String handle) {
+        if (handle != null) mPermanentSessionHandles.remove(handle);
+    }
+
+    /** Check if a handle belongs to a permanent session. */
+    public boolean isPermanentSession(String handle) {
+        return handle != null && mPermanentSessionHandles.contains(handle);
+    }
+
+    /** Find a permanent session by shell name and remove it from the service entirely. */
+    public synchronized boolean removePermanentSessionByName(String shellName) {
+        TermuxSession session = getTermuxSessionForShellName(shellName);
+        if (session == null) return false;
+
+        String handle = session.getTerminalSession().mHandle;
+        mPermanentSessionHandles.remove(handle);
+        session.killIfExecuting(this, false);
+        mShellManager.mTermuxSessions.remove(session);
+
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
+        updateNotification();
+        return true;
+    }
+
+    /** Get the permanent session handle set (for inspection). */
+    public Set<String> getPermanentSessionHandles() {
+        return mPermanentSessionHandles;
     }
 
 
