@@ -180,9 +180,14 @@
             android:name="alin.android.alinos.TextToSpeechActivity"
             android:exported="true"/>
         <activity
-            android:name="alin.android.alinos.TermuxShellTestActivity"
+            android:name="alin.android.alinos.dev.TermuxShellTestActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name="alin.android.alinos.dev.ChatActivityDev"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         <activity
             android:name="alin.android.alinos.ChatActivity"
             android:launchMode="singleTask"

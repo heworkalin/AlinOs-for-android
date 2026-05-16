@@ -41,7 +41,11 @@ android {
         pickFirst 'lib/x86_64/libtalloc.so.2'
     }
 }
-
+configurations {
+    all {
+        exclude group: 'org.jetbrains', module: 'annotations-java5'
+    }
+}
 dependencies {
     // 基础依赖
     implementation libs.appcompat
@@ -70,7 +74,22 @@ dependencies {
 
     // ✅ 简化 Vosk 依赖 - 仅使用最新版 Vosk，JNA 会自动包含
     implementation 'com.alphacephei:vosk-android:0.3.47'
+    // Markwon 核心库，处理基础的 Markdown 解析与渲染
+    implementation 'io.noties.markwon:core:4.6.2'
+    implementation 'io.noties.markwon:inline-parser:4.6.2'
+    implementation 'io.noties.markwon:ext-latex:4.6.2'
+    implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
+    implementation 'io.noties.markwon:ext-tables:4.6.2'
+    implementation 'io.noties.markwon:ext-tasklist:4.6.2'
+    implementation 'io.noties.markwon:syntax-highlight:4.6.2'
 
+    implementation 'io.noties:prism4j:2.0.0'
+    // 注解处理器，用于生成 GrammarLocator
+    annotationProcessor('io.noties:prism4j-bundler:2.0.0') {
+        exclude group: 'org.jetbrains', module: 'annotations-java5'
+    }
+    // Prism4j 注解处理器，用于在编译时生成 GrammarLocator
+    //annotationProcessor 'io.noties:prism4j-bundler:2.0.0'
     // ✅ 移除单独的 JNA 依赖，Vosk AAR 已经包含了正确的 JNA
     // implementation 'net.java.dev.jna:jna:5.14.0@aar'
     implementation 'androidx.preference:preference:1.2.0'

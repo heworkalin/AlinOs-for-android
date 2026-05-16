@@ -6,6 +6,9 @@ import android.view.View;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
+import alin.android.alinos.dev.ChatActivityDev;
+import alin.android.alinos.dev.TermuxShellTestActivity;
+
 //AlinOs\app\src\main\java\alin\android\alinos\AgentConfigActivity.java
 public class AgentConfigActivity extends AppCompatActivity {
 
@@ -37,6 +40,16 @@ public class AgentConfigActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 Intent intent = new Intent(AgentConfigActivity.this, TermuxShellTestActivity.class);
+                startActivity(intent);
+            }
+        });
+
+        // 找到 Markdown + LaTeX 渲染测试卡片
+        CardView cvMarkdownTest = findViewById(R.id.cv_markdown_test);
+        cvMarkdownTest.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(AgentConfigActivity.this, ChatActivityDev.class);
                 startActivity(intent);
             }
         });

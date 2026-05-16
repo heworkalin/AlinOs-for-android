@@ -16,248 +16,70 @@ import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
 import com.termux.terminal.WcWidth;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Termux Shell 标准化接口执行器。
+ * Termux Shell 面向 Agent 的工具集。
  *
- * <p>对外提供且仅提供四个标准函数 + 一个快捷辅助函数：
- * <ol>
- *   <li>{@link #execPersistentShell(String, String, boolean, String, long, Object, boolean, boolean)}</li>
- *   <li>{@link #createPersistentSession(String)}</li>
- *   <li>{@link #closePersistentSession(String)}</li>
- *   <li>{@link #execTemporaryShell(String, boolean)}</li>
- * </ol>
- * 快捷辅助：{@link #execPersistentCommand(String)}
+ * <p>彻底移除临时一次性执行（{@code bash -c}），全部操作收敛到永久 PTY 会话。
+ * 所有接口返回结构化 JSON，面向 Agent 调用设计。
  *
- * <p>调用前必须确保：
+ * <p>设计原则：
  * <ul>
- *   <li>{@code TermuxApplication.init(context)} 已调用</li>
- *   <li>{@code TermuxShellEnvironment.init(context)} 已调用</li>
- *   <li>本执行器的 {@link #init(Context, TermuxService)} 已完成</li>
+ *   <li>纯文本优先 — 默认无颜色/行号/标记</li>
+ *   <li>结构化响应 — 至少包含 {@code status} 字段</li>
+ *   <li>显式生命周期 — 会话必须显式创建/销毁</li>
+ *   <li>枚举式按键 — 控制键/方向键使用枚举</li>
+ *   <li>智能等待 — 检测提示符而非盲睡</li>
  * </ul>
  *
- * <p>线程安全：所有 PTY 读写、会话池操作均同步处理。
- *
- * <p>注意：当使用 TermuxService 创建会话时，{@link #execPersistentShell} 需在 UI 线程调用
- * （TermuxService 内部 ListView 适配器不支持并发修改）。
+ * <p>使用前需确保：
+ * {@code TermuxApplication.init(context)}、{@code TermuxShellEnvironment.init(context)}、
+ * {@link #init(Context, TermuxService)} 均已完成。
  */
-/**
- 感谢您的纠正，我理解了：**行号和ANSI样式标记** 由 `stripFormat` 控制（默认 `false` 即保留），**光标标记**（`[ ]`、`█`、`(标)`）由另一个独立参数控制，默认 **`false` 不显示**。
-
-因此，`execPersistentShell` 的参数列表必须增加第 8 个参数 `showCursor`，类型 `boolean`，默认值 `false`。  
-下面是根据您的指示修正后的最终规范，其他所有逻辑不变。
-
----
-
-# AlinOs Termux Shell 接口函数规范文档（修正版）
-
-## 文档目的
-本接口规范定义 **永久会话模式** 与 **临时会话模式** 两套执行体系，共 **4 个标准函数** + 1 个快捷辅助函数，**参数默认值、业务逻辑、边界行为、返回规则全部固化**；所有细节、默认行为、隐式逻辑全部写明，无任何隐含规则，确保任意 AI 可直接理解并生成代码。
-
----
-
-## 一、永久会话体系（长驻 PTY 交互会话，自动生命周期管理）
-
-### 1. 核心主函数：`execPersistentShell`
-
-```java
-public String execPersistentShell(
-    String sessionId,
-    String inputText,
-    boolean appendEnter,
-    String specialKeySeq,
-    long waitMs,
-    Object fetchRule,
-    boolean stripFormat,
-    boolean showCursor
-)
-```
-
-**功能总述**  
-永久模式统一入口，99% 业务场景仅需调用此函数：  
-- 自动检测目标会话是否存在，**不存在则自动创建**  
-- 支持发送命令 / 纯文本 / 特殊按键  
-- 发送后阻塞等待终端渲染  
-- 按规则截取终端输出并格式化返回  
-- 输出自动附加 **行号前缀** 与 **具名 ANSI 样式标记**（通过 `stripFormat` 控制）  
-- 可选择显示 **光标占位标记**（通过 `showCursor` 控制）  
-- 所有参数支持默认值，可无参直接调用  
-
-**参数明细（顺序不可变，默认值严格固定）**  
-
-| 序号 | 参数名 | 类型 | 默认值 | 完整业务描述 |
-|------|--------|------|--------|--------------|
-| 1 | sessionId | String | `"default"` | 目标永久会话唯一标识；<br>不传则使用默认会话；<br>函数内部自动检测：不存在则自动新建，已存在则直接复用 |
-| 2 | inputText | String | `""` | 要发送的 Shell 命令、纯文本内容；<br>空字符串 = 不发送任何内容，仅刷新当前终端画面 |
-| 3 | appendEnter | boolean | `false` | 是否在输入内容末尾**自动追加回车符 `\r`**；<br>默认不追加，仅发送文本不执行；<br>设为 `true` 用于执行命令 |
-| 4 | specialKeySeq | String | `null` | 特殊按键 ANSI 序列（方向键、Tab、ESC、Ctrl 组合键等）；<br>`null` = 不发送任何特殊按键；<br>与 `inputText` 互斥，二选一执行 |
-| 5 | waitMs | long | `300` | 发送操作完成后，**阻塞等待终端渲染完成的毫秒时长**；<br>默认 300ms，适配绝大多数命令；<br>长耗时交互命令可调大 |
-| 6 | fetchRule | Object | `20` | 输出截取规则，**永远从终端最后一行向上截取**：<br>1. 数字 `Integer N`：返回最后 N 行；<br>2. 字符串 `"all"`：返回终端全部历史内容；<br>3. `null`：不截取、不返回任何内容，仅执行操作 |
-| 7 | stripFormat | boolean | `false` | **行号与样式标记** 控制：<br>`false` = **保留行号、ANSI 样式标记**，返回结构化终端画布；<br>`true` = 移除所有行号、样式标记及 ANSI 控制符，仅输出纯文本内容 |
-| 8 | showCursor | boolean | `false` | **光标标记** 控制：<br>`false` = **不显示**光标占位符（`[ ]`、`█`、`(标)`）；<br>`true` = 在当前光标位置渲染对应的占位标记，便于调试或精准定位 |
-
-**隐式内置逻辑（必须明确）**  
-
-1. **自动会话兜底**：目标 `sessionId` 不存在 → 自动调用 `createPersistentSession` 创建  
-2. **行号与样式标记**（由 `stripFormat` 控制）：每行输出以 `[行号]` 开头；ANSI 颜色 / 效果自动转换为具名标记（如 `[红色]`、`[粗体|亮青]` 等），内嵌于行内  
-3. **光标标记**（仅在 `showCursor = true` 时出现）：  
-   - 光标所在单词两侧加 `[` `]`  
-   - 光标位于空格上时渲染为 `█`  
-   - 光标位于字符右侧时追加 `(标)`  
-4. **线程安全**：所有 PTY 读写、会话状态操作均同步处理  
-5. **异常兜底**：会话死亡时自动重建默认会话  
-
-**重载版本（完全继承全参默认逻辑）**  
-
-```java
-// 1. 无参调用（仅刷新画面，返回最后 20 行，带行号与样式，无光标）
-public String execPersistentShell()
-
-// 2. 仅传输入文本（不追加回车，返回最后 20 行，带行号与样式，无光标）
-public String execPersistentShell(String inputText)
-
-// 3. 快捷执行命令（自动追加回车，返回最后 20 行，带行号与样式，无光标）
-public String execPersistentCommand(String command)
-```
-
-`execPersistentCommand` 等价于 `execPersistentShell("default", command, true, null, 300, 20, false, false)`，专为“输入命令并立刻执行”场景提供。
-
-**返回值规则**  
-- 成功：返回按 `fetchRule` + `stripFormat` + `showCursor` 处理后的终端文本  
-- `fetchRule = null`：返回空字符串 `""`  
-- 失败：返回错误信息纯文本  
-
----
-
-### 2. 创建函数：`createPersistentSession`
-
-```java
-public void createPersistentSession(String sessionId)
-```
-
-**功能总述**  
-手动创建指定 ID 的永久 PTY 会话。  
-**注意**：日常业务无需调用，`execPersistentShell` 已自动封装。
-
-| 参数名 | 类型 | 默认值 | 描述 |
-|--------|------|--------|------|
-| sessionId | String | 无（必填） | 会话唯一 ID，不能为空 / 空串；重复创建会直接跳过，不报错 |
-
-**返回值**：void，失败仅打印日志。
-
----
-
-### 3. 销毁函数：`closePersistentSession`
-
-```java
-public void closePersistentSession(String sessionId)
-```
-
-**功能总述**  
-手动销毁指定 ID 的永久会话，释放 PTY 资源并从全局会话池移除。
-
-| 参数名 | 类型 | 默认值 | 描述 |
-|--------|------|--------|------|
-| sessionId | String | 无（必填） | 要关闭的目标会话 ID；不存在则直接跳过，不报错 |
-
-**返回值**：void，无返回。
-
----
-
-## 二、临时会话体系（一次性 `bash -c` 调用，无状态、3s 超时）
-
-### 唯一主函数：`execTemporaryShell`
-
-```java
-public String execTemporaryShell(String command, boolean stripFormat)
-```
-
-**功能总述**  
-一次性执行 Shell 命令，**无常驻会话、无状态保留**；底层通过 `bash -c` 执行，强制 3 秒超时，超时自动杀进程。
-
-| 序号 | 参数名 | 类型 | 默认值 | 完整业务描述 |
-|------|--------|------|--------|--------------|
-| 1 | command | String | 无（必填） | 要执行的完整 Shell 命令，**必须传入，不允许空** |
-| 2 | stripFormat | boolean | `false` | 输出格式控制：<br>`false` = 保留 ANSI 颜色样式；<br>`true` = 仅返回 stdout/stderr 纯文本，剔除所有格式符 |
-
-**固定隐式逻辑**  
-1. 独立进程执行，3 秒超时强制销毁  
-2. 不维护任何会话，执行后进程完全退出  
-3. 返回包含 stdout、stderr、exit code 的结构化文本  
-4. **无行号、无光标标记、无终端画布维护**  
-
-**返回值规则**  
-返回结构化执行结果文本（stdout、stderr、exit code、超时提示）。
-
----
-
-## 三、输出格式详解与样例
-
-### 永久模式（默认：行号与样式保留，无光标，`stripFormat = false`, `showCursor = false`）
-每行格式：`[行号] [样式] 文本内容`
-```
-[0] [绿色] ~ [亮白] $ [默认]  ls 
-[1] [默认] a.txt   crash.log
-[2] [粗体|青色] 容器选择菜单.sh 
-[50] [绿色] ~ [亮白] $ [默认]  help
-```
-
-### 永久模式（显示光标，`showCursor = true`）
-在上一输出的基础上，当前光标行会出现标记：
-```
-[50] [绿色] ~ [亮白] $ [默认]  [mmmmmnnnnnnmmmmmmmmmmmmmsl](标)█
-```
-- 单词被 `[ ]` 包围  
-- 光标位置标注 `(标)`  
-- 光标所在空格渲染为 `█`  
-
-### 永久模式纯文本（`stripFormat = true`，无论 `showCursor` 为何值，移除所有标记）
-```
-~ $ ls
-a.txt   crash.log
-容器选择菜单.sh
-~ $ █
-```
-
----
-
-## 四、全局统一约定
-
-1. **空值等价**：`null` 与空串 `""` 完全等价  
-2. **时间单位**：所有超时 / 等待均为 **毫秒（ms）**  
-3. **会话 ID**：大小写敏感，唯一不可重复  
-4. **默认值固定**：所有默认值不随环境或版本变化  
-5. **无黑盒行为**：所有隐式逻辑均已显式说明  
-
----
-
-至此，规范完全对齐您的需求：行号和样式标记由 `stripFormat` 控制（默认保留），光标标记由 `showCursor` 独立控制（默认关闭）。`TerminalTermuxExecutor` 的实现应严格遵循本规范。
-*/
 public class TerminalTermuxExecutor {
 
     private static final String DEFAULT_SESSION_ID = "default";
+    private static final long SHELL_EXEC_POLL_MS = 80;
+    private static final long SHELL_EXEC_DEFAULT_TIMEOUT_MS = 10000;
+    private static final Pattern EXIT_MARKER = Pattern.compile("__ALINOS_EXIT__:(\\d+)");
 
     private static final String[] ANSI_COLOR_NAMES = {
         "黑色", "红色", "绿色", "黄色", "蓝色", "紫色", "青色", "白色",
         "暗灰", "亮红", "亮绿", "亮黄", "亮蓝", "亮紫", "亮青", "亮白"
     };
 
+    // ── 按键枚举 → ANSI 序列映射 ──
+    private static final Map<String, String> KEY_ANSI_MAP = new HashMap<>();
+    static {
+        KEY_ANSI_MAP.put("CTRL_C", "\003");
+        KEY_ANSI_MAP.put("CTRL_D", "\004");
+        KEY_ANSI_MAP.put("CTRL_Z", "\026");
+        KEY_ANSI_MAP.put("TAB", "\t");
+        KEY_ANSI_MAP.put("ENTER", "\r");
+        KEY_ANSI_MAP.put("ESCAPE", "\033");
+        KEY_ANSI_MAP.put("UP", "\033[A");
+        KEY_ANSI_MAP.put("DOWN", "\033[B");
+        KEY_ANSI_MAP.put("LEFT", "\033[D");
+        KEY_ANSI_MAP.put("RIGHT", "\033[C");
+    }
+
     // ── 单例 ──
     private static volatile TerminalTermuxExecutor instance;
 
     private TerminalTermuxExecutor() {}
 
-    /**
-     * 获取全局单例实例。进程内唯一，sessionPool 随实例持久保留。
-     * Activity 重建后应调用 {@link #init(Context, TermuxService)} 刷新 TermuxService 引用。
-     */
     public static TerminalTermuxExecutor getInstance() {
         if (instance == null) {
             synchronized (TerminalTermuxExecutor.class) {
@@ -270,9 +92,12 @@ public class TerminalTermuxExecutor {
     }
 
     // ────────────────────────────────────────────────────────────────
-    //  会话池（实例级别，单例内全局唯一）
+    //  实例状态
     // ────────────────────────────────────────────────────────────────
+
     private final HashMap<String, PtySession> sessionPool = new HashMap<>();
+    /** 每个会话的「增量读取」位置追踪 */
+    private final HashMap<String, Integer> lastReadLineCount = new HashMap<>();
 
     private Context context;
     private TermuxService termuxService;
@@ -285,18 +110,15 @@ public class TerminalTermuxExecutor {
           + "预期路径: " + TermuxConstants.TERMUX_PREFIX_DIR_PATH;
 
     // ================================================================
-    //  PtySession — 基于 TerminalSession 的 PTY 长驻会话
-    //  TerminalSession 通过 JNI 创建伪终端，自动读取输出并解析 ANSI，
-    //  无需手动管理 stdin/stdout 管道。
+    //  PtySession
     // ================================================================
+
     static class PtySession {
         final String id;
         final TerminalSession session;
         final TerminalEmulator emulator;
-        /** per-session 锁：序列化同一会话的写入与读取操作 */
         final Object lock = new Object();
 
-        /** 最小化 TerminalSessionClient —— 用于直接创建的 TerminalSession */
         private final TerminalSessionClient sessionClient = new TerminalSessionClient() {
             @Override public void onTextChanged(TerminalSession s) {}
             @Override public void onSessionFinished(TerminalSession s) {}
@@ -317,7 +139,6 @@ public class TerminalTermuxExecutor {
             @Override public void logStackTrace(String t, Exception e) {}
         };
 
-        /** 直接创建新 PTY 会话（不依赖 TermuxService） */
         PtySession(String id, String shellPath, String cwd, String[] env) {
             this.id = id;
             this.session = new TerminalSession(shellPath, cwd, null, env,
@@ -326,7 +147,6 @@ public class TerminalTermuxExecutor {
             this.emulator = session.getEmulator();
         }
 
-        /** 包装 TermuxService 创建的已有 TerminalSession */
         PtySession(String id, TerminalSession existingSession) {
             this.id = id;
             this.session = existingSession;
@@ -334,7 +154,6 @@ public class TerminalTermuxExecutor {
             this.emulator = session.getEmulator();
         }
 
-        /** 发送按键/文本序列到 PTY（非阻塞） */
         void sendKey(String sequence) {
             if (session.isRunning()) session.write(sequence);
         }
@@ -352,40 +171,19 @@ public class TerminalTermuxExecutor {
     //  初始化
     // ================================================================
 
-    /**
-     * 初始化执行器。
-     * <p>初始化时会自动检测 Termux 环境是否就绪（检查 {@code $PREFIX} 目录是否存在）。
-     * 环境未就绪时初始化失败，后续所有调用均返回错误提示。
-     *
-     * @param context Activity 或 Application Context
-     * @param service TermuxService 实例（建议传入以支持 Termux 抽屉/通知管理；可为 null）
-     * @return true=初始化成功且环境就绪；false=环境未就绪，无法使用
-     */
     public boolean init(Context context, TermuxService service) {
         this.context = context.getApplicationContext();
         this.termuxService = service;
         this.termuxEnv = new TermuxShellEnvironment();
         this.initialized = true;
-
-        // 检测 Termux 真实环境是否可用
         envReady = checkEnvironmentReady();
         return envReady;
     }
 
-    /** 执行器是否已初始化 */
-    public boolean isInitialized() {
-        return initialized;
-    }
+    public boolean isInitialized() { return initialized; }
 
-    /** Termux 真实运行环境是否就绪（$PREFIX 目录存在） */
-    public boolean isEnvironmentReady() {
-        return initialized && envReady;
-    }
+    public boolean isEnvironmentReady() { return initialized && envReady; }
 
-    /**
-     * 检测 Termux 前缀目录是否存在，判断环境是否已完成首次初始化。
-     * 对应 Activity 中 {@code FileUtils.directoryFileExists(TermuxConstants.TERMUX_PREFIX_DIR_PATH, true)}。
-     */
     private boolean checkEnvironmentReady() {
         try {
             return new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH).isDirectory();
@@ -394,324 +192,546 @@ public class TerminalTermuxExecutor {
         }
     }
 
-    /** 环境未就绪时的统一错误提示 */
-    private String envNotReadyError() {
-        return "ERROR: " + MSG_ENV_NOT_READY;
-    }
-
     // ================================================================
-    //  1. execPersistentShell — 永久模式统一入口
+    //  内部辅助：构建 JSON 响应
     // ================================================================
 
-    /**
-     * 永久模式统一入口。
-     *
-     * <p>自动检测目标会话是否存在，不存在则自动创建；支持发送命令/文本/特殊按键；
-     * 发送后阻塞等待终端渲染；按规则截取终端输出并返回。
-     *
-     * @param sessionId      目标会话 ID（null 或空串使用 {@code "default"}）
-     * @param inputText      要发送的 Shell 命令或纯文本（空字符串仅刷新画面）
-     * @param appendEnter    是否在末尾自动追加回车符 {@code \r}
-     * @param specialKeySeq  特殊按键 ANSI 序列（与 inputText 互斥，非 null 时优先）
-     * @param waitMs         发送完成后等待终端渲染的毫秒数；≤0 使用默认 300ms
-     * @param fetchRule      输出截取规则：
-     *                       <ul>
-     *                         <li>{@code Integer N} → 返回最后 N 行</li>
-     *                         <li>{@code String "all"} → 返回全部历史内容</li>
-     *                         <li>{@code null} → 不返回任何内容，仅执行操作</li>
-     *                       </ul>
-     * @param stripFormat    {@code false}=保留行号与ANSI样式标记；{@code true}=仅纯文本
-     * @param showCursor     {@code true}=渲染光标占位标记（[ ]/█/(标)）；{@code false}=不显示
-     * @return 按 fetchRule + stripFormat + showCursor 处理后的终端文本；失败返回错误信息
-     */
-    public String execPersistentShell(
-            String sessionId,
-            String inputText,
-            boolean appendEnter,
-            String specialKeySeq,
-            long waitMs,
-            Object fetchRule,
-            boolean stripFormat,
-            boolean showCursor) {
-
-        if (!initialized) return "ERROR: TerminalTermuxExecutor not initialized";
-        if (!envReady) return envNotReadyError();
-
-        // ── 参数归一化 ──
-        if (sessionId == null || sessionId.isEmpty()) sessionId = DEFAULT_SESSION_ID;
-        if (inputText == null) inputText = "";
-        if (waitMs <= 0) waitMs = 300;
-
-        // ── 获取或自动创建会话 ──
-        PtySession session = getOrCreateSession(sessionId);
-        if (session == null) {
-            return "ERROR: Failed to create/get session: " + sessionId;
-        }
-
-        // ── session 级互斥：发送→等待→读取 原子化 ──
-        String screenText;
-        synchronized (session.lock) {
-            // ── 发送操作：specialKeySeq 优先级高于 inputText ──
-            if (specialKeySeq != null && !specialKeySeq.isEmpty()) {
-                session.sendKey(specialKeySeq);
-            } else if (!inputText.isEmpty()) {
-                session.sendKey(appendEnter ? inputText + "\r" : inputText);
-            }
-
-            // ── 阻塞等待终端渲染 ──
-            if (waitMs > 0) {
-                try {
-                    Thread.sleep(waitMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return "ERROR: interrupted";
-                }
-            }
-
-            // ── 按 fetchRule 截取 ──
-            if (fetchRule == null) return "";
-
-            if (stripFormat) {
-                screenText = getScreenText(session);
-            } else {
-                screenText = dumpStyledScreen(session, showCursor);
-            }
-        }
-        if (screenText.isEmpty()) return "";
-
-        String result;
-        if (fetchRule instanceof Integer) {
-            result = getLastNLines(screenText, (Integer) fetchRule);
-        } else if ("all".equals(fetchRule)) {
-            result = screenText;
-        } else {
-            // 非预期类型，安全返回全部文本
-            result = screenText;
-        }
-
-        if (stripFormat) {
-            result = stripAnsiCodes(result);
-        }
-
-        return result;
+    private static JSONObject okJson() {
+        return okJson(null);
     }
 
-    /**
-     * 全默认调用：使用 default 会话，不发送任何内容，仅刷新终端并返回最后 20 行（带格式，无光标）。
-     * 等价于 {@code execPersistentShell("default", "", false, null, 300, 20, false, false)}。
-     */
-    public String execPersistentShell() {
-        return execPersistentShell(DEFAULT_SESSION_ID, "", false, null, 300, 20, false, false);
-    }
-
-    /** 仅传输入文本（最常用重载）：使用 default 会话，不追加回车，返回最后 20 行（带格式，无光标）。
-     * 等价于 {@code execPersistentShell("default", inputText, false, null, 300, 20, false, false)}。
-     */
-    public String execPersistentShell(String inputText) {
-        return execPersistentShell(DEFAULT_SESSION_ID, inputText, false, null, 300, 20, false, false);
-    }
-
-    /**
-     * 快捷执行命令：使用 default 会话，自动追加回车，返回最后 20 行（带格式，无光标）。
-     * 等价于 {@code execPersistentShell("default", command, true, null, 300, 20, false, false)}。
-     */
-    public String execPersistentCommand(String command) {
-        return execPersistentShell(DEFAULT_SESSION_ID, command, true, null, 300, 20, false, false);
-    }
-
-    /**
-     * 6 参数便捷版本：省略 {@code stripFormat} 与 {@code showCursor}（均默认 {@code false}）。
-     * 等价于 {@code execPersistentShell(sessionId, inputText, appendEnter, specialKeySeq, waitMs, fetchRule, false, false)}。
-     */
-    public String execPersistentShell(
-            String sessionId,
-            String inputText,
-            boolean appendEnter,
-            String specialKeySeq,
-            long waitMs,
-            Object fetchRule) {
-        return execPersistentShell(sessionId, inputText, appendEnter, specialKeySeq, waitMs, fetchRule, false, false);
-    }
-    // ================================================================
-    //  2. createPersistentSession
-    // ================================================================
-
-    /**
-     * 手动创建指定 ID 的永久 PTY 会话。
-     * 会话已存在则直接跳过（不报错）。
-     *
-     * @param sessionId 会话唯一 ID；null 或空串直接返回
-     */
-    public void createPersistentSession(String sessionId) {
-        if (!initialized || sessionId == null || sessionId.isEmpty()) return;
-        if (!envReady) return;
-        getOrCreateSession(sessionId);
-    }
-
-    // ================================================================
-    //  3. closePersistentSession
-    // ================================================================
-
-    /**
-     * 手动销毁指定 ID 的永久会话，释放 PTY 资源并从全局会话池移除。
-     * 会话不存在则直接跳过（不报错）。
-     *
-     * @param sessionId 目标会话 ID；null 或空串直接返回
-     */
-    public void closePersistentSession(String sessionId) {
-        if (!initialized || sessionId == null || sessionId.isEmpty()) return;
-        if (!envReady) return;
-        PtySession session;
-        synchronized (sessionPool) {
-            session = sessionPool.remove(sessionId);
-        }
-        if (session != null) {
-            synchronized (session.lock) {
-                if (termuxService != null) {
-                    termuxService.removePermanentSessionByName(session.id);
-                }
-                session.close();
-            }
-        }
-    }
-
-    // ================================================================
-    //  4. execTemporaryShell — 临时一次性命令
-    // ================================================================
-
-    /**
-     * 一次性执行 Shell 命令。
-     *
-     * <p>底层通过 {@code bash -c} 执行，强制 3 秒超时，超时自动杀进程。
-     * 无穷驻会话、无状态保留，返回结构化执行结果文本。
-     *
-     * @param command     要执行的完整 Shell 命令（不可为空）
-     * @param stripFormat {@code true}=仅返回纯文本（剔除 ANSI），{@code false}=保留格式
-     * @return 包含 stdout、stderr、exit code、超时提示的结构化文本
-     */
-    public String execTemporaryShell(String command, boolean stripFormat) {
-        if (!initialized) return "ERROR: TerminalTermuxExecutor not initialized";
-        if (!envReady) return envNotReadyError();
-        if (command == null || command.trim().isEmpty()) return "ERROR: empty command";
-
-        StringBuilder result = new StringBuilder();
-        Process process = null;
-
+    private static JSONObject okJson(String message) {
         try {
-            String bashPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash";
-            String[] cmdArray = termuxEnv.setupShellCommandArguments(
-                    bashPath, new String[]{"-c", command});
-            HashMap<String, String> envMap = termuxEnv.getEnvironment(context, false);
-            String[] envArray = toEnvArray(envMap);
-            File workDir = new File(TermuxConstants.TERMUX_HOME_DIR_PATH);
-
-            process = Runtime.getRuntime().exec(cmdArray, envArray, workDir);
-
-            boolean finished;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                finished = process.waitFor(3, TimeUnit.SECONDS);
-            } else {
-                // API < 26: Process.waitFor(long, TimeUnit) 不可用，用线程 + join 模拟超时
-                Process p = process;
-                Thread waiter = new Thread(() -> { try { p.waitFor(); } catch (InterruptedException ignored) { } });
-                waiter.start();
-                try {
-                    waiter.join(3000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                finished = !waiter.isAlive();
-                if (!finished) waiter.interrupt();
-            }
-
-            if (!finished) {
-                process.destroy();
-                // 等进程真正退出
-                try {
-                    process.waitFor();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-
-            String stdoutText = readStreamFully(process.getInputStream());
-            String stderrText = readStreamFully(process.getErrorStream());
-            int exitCode = process.exitValue();
-
-            result.append("$ ").append(command).append("  [临时模式]\n");
-
-            if (!finished) {
-                result.append("── 超时 (3s) ──\n");
-                result.append("命令未在 3 秒内完成，已强制终止。\n");
-                result.append("exit code: ").append(exitCode).append("\n");
-                result.append("⚠ 该命令可能需要持续交互，请切换到「永久模式」执行。");
-            } else {
-                if (!TextUtils.isEmpty(stdoutText)) {
-                    String out = stripFormat ? stripAnsiCodes(stdoutText) : stdoutText;
-                    result.append("── stdout ──\n").append(out).append("\n");
-                }
-                if (!TextUtils.isEmpty(stderrText)) {
-                    String err = stripFormat ? stripAnsiCodes(stderrText) : stderrText;
-                    result.append("── stderr ──\n").append(err).append("\n");
-                }
-                result.append("── 返回 ──\n");
-                result.append("exit code: ").append(exitCode);
-            }
-
+            JSONObject o = new JSONObject();
+            o.put("status", "ok");
+            if (message != null) o.put("message", message);
+            return o;
         } catch (Exception e) {
-            result.append("$ ").append(command).append("  [临时模式]\n");
-            result.append("── 异常 ──\n").append(e.getMessage());
-        } finally {
-            if (process != null) {
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        if (process.isAlive()) process.destroyForcibly();
-                    }
-                } catch (Exception ignored) {}
-            }
+            return errorJson("INTERNAL_ERROR", e.getMessage());
         }
+    }
 
-        return result.toString();
+    private static JSONObject errorJson(String code, String message) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("status", "error");
+            o.put("error_code", code != null ? code : "UNKNOWN");
+            o.put("message", message != null ? message : "");
+            return o;
+        } catch (Exception e) {
+            return new JSONObject();
+        }
     }
 
     // ================================================================
-    //  内部工具方法
+    //  会话管理 — Agent API
     // ================================================================
 
+    // ── create_session ──
+
     /**
-     * 获取或创建会话（线程安全）。
-     * 路径：已存在且活跃 → 直接返回；不存在 → createViaService / createDirect。
+     * 创建一个新的永久 PTY 会话。若 ID 已存在则返回错误。
      */
-    private PtySession getOrCreateSession(String sessionId) {
+    public JSONObject create_session(String sessionId) {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            return errorJson("INVALID_SESSION_ID", "session_id cannot be empty");
+        }
+
+        String sid = sessionId.trim();
         synchronized (sessionPool) {
-            PtySession existing = sessionPool.get(sessionId);
-            if (existing != null && existing.isAlive()) return existing;
+            PtySession existing = sessionPool.get(sid);
+            if (existing != null && existing.isAlive()) {
+                return errorJson("ALREADY_EXISTS", "Session already exists: " + sid);
+            }
         }
 
         try {
             PtySession session;
             if (termuxService != null) {
-                session = createViaService(sessionId);
+                session = createViaService(sid);
             } else {
-                session = createDirect(sessionId);
+                session = createDirect(sid);
             }
-            return session;
+            if (session == null) {
+                return errorJson("CREATE_FAILED", "Failed to create session: " + sid);
+            }
+            return okJson("Session created: " + sid);
         } catch (Exception e) {
-            return null;
+            return errorJson("CREATE_FAILED", e.getMessage());
         }
     }
 
-    /** 通过 TermuxService 创建会话（会话将出现在 Termux 抽屉和通知中） */
+    // ── destroy_session ──
+
+    /**
+     * 关闭指定会话并释放所有资源。会话不存在则返回错误。
+     */
+    public JSONObject destroy_session(String sessionId) {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        if (sessionId == null) {
+            return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        }
+
+        PtySession session;
+        synchronized (sessionPool) {
+            session = sessionPool.remove(sessionId);
+        }
+        if (session == null) {
+            return errorJson("NOT_FOUND", "Session not found: " + sessionId);
+        }
+
+        synchronized (session.lock) {
+            if (termuxService != null) {
+                termuxService.removePermanentSessionByName(session.id);
+            }
+            session.close();
+        }
+        lastReadLineCount.remove(sessionId);
+        return okJson("Session destroyed: " + sessionId);
+    }
+
+    // ── list_sessions ──
+
+    /**
+     * 列出当前所有会话及其存活状态。
+     */
+    public JSONObject list_sessions() {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+
+        try {
+            JSONArray arr = new JSONArray();
+            synchronized (sessionPool) {
+                for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
+                    JSONObject item = new JSONObject();
+                    item.put("session_id", e.getKey());
+                    item.put("alive", e.getValue().isAlive());
+                    item.put("cwd", getCwd(e.getValue()));
+                    arr.put(item);
+                }
+            }
+            JSONObject result = okJson();
+            result.put("sessions", arr);
+            return result;
+        } catch (Exception e) {
+            return errorJson("INTERNAL_ERROR", e.getMessage());
+        }
+    }
+
+    // ── session_status ──
+
+    /**
+     * 查询指定会话的详细信息：存活状态、当前工作目录、是否有运行中的命令。
+     */
+    public JSONObject session_status(String sessionId) {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        if (sessionId == null) {
+            return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        }
+
+        PtySession session;
+        synchronized (sessionPool) {
+            session = sessionPool.get(sessionId);
+        }
+        if (session == null) {
+            return errorJson("NOT_FOUND", "Session not found: " + sessionId);
+        }
+
+        try {
+            JSONObject data = new JSONObject();
+            boolean alive = session.isAlive();
+            data.put("alive", alive);
+            data.put("cwd", alive ? getCwd(session) : "");
+            data.put("has_running_command", alive && hasRunningCommand(session));
+
+            JSONObject result = okJson();
+            result.put("data", data);
+            return result;
+        } catch (Exception e) {
+            return errorJson("INTERNAL_ERROR", e.getMessage());
+        }
+    }
+
+    // ================================================================
+    //  命令执行 — Agent API
+    // ================================================================
+
+    // ── shell_exec ──
+
+    /**
+     * 在指定会话中执行一条 Shell 命令，自动追加回车，等待命令结束（提示符重新出现或超时），
+     * 返回纯净文本输出和退出码。
+     *
+     * <p>内部通过追加 {@code ;echo __ALINOS_EXIT__:$?} 标记来获取退出码。
+     *
+     * @param sessionId 目标会话 ID
+     * @param command   要执行的 Shell 命令
+     * @param timeoutMs 最长等待毫秒数（默认 10000）
+     */
+    public JSONObject shell_exec(String sessionId, String command, long timeoutMs) {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        if (command == null || command.trim().isEmpty()) {
+            return errorJson("EMPTY_COMMAND", "command cannot be empty");
+        }
+
+        PtySession session = getSession(sessionId);
+        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+
+        if (timeoutMs <= 0) timeoutMs = SHELL_EXEC_DEFAULT_TIMEOUT_MS;
+        String cmd = command.trim();
+
+        synchronized (session.lock) {
+            try {
+                // 发送命令（带退出码标记）
+                String sentinel = cmd + " ;echo __ALINOS_EXIT__:$?";
+                session.sendKey(sentinel + "\r");
+
+                // 轮询等待标记出现
+                long deadline = System.currentTimeMillis() + timeoutMs;
+                boolean finished = false;
+
+                while (System.currentTimeMillis() < deadline) {
+                    try { Thread.sleep(SHELL_EXEC_POLL_MS); }
+                    catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return errorJson("INTERRUPTED", "Interrupted while waiting");
+                    }
+
+                    String current = getScreenText(session);
+                    Matcher m = EXIT_MARKER.matcher(current);
+                    if (m.find()) {
+                        finished = true;
+                        break;
+                    }
+                }
+
+                // 读取最终画面并解析
+                String finalScreen = getScreenText(session);
+
+                if (!finished) {
+                    // 超时：返回已产生的输出
+                    String partialOutput = extractOutputBeforeMarker(finalScreen, cmd);
+                    JSONObject result = new JSONObject();
+                    result.put("status", "timeout");
+                    result.put("output", partialOutput);
+                    result.put("exit_code", JSONObject.NULL);
+                    result.put("cwd", getCwd(session));
+                    return result;
+                }
+
+                // 解析退出码和输出
+                int exitCode = -1;
+                String output = "";
+                String[] lines = finalScreen.split("\n", -1);
+                int markerLineIdx = -1;
+
+                for (int i = lines.length - 1; i >= 0; i--) {
+                    Matcher m = EXIT_MARKER.matcher(lines[i]);
+                    if (m.find()) {
+                        exitCode = Integer.parseInt(m.group(1));
+                        markerLineIdx = i;
+                        break;
+                    }
+                }
+
+                // 找到命令所在行（从 marker 行往前找，该行同时包含 command 和 __ALINOS_EXIT__）
+                int cmdLineIdx = -1;
+                for (int i = markerLineIdx - 1; i >= 0; i--) {
+                    if (lines[i].contains(cmd) && lines[i].contains("__ALINOS_EXIT__")) {
+                        cmdLineIdx = i;
+                        break;
+                    }
+                }
+                // 回退：只包含命令即可
+                if (cmdLineIdx < 0) {
+                    for (int i = markerLineIdx - 1; i >= 0; i--) {
+                        if (lines[i].contains(cmd)) {
+                            cmdLineIdx = i;
+                            break;
+                        }
+                    }
+                }
+
+                // 提取输出 = 命令行之后、标记行之前的行
+                StringBuilder outputBuf = new StringBuilder();
+                int start = Math.max(0, cmdLineIdx + 1);
+                for (int i = start; i < markerLineIdx; i++) {
+                    String line = lines[i].trim();
+                    if (line.isEmpty()) continue;
+                    // 跳过可能出现的提示符行
+                    if (isPromptLike(line)) continue;
+                    if (outputBuf.length() > 0) outputBuf.append("\n");
+                    outputBuf.append(line);
+                }
+                output = outputBuf.toString();
+
+                JSONObject result = new JSONObject();
+                result.put("status", "ok");
+                result.put("output", output);
+                result.put("exit_code", exitCode);
+                result.put("cwd", getCwd(session));
+                return result;
+
+            } catch (Exception e) {
+                return errorJson("EXEC_FAILED", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * shell_exec 默认超时版本（10 秒）。
+     */
+    public JSONObject shell_exec(String sessionId, String command) {
+        return shell_exec(sessionId, command, SHELL_EXEC_DEFAULT_TIMEOUT_MS);
+    }
+
+    // ================================================================
+    //  交互输入 — Agent API
+    // ================================================================
+
+    // ── shell_write ──
+
+    /**
+     * 向会话发送文本，不追加回车。用于交互式程序应答（如密码、提示确认）。
+     */
+    public JSONObject shell_write(String sessionId, String text) {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        if (text == null) return errorJson("INVALID_TEXT", "text cannot be null");
+
+        PtySession session = getSession(sessionId);
+        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+
+        synchronized (session.lock) {
+            session.sendKey(text);
+        }
+        return okJson();
+    }
+
+    // ── shell_send_key ──
+
+    /**
+     * 向会话发送一个控制键或方向键（枚举值）。
+     * 支持：CTRL_C, CTRL_D, CTRL_Z, TAB, ENTER, ESCAPE,
+     *       UP, DOWN, LEFT, RIGHT
+     */
+    public JSONObject shell_send_key(String sessionId, String key) {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+
+        String ansi = KEY_ANSI_MAP.get(key);
+        if (ansi == null) {
+            return errorJson("INVALID_KEY", "Unsupported key: " + key
+                + ". Supported: CTRL_C, CTRL_D, CTRL_Z, TAB, ENTER, ESCAPE, UP, DOWN, LEFT, RIGHT");
+        }
+
+        PtySession session = getSession(sessionId);
+        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+
+        synchronized (session.lock) {
+            session.sendKey(ansi);
+        }
+        return okJson();
+    }
+
+    // ================================================================
+    //  输出读取 — Agent API
+    // ================================================================
+
+    // ── shell_read ──
+
+    /**
+     * 读取会话终端当前的文本内容。
+     *
+     * @param mode     "last_n"（默认，返回最后 N 行）、"all"（全部历史）、"new"（增量）
+     * @param lines    mode=last_n 时有效，默认 20
+     * @param stripAnsi true=移除 ANSI 转义码（默认），false=保留
+     */
+    public JSONObject shell_read(String sessionId, String mode, int lines, boolean stripAnsi) {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+
+        PtySession session = getSession(sessionId);
+        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+
+        if (mode == null) mode = "last_n";
+        if (lines <= 0) lines = 20;
+
+        try {
+            String raw;
+            synchronized (session.lock) {
+                raw = getScreenText(session);
+            }
+            if (stripAnsi) raw = stripAnsiCodes(raw);
+
+            String output;
+            int lineCount;
+
+            switch (mode) {
+                case "all":
+                    output = raw.trim();
+                    lineCount = output.isEmpty() ? 0 : output.split("\n", -1).length;
+                    break;
+
+                case "new":
+                    output = getIncrementalOutput(sessionId, raw);
+                    lineCount = output.isEmpty() ? 0 : output.split("\n", -1).length;
+                    break;
+
+                default: // last_n
+                    output = getLastNLines(raw, lines);
+                    lineCount = output.isEmpty() ? 0 : output.split("\n", -1).length;
+                    break;
+            }
+
+            JSONObject result = okJson();
+            result.put("output", output);
+            result.put("line_count", lineCount);
+            return result;
+
+        } catch (Exception e) {
+            return errorJson("READ_FAILED", e.getMessage());
+        }
+    }
+
+    /**
+     * shell_read 默认参数版本（last_n, 20 行, 去除ANSI）。
+     */
+    public JSONObject shell_read(String sessionId) {
+        return shell_read(sessionId, "last_n", 20, true);
+    }
+
+    // ================================================================
+    //  调试视图 — Agent API
+    // ================================================================
+
+    // ── shell_get_debug_view ──
+
+    /**
+     * 获取当前终端画面的完整带标记文本（行号、样式名称、可选光标位置）。
+     * 仅在需要分析终端样式/光标时使用。
+     */
+    public JSONObject shell_get_debug_view(String sessionId,
+                                            boolean showLineNumbers,
+                                            boolean showStyles,
+                                            boolean showCursor) {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+
+        PtySession session = getSession(sessionId);
+        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+
+        try {
+            String view;
+            synchronized (session.lock) {
+                view = dumpStyledScreen(session, showCursor);
+            }
+
+            if (!showLineNumbers) {
+                view = view.replaceAll("(?m)^\\[\\d+\\] ", "");
+            }
+            if (!showStyles) {
+                view = view.replaceAll("\\[[^\\]]+\\] ", "");
+            }
+            view = view.trim();
+
+            JSONObject result = okJson();
+            result.put("view", view);
+            return result;
+        } catch (Exception e) {
+            return errorJson("READ_FAILED", e.getMessage());
+        }
+    }
+
+    /** 默认显示全部标记（行号、样式、光标）。 */
+    public JSONObject shell_get_debug_view(String sessionId) {
+        return shell_get_debug_view(sessionId, true, true, true);
+    }
+
+    // ================================================================
+    //  UI 层辅助方法（非 JSON，保持向后兼容供 Activity 轮询使用）
+    // ================================================================
+
+    /**
+     * 返回所有已注册会话的 ID → 是否活跃映射。
+     */
+    public Map<String, Boolean> getSessionStatus() {
+        Map<String, Boolean> result = new HashMap<>();
+        synchronized (sessionPool) {
+            for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
+                result.put(e.getKey(), e.getValue().isAlive());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 获取指定会话的终端纯文本内容（供 UI 轮询刷新）。
+     */
+    public String getSessionPlainScreen(String sessionId) {
+        if (!initialized || !envReady || sessionId == null) return "";
+        synchronized (sessionPool) {
+            PtySession s = sessionPool.get(sessionId);
+            if (s != null && s.isAlive()) {
+                synchronized (s.lock) {
+                    return getScreenText(s);
+                }
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 获取指定会话的结构化终端内容（带行号与样式标记，可选光标）。
+     */
+    public String getSessionStyledScreen(String sessionId, boolean showCursor) {
+        if (!initialized || !envReady || sessionId == null) return "";
+        synchronized (sessionPool) {
+            PtySession s = sessionPool.get(sessionId);
+            if (s != null && s.isAlive()) {
+                synchronized (s.lock) {
+                    return dumpStyledScreen(s, showCursor);
+                }
+            }
+        }
+        return "";
+    }
+
+    /** 获取 default 会话的终端纯文本。 */
+    public String getDefaultSessionScreen() {
+        return getSessionPlainScreen(DEFAULT_SESSION_ID);
+    }
+
+    // ================================================================
+    //  内部与会话创建
+    // ================================================================
+
+    /** 仅查找不自动创建（与旧 getOrCreateSession 区别）。 */
+    private PtySession getSession(String sessionId) {
+        synchronized (sessionPool) {
+            return sessionPool.get(sessionId);
+        }
+    }
+
+    /** 供 create_session 内部使用的创建路径（线程安全由 caller 保证）。 */
     private PtySession createViaService(String sessionId) {
         String bashPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash";
         String workingDir = TermuxConstants.TERMUX_HOME_DIR_PATH;
 
         TermuxSession termuxSession = termuxService.createTermuxSession(
                 bashPath, null, null, workingDir, false, sessionId);
-
         if (termuxSession == null) return null;
 
-        // 标记为永久会话（不可被通知 Exit 关闭）
         termuxSession.getExecutionCommand().isPermanent = true;
         termuxService.addPermanentSessionHandle(termuxSession.getTerminalSession().mHandle);
 
@@ -724,7 +744,6 @@ public class TerminalTermuxExecutor {
         return session;
     }
 
-    /** 直接创建 PTY 会话（不依赖 TermuxService） */
     private PtySession createDirect(String sessionId) {
         String bashPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash";
         String workingDir = TermuxConstants.TERMUX_HOME_DIR_PATH;
@@ -733,17 +752,19 @@ public class TerminalTermuxExecutor {
                 : new String[0];
 
         PtySession session = new PtySession(sessionId, bashPath, workingDir, env);
-
         synchronized (sessionPool) {
             sessionPool.put(sessionId, session);
         }
         return session;
     }
 
-    /** 从 TerminalEmulator 屏幕缓冲区读取全部纯文本（已过滤光标占位符） */
+    // ================================================================
+    //  内部工具：屏幕读取
+    // ================================================================
+
+    /** 从 TerminalEmulator 读取全部纯文本。 */
     private String getScreenText(PtySession session) {
         if (session == null || session.emulator == null) return "";
-
         TerminalBuffer screen = session.emulator.getScreen();
         if (screen == null) return "";
 
@@ -756,8 +777,6 @@ public class TerminalTermuxExecutor {
         for (int extRow = -transcriptRows; extRow < screenRows; extRow++) {
             TerminalRow row = screen.getRowOrNull(extRow);
             if (row == null) continue;
-
-            // 跳过完全空行
             if (isRowBlank(row, cols)) continue;
 
             StringBuilder line = new StringBuilder();
@@ -768,31 +787,117 @@ public class TerminalTermuxExecutor {
                     if (ch != '\0') line.append(ch);
                 }
             }
-
-            // 剔除行尾空白（保留有意义的内容）
             String lineStr = line.toString().replaceAll("\\s+$", "");
             if (lineStr.isEmpty()) continue;
-
             sb.append(lineStr).append('\n');
         }
-
         return sb.toString();
     }
 
+    /** 检测某行是否看起来像 Shell 提示符。 */
+    private static boolean isPromptLike(String line) {
+        String t = line.trim();
+        return t.endsWith("$") || t.endsWith("#") || ">".equals(t);
+    }
+
+    /** 从屏幕文本中提取命令输出（超时场景，在标记出现前）。 */
+    private static String extractOutputBeforeMarker(String screen, String command) {
+        String[] lines = screen.split("\n", -1);
+        boolean foundCmd = false;
+        StringBuilder out = new StringBuilder();
+        for (String line : lines) {
+            String t = line.trim();
+            if (!foundCmd) {
+                if (t.contains(command)) {
+                    foundCmd = true;
+                }
+                continue;
+            }
+            if (t.isEmpty() || isPromptLike(t)) continue;
+            if (t.contains("__ALINOS_EXIT__:")) break;
+            if (out.length() > 0) out.append("\n");
+            out.append(t);
+        }
+        return out.toString();
+    }
+
+    /** 增量读取：返回自上次读取后的新行。 */
+    private String getIncrementalOutput(String sessionId, String currentText) {
+        String[] currentLines = currentText.split("\n", -1);
+        int currentCount = currentLines.length;
+
+        Integer lastCount = lastReadLineCount.get(sessionId);
+        if (lastCount == null || currentCount <= lastCount) {
+            // 首次读取或滚屏导致重置 → 返回全部
+            lastReadLineCount.put(sessionId, currentCount);
+            return currentText.trim();
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = lastCount; i < currentCount; i++) {
+            String trimmed = currentLines[i].trim();
+            if (!trimmed.isEmpty()) {
+                if (sb.length() > 0) sb.append("\n");
+                sb.append(trimmed);
+            }
+        }
+        lastReadLineCount.put(sessionId, currentCount);
+        return sb.toString();
+    }
+
+    /** 获取会话当前工作目录（通过发送 pwd 读取）。 */
+    private String getCwd(PtySession session) {
+        if (session == null || !session.isAlive()) return "";
+        synchronized (session.lock) {
+            try {
+                // 记录当前屏幕作为基线
+                String before = getScreenText(session);
+                int beforeLineCount = before.isEmpty() ? 0 : before.split("\n", -1).length;
+
+                session.sendKey("pwd\r");
+                Thread.sleep(200);
+
+                String after = getScreenText(session);
+                String[] lines = after.split("\n", -1);
+
+                // 在新增行中查找 pwd 输出（以 / 开头）
+                for (int i = beforeLineCount; i < lines.length && i >= 0; i++) {
+                    String t = lines[i].trim();
+                    if (t.startsWith("/")) {
+                        // 清理可能的换行符
+                        return t.replaceAll("[\\r\\n]", "").trim();
+                    }
+                }
+                return "";
+            } catch (Exception e) {
+                return "";
+            }
+        }
+    }
+
+    /** 判断会话当前是否有命令在运行（基于屏幕最后一行是否像提示符）。 */
+    private boolean hasRunningCommand(PtySession session) {
+        String screen = getScreenText(session);
+        if (screen.isEmpty()) return false;
+        String[] lines = screen.split("\n");
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String t = lines[i].trim();
+            if (!t.isEmpty()) {
+                // 最后非空行不像提示符 → 可能正在运行命令
+                boolean isPrompt = t.endsWith("$") || t.endsWith("#");
+                if (isPrompt) return false;
+                // 若很短的命令可能是提示符
+                if (t.length() < 5 && (t.contains("$") || t.contains("#"))) return false;
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ================================================================
-    //  dumpStyledScreen — 结构化样式输出（带行号 + ANSI 具名标记 + 可选光标标记）
+    //  dumpStyledScreen — 结构化样式输出
     // ================================================================
 
-    /**
-     * 从 TerminalEmulator 读取终端画布并渲染为结构化文本。
-     * <p>
-     * 输出格式：每行 {@code [行号] [样式名] 文本内容}，样式名在字符间变化时自动切换。
-     * 当 {@code showCursor = true} 时，在当前光标位置渲染 {@code [word](标)} 或 {@code █}。
-     *
-     * @param session    PTY 会话
-     * @param showCursor 是否渲染光标占位标记
-     * @return 结构化终端文本
-     */
     private String dumpStyledScreen(PtySession session, boolean showCursor) {
         if (session == null || session.emulator == null) return "";
         TerminalBuffer screen = session.emulator.getScreen();
@@ -811,7 +916,6 @@ public class TerminalTermuxExecutor {
             TerminalRow row = screen.getRowOrNull(extRow);
             if (row == null) continue;
 
-            // 空行但光标在此行 → 单独处理
             if (isRowBlank(row, cols)) {
                 if (showCursor && extRow == cursorRow) {
                     result.append("[").append(displayLine).append("] ");
@@ -827,7 +931,6 @@ public class TerminalTermuxExecutor {
 
             boolean isCursorRow = showCursor && (extRow == cursorRow);
 
-            // 光标所在单词的起止列
             int cursorWordStart = -1, cursorWordEnd = -1;
             boolean cursorInsideWord = false;
             if (isCursorRow) {
@@ -878,7 +981,6 @@ public class TerminalTermuxExecutor {
                     started = true;
                     prevStyle = style;
 
-                    // 光标在单词内部且当前列是单词首列 → 开括号
                     if (isCursorRow && cursorInsideWord && col == cursorWordStart) {
                         segText.append("[");
                         bracketOpened = true;
@@ -886,12 +988,10 @@ public class TerminalTermuxExecutor {
 
                     segText.append(ch);
 
-                    // 光标落在空格上 → 替换为 █
                     if (isCursorRow && col == cursorCol && ch == ' ') {
                         segText.setCharAt(segText.length() - 1, '█');
                     }
 
-                    // 光标标注：当前字符右侧即光标位置 → 插入 (标)
                     if (isCursorRow && cursorWordStart >= 0 && ch != ' ') {
                         int nextCol = col + (w > 1 ? w : 1);
                         if (nextCol == cursorCol) {
@@ -899,7 +999,6 @@ public class TerminalTermuxExecutor {
                         }
                     }
 
-                    // 光标在单词内部且当前列是单词末列 → 关括号
                     if (isCursorRow && bracketOpened) {
                         int nextCol = col + (w > 1 ? w : 1);
                         if (nextCol >= cursorWordEnd) {
@@ -908,7 +1007,6 @@ public class TerminalTermuxExecutor {
                         }
                     }
                 } else if (isCursorRow && col == cursorCol) {
-                    // 光标在 \0 上 → 刷出前一段后渲染 █
                     if (started) {
                         flushStyledSegment(result, segText, prevStyle);
                         segText = new StringBuilder();
@@ -948,14 +1046,12 @@ public class TerminalTermuxExecutor {
         return w < 1 ? 1 : w;
     }
 
-    /** 将样式一致的文本段输出为 {@code [样式名] 文本 } */
     private static void flushStyledSegment(StringBuilder result, StringBuilder text, long style) {
         String t = text.toString().replaceAll("\\s+$", "");
         if (t.isEmpty()) return;
         result.append("[").append(styleToString(style)).append("] ").append(t).append(" ");
     }
 
-    /** 将 TextStyle 位编码转换为中文具名样式字符串 */
     private static String styleToString(long style) {
         int fg = TextStyle.decodeForeColor(style);
         int effect = TextStyle.decodeEffect(style);
@@ -1000,7 +1096,6 @@ public class TerminalTermuxExecutor {
         return sb.toString();
     }
 
-    /** 判断 TerminalRow 是否全为空格 */
     private static boolean isRowBlank(TerminalRow row, int cols) {
         for (int col = 0; col < cols; col++) {
             int idx = row.findStartOfColumn(col);
@@ -1009,20 +1104,18 @@ public class TerminalTermuxExecutor {
         return true;
     }
 
-    /**
-     * 从文本末尾取最后 N 行。
-     * 自动忽略末尾由尾部换行符产生的空行。
-     */
+    // ================================================================
+    //  内部工具：文本处理
+    // ================================================================
+
     private static String getLastNLines(String text, int n) {
         if (text == null || text.isEmpty() || n <= 0) return "";
         String[] lines = text.split("\n", -1);
 
-        // 从末尾跳过空行
         int end = lines.length;
         while (end > 0 && lines[end - 1].isEmpty()) end--;
 
         if (end <= n) {
-            // 少于等于 N 行 → 返回全部（trim 末尾多余换行）
             return text.substring(0, text.length() - countTrailingNewlines(text));
         }
 
@@ -1040,19 +1133,14 @@ public class TerminalTermuxExecutor {
         return count;
     }
 
-    /** 剔除 ANSI 转义控制符 */
     private static String stripAnsiCodes(String text) {
         if (text == null || text.isEmpty()) return text;
-        // CSI 序列: \033[<params><letter>
         String cleaned = text.replaceAll("\033\\[[0-9;]*[a-zA-Z]", "");
-        // OSC 序列: \033]<params>...(\007|\033\\)
         cleaned = cleaned.replaceAll("\033\\].*?(\007|\033\\\\)", "");
-        // 两字符 ESC 序列: \033<letter>
         cleaned = cleaned.replaceAll("\033[a-zA-Z]", "");
         return cleaned;
     }
 
-    /** 全量读取 InputStream 为 UTF-8 字符串 */
     private static String readStreamFully(InputStream is) {
         if (is == null) return "";
         try {
@@ -1073,7 +1161,6 @@ public class TerminalTermuxExecutor {
         }
     }
 
-    /** {@link HashMap}{@code <String, String>} 转 {@code String[]} 环境变量数组 */
     private static String[] toEnvArray(HashMap<String, String> envMap) {
         if (envMap == null) return new String[0];
         String[] arr = new String[envMap.size()];
@@ -1082,91 +1169,5 @@ public class TerminalTermuxExecutor {
             arr[i++] = e.getKey() + "=" + e.getValue();
         }
         return arr;
-    }
-
-    // ================================================================
-    //  会话状态查询（外部 UI 使用）
-    // ================================================================
-
-    /**
-     * 返回所有已注册会话的 ID → 是否活跃 映射。
-     * 用于 Activity 中显示会话列表、刷新 UI。
-     */
-    public Map<String, Boolean> getSessionStatus() {
-        Map<String, Boolean> result = new HashMap<>();
-        synchronized (sessionPool) {
-            for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
-                result.put(e.getKey(), e.getValue().isAlive());
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 获取 default 会话的终端文本（用于外部 UI 轮询刷新）。
-     * 临时获取当前终端画布的快照，不阻塞。
-     */
-    public String getDefaultSessionScreen() {
-        if (!initialized) return "";
-        if (!envReady) return "";
-        synchronized (sessionPool) {
-            PtySession s = sessionPool.get(DEFAULT_SESSION_ID);
-            if (s != null && s.isAlive()) {
-                synchronized (s.lock) {
-                    return getScreenText(s);
-                }
-            }
-        }
-        return "";
-    }
-
-    /**
-     * 获取指定会话的终端纯文本内容（用于 UI 轮询刷新）。
-     *
-     * @param sessionId 目标会话 ID
-     * @return 纯文本终端内容，会话不存在或不可用时返回空串
-     */
-    public String getSessionPlainScreen(String sessionId) {
-        if (!initialized || !envReady || sessionId == null) return "";
-        synchronized (sessionPool) {
-            PtySession s = sessionPool.get(sessionId);
-            if (s != null && s.isAlive()) {
-                synchronized (s.lock) {
-                    return getScreenText(s);
-                }
-            }
-        }
-        return "";
-    }
-
-    /**
-     * 获取指定会话的结构化终端内容（带行号与样式标记，默认无光标）。
-     * Activity 轮询用 — 不暴露光标参数给 UI 层。
-     *
-     * @param sessionId 目标会话 ID
-     * @return 结构化终端文本，会话不存在或不可用时返回空串
-     */
-    public String getSessionStyledScreen(String sessionId) {
-        return getSessionStyledScreen(sessionId, false);
-    }
-
-    /**
-     * 获取指定会话的结构化终端内容（带行号与样式标记，可选光标标记）。
-     *
-     * @param sessionId  目标会话 ID
-     * @param showCursor 是否渲染光标占位标记
-     * @return 结构化终端文本，会话不存在或不可用时返回空串
-     */
-    public String getSessionStyledScreen(String sessionId, boolean showCursor) {
-        if (!initialized || !envReady || sessionId == null) return "";
-        synchronized (sessionPool) {
-            PtySession s = sessionPool.get(sessionId);
-            if (s != null && s.isAlive()) {
-                synchronized (s.lock) {
-                    return dumpStyledScreen(s, showCursor);
-                }
-            }
-        }
-        return "";
     }
 }

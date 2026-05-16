@@ -1,4 +1,4 @@
-package alin.android.alinos;
+package alin.android.alinos.dev;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -12,7 +12,6 @@ import android.text.TextUtils;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -25,10 +24,13 @@ import com.termux.app.TermuxService;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 
+import org.json.JSONObject;
+
 import java.util.Map;
 
+import alin.android.alinos.R;
 import alin.android.alinos.tools.TerminalTermuxExecutor;
-
+//这个界面其实还需要修复改因为它所引入的一些东西存在严重的问题。嗯，就是对于人类也不友好，对于AI也不绝对友好。
 public class TermuxShellTestActivity extends AppCompatActivity implements ServiceConnection {
 
     // ---- 常量 ----
@@ -37,14 +39,12 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
     // ---- UI ----
     private View mEnvIndicator;
     private TextView mTvEnvStatus;
-    private RadioGroup mRgMode;
     private CardView mCardSession;
     private EditText mEtSessionId;
     private Button mBtnNewSession;
     private Button mBtnConnectSession;
     private Button mBtnCloseSession;
     private TextView mTvActiveSessions;
-    private CardView mCardKeypad;
     private Button mBtnKeyUp, mBtnKeyDown, mBtnKeyLeft, mBtnKeyRight;
     private Button mBtnKeyTab, mBtnKeyEsc, mBtnKeyEnter;
     private Button mBtnKeyCtrl, mBtnKeyAlt, mBtnKeyFn;
@@ -68,7 +68,7 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
     private boolean mAltActive = false;
     private boolean mFnActive = false;
 
-    // ---- 屏幕轮询（永久模式结构化画布实时刷新） ----
+    // ---- 屏幕轮询（结构化画布实时刷新） ----
     private final Handler mScreenPollHandler = new Handler(Looper.getMainLooper());
     private boolean mScreenPolling = false;
     private static final long SCREEN_POLL_INTERVAL_MS = 250;
@@ -76,10 +76,6 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
         @Override
         public void run() {
             if (!mScreenPolling || mExecutor == null) return;
-            if (mRgMode.getCheckedRadioButtonId() != R.id.rb_perm) {
-                mScreenPollHandler.postDelayed(this, SCREEN_POLL_INTERVAL_MS);
-                return;
-            }
             String styled = mExecutor.getSessionStyledScreen(mCurrentSessionId, true);
             if (styled != null) updateStructuredOutput(styled);
             mScreenPollHandler.postDelayed(this, SCREEN_POLL_INTERVAL_MS);
@@ -154,15 +150,14 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
     private void initExecutor() {
         if (!mServiceBound || !mIsTermuxReady) return;
 
-        // 获取全局单例，sessionPool 在进程内一直保留
         mExecutor = TerminalTermuxExecutor.getInstance();
         boolean ready = mExecutor.init(this, mTermuxService);
         if (!ready) return;
 
-        // 仅当会话池中尚无 default 会话时才创建，避免 Activity 重建后重复创建
+        // 仅当会话池中尚无 default 会话时才创建
         Map<String, Boolean> status = mExecutor.getSessionStatus();
         if (!Boolean.TRUE.equals(status.get(DEFAULT_SESSION_ID))) {
-            mExecutor.createPersistentSession(DEFAULT_SESSION_ID);
+            mExecutor.create_session(DEFAULT_SESSION_ID);
         }
         mCurrentSessionId = DEFAULT_SESSION_ID;
         // 初始刷新画布
@@ -184,9 +179,8 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
                     mTvEnvStatus.setText("Termux 环境已就绪");
                     mTvEnvStatus.setTextColor(ContextCompat.getColor(this, R.color.green));
                     mBtnInsert.setEnabled(true);
-                    setResultText("环境正常，请选择模式后输入命令");
-                    mIsTermuxReady = true;
-                    initExecutor(); // 若 Service 已连接则完成初始化
+                    setResultText("环境正常，请输入命令");
+                    initExecutor();
                 } else {
                     mEnvIndicator.setBackgroundResource(R.drawable.circle_dot_red);
                     mTvEnvStatus.setText("Termux 环境未初始化");
@@ -206,7 +200,6 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
     private void bindViews() {
         mEnvIndicator     = findViewById(R.id.view_env_indicator);
         mTvEnvStatus      = findViewById(R.id.tv_env_status);
-        mRgMode           = findViewById(R.id.rg_mode);
         mCardSession      = findViewById(R.id.card_session);
         mEtSessionId      = findViewById(R.id.et_session_id);
         mBtnNewSession    = findViewById(R.id.btn_new_session);
@@ -238,46 +231,29 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
         mSvResult         = findViewById(R.id.sv_result);
         mTvResult.setTextIsSelectable(true);
 
-        // ── 模式切换 ──
-        mRgMode.setOnCheckedChangeListener((group, checkedId) -> {
-            boolean isPerm = checkedId == R.id.rb_perm;
-            mCardKeypad.setVisibility(isPerm ? View.VISIBLE : View.GONE);
-            mBtnInsert.setText(isPerm ? "插入" : "发送");
-            if (!isPerm) {
-                stopScreenPolling();
-            } else {
-                startScreenPolling();
-            }
-            updateSessionCardVisibility();
-            refreshSessionInfo();
-        });
-
-        // 初始状态：临时模式
-        mBtnInsert.setText("发送");
-
         // ── 会话管理 ──
         mBtnNewSession.setOnClickListener(v -> createNewSession());
         mBtnConnectSession.setOnClickListener(v -> connectSession());
         mBtnCloseSession.setOnClickListener(v -> closeCurrentSession());
 
-        // ── 方向编辑键 ──
-        mBtnKeyUp.setOnClickListener(v -> sendKeyToSession("\033[A"));
-        mBtnKeyDown.setOnClickListener(v -> sendKeyToSession("\033[B"));
-        mBtnKeyLeft.setOnClickListener(v -> sendKeyToSession("\033[D"));
-        mBtnKeyRight.setOnClickListener(v -> sendKeyToSession("\033[C"));
+        // ── 方向编辑键（使用 shell_send_key 枚举） ──
+        mBtnKeyUp.setOnClickListener(v -> sendKey("UP"));
+        mBtnKeyDown.setOnClickListener(v -> sendKey("DOWN"));
+        mBtnKeyLeft.setOnClickListener(v -> sendKey("LEFT"));
+        mBtnKeyRight.setOnClickListener(v -> sendKey("RIGHT"));
 
         // ── 页控定位键 ──
-        mBtnKeyHome.setOnClickListener(v -> sendKeyToSession("\033[H"));
-        mBtnKeyEnd.setOnClickListener(v -> sendKeyToSession("\033[F"));
-        mBtnKeyPgUp.setOnClickListener(v -> sendKeyToSession("\033[5~"));
-        mBtnKeyPgDn.setOnClickListener(v -> sendKeyToSession("\033[6~"));
+        mBtnKeyHome.setOnClickListener(v -> sendKey("ESCAPE")); // ESC[H 不方便用枚举，发送原始序列
+        mBtnKeyEnd.setOnClickListener(v -> sendRawKey("\033[F"));
+        mBtnKeyPgUp.setOnClickListener(v -> sendRawKey("\033[5~"));
+        mBtnKeyPgDn.setOnClickListener(v -> sendRawKey("\033[6~"));
 
         // ── 基础功能键 ──
-        mBtnKeyTab.setOnClickListener(v -> sendKeyToSession("\t"));
-        mBtnKeyEsc.setOnClickListener(v -> sendKeyToSession("\033"));
-        mBtnKeyDel.setOnClickListener(v -> sendKeyToSession("\033[3~"));
-        mBtnKeyBksp.setOnClickListener(v -> sendKeyToSession("\177"));
-        mBtnKeyEnter.setOnClickListener(v -> sendKeyToSession("\r"));
+        mBtnKeyTab.setOnClickListener(v -> sendKey("TAB"));
+        mBtnKeyEsc.setOnClickListener(v -> sendKey("ESCAPE"));
+        mBtnKeyDel.setOnClickListener(v -> sendRawKey("\033[3~"));
+        mBtnKeyBksp.setOnClickListener(v -> sendRawKey("\177"));
+        mBtnKeyEnter.setOnClickListener(v -> sendKey("ENTER"));
 
         // ── 修饰键 ──
         mBtnKeyCtrl.setOnClickListener(v -> toggleModifier("ctrl"));
@@ -290,13 +266,12 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
         // ── 输入框焦点 ──
         mEtCommand.setOnFocusChangeListener((v, hasFocus) -> {
             mInputFocused = hasFocus;
-            updateSessionCardVisibility();
             if (hasFocus) scrollResultToBottom();
         });
     }
 
     // ================================================================
-    //  永久模式：插入文本 / 按键
+    //  发送命令 / 文本（永久模式）
     // ================================================================
 
     private void onInsertClick() {
@@ -306,55 +281,62 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
             setResultText("Termux 环境未就绪");
             return;
         }
-        if (mRgMode.getCheckedRadioButtonId() == R.id.rb_perm) {
-            handlePermanentInsert(text);
-        } else {
-            executeTemporary(text);
-        }
-    }
 
-    /** 永久模式插入文本 */
-    private void handlePermanentInsert(String text) {
+        mEtCommand.setText("");
+
         // 修饰键组合：仅取首字符
         if (mCtrlActive || mAltActive || mFnActive) {
             String firstChar = text.substring(0, 1);
             String mapped = applyModifierMapping(firstChar);
             clearModifiers();
-            sendKeyToSession(mapped);
-            mEtCommand.setText("");
+            sendRawKey(mapped);
             return;
         }
 
-        // 在后台线程发送文本，发完后取回最后 20 行画面
-        mEtCommand.setText("");
+        // 在后台线程执行命令
         final String cmd = text;
         new Thread(() -> {
-            String result = mExecutor.execPersistentShell(
-                    mCurrentSessionId, cmd, false, null, 200, 20, false, true);
-            if (result != null && !result.isEmpty()) {
-                runOnUiThread(() -> updateStructuredOutput(result));
+            JSONObject result = mExecutor.shell_exec(mCurrentSessionId, cmd);
+            try {
+                String output = result.optString("output", "");
+                int exitCode = result.optInt("exit_code", -1);
+                String status = result.optString("status", "error");
+                if (!TextUtils.isEmpty(output)) {
+                    String display = "$ " + cmd + "\n" + output
+                            + "\n── exit: " + exitCode + " ──";
+                    runOnUiThread(() -> appendResult(display));
+                } else {
+                    String display = "$ " + cmd + "\n── " + status
+                            + " (exit: " + exitCode + ") ──";
+                    runOnUiThread(() -> appendResult(display));
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> appendResult("$ " + cmd + "\n── error: " + e.getMessage() + " ──"));
             }
         }).start();
         scrollResultToBottom();
     }
 
-    /** 向当前会话发送按键序列（后台线程） */
-    private void sendKeyToSession(String sequence) {
+    /** 使用 shell_send_key 发送枚举键。 */
+    private void sendKey(String keyName) {
         if (mExecutor == null) return;
-        // 应用修饰键映射
-        sequence = applyModifierMapping(sequence);
+        final String key = keyName;
+        new Thread(() -> {
+            mExecutor.shell_send_key(mCurrentSessionId, key);
+        }).start();
+    }
+
+    /** 发送原始 ANSI 序列（框架中没有对应枚举的键）。 */
+    private void sendRawKey(String sequence) {
+        if (mExecutor == null) return;
         final String seq = sequence;
         new Thread(() -> {
-            String result = mExecutor.execPersistentShell(
-                    mCurrentSessionId, "", false, seq, 80, 20, false, true);
-            if (result != null && !result.isEmpty()) {
-                runOnUiThread(() -> updateStructuredOutput(result));
-            }
+            mExecutor.shell_write(mCurrentSessionId, seq);
         }).start();
     }
 
     // ================================================================
-    //  永久模式：会话管理
+    //  会话管理
     // ================================================================
 
     private void createNewSession() {
@@ -363,14 +345,17 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
         if (TextUtils.isEmpty(rawSid)) rawSid = DEFAULT_SESSION_ID;
         final String sid = rawSid;
 
-        mExecutor.createPersistentSession(sid);
-        mCurrentSessionId = sid;
-        // 刷新画布
-        String screen = mExecutor.getSessionStyledScreen(sid, true);
-        if (screen != null && !screen.isEmpty()) setResultText(screen);
-        refreshSessionInfo();
-        startScreenPolling();
-        appendResult("会话 " + sid + " 已创建" + (sid.equals(DEFAULT_SESSION_ID) ? "（默认）" : ""));
+        JSONObject result = mExecutor.create_session(sid);
+        if ("ok".equals(result.optString("status"))) {
+            mCurrentSessionId = sid;
+            String screen = mExecutor.getSessionStyledScreen(sid, true);
+            if (screen != null && !screen.isEmpty()) setResultText(screen);
+            refreshSessionInfo();
+            startScreenPolling();
+            appendResult("会话 " + sid + " 已创建" + (sid.equals(DEFAULT_SESSION_ID) ? "（默认）" : ""));
+        } else {
+            appendResult("创建失败: " + result.optString("message"));
+        }
     }
 
     private void connectSession() {
@@ -395,10 +380,10 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
 
     private void closeCurrentSession() {
         if (mExecutor == null) return;
-        mExecutor.closePersistentSession(mCurrentSessionId);
+        mExecutor.destroy_session(mCurrentSessionId);
         mCurrentSessionId = DEFAULT_SESSION_ID;
         // 确保默认会话存在
-        mExecutor.createPersistentSession(DEFAULT_SESSION_ID);
+        mExecutor.create_session(DEFAULT_SESSION_ID);
         refreshSessionInfo();
         appendResult("当前会话已关闭，已切换至 default");
     }
@@ -422,27 +407,10 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
     }
 
     // ================================================================
-    //  临时模式：一次性 bash -c 调用
-    // ================================================================
-
-    private void executeTemporary(String command) {
-        mBtnInsert.setEnabled(false);
-        new Thread(() -> {
-            String result = mExecutor.execTemporaryShell(command, false);
-            runOnUiThread(() -> {
-                appendResult(result);
-                mBtnInsert.setEnabled(true);
-                mBtnInsert.setText("发送");
-            });
-        }).start();
-    }
-
-    // ================================================================
     //  画面更新
     // ================================================================
 
     private void updateStructuredOutput(String styledText) {
-        if (mRgMode.getCheckedRadioButtonId() != R.id.rb_perm) return;
         if (mTvResult.hasSelection()) return;
         String current = mTvResult.getText().toString();
         if (styledText != null && !styledText.equals(current)) {
@@ -458,7 +426,7 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
 
     private void appendResult(String text) {
         String prev = mTvResult.getText().toString();
-        if (prev.equals("等待测试...") || prev.startsWith("环境正常")) {
+        if (prev.equals("等待连接...") || prev.startsWith("环境正常")) {
             setResultText(text);
         } else {
             setResultText(prev + "\n\n" + text);
@@ -547,9 +515,6 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
         mBtnKeyFn.setTextColor(0xFF333333);
     }
 
-    // ── 会话管理卡片可见性 ──
-    private void updateSessionCardVisibility() {
-        boolean isPerm = mRgMode.getCheckedRadioButtonId() == R.id.rb_perm;
-        mCardSession.setVisibility(isPerm && !mInputFocused ? View.VISIBLE : View.GONE);
-    }
+    // ── 保留 CardView 字段引用（虽然不再动态切换可见性） ──
+    private CardView mCardKeypad;
 }

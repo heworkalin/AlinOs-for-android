@@ -257,4 +257,13 @@
     <string name="text_to_voice_test_title">Text to Voice Test</string>
     <string name="agent_main_name">Agent Main</string>
     <string name="accessibility_service_description">Accessibility Service for AlinOs</string>
+
+    <!-- ChatActivityDev strings -->
+    <string name="chat_dev_welcome"># ✅ Markdown + LaTeX 渲染测试\n\n欢迎使用测试页面！您可以通过以下方式测试：\n\n1. 在输入框**手动输入** Markdown 文本后点击发送\n2. 点击右上角 **「插入用例」** 选择预置测试场景\n3. 点击 **「🌙 暗色」** 切换暗色模式\n\n**覆盖测试项：**\n- 标题（1-6级）、粗体、斜体、删除线\n- 有序/无序列表、任务列表\n- 表格、引用块、分割线\n- 行内代码、代码块（语法高亮）\n- LaTeX 行内公式（$...$）\n- LaTeX 块级公式（$$...$$）\n- 混合复杂场景\n- 暗色模式适配</string>
+    <string name="chat_dev_title">Markdown + LaTeX 渲染测试</string>
+    <string name="chat_dev_input_hint">输入 Markdown 文本，或点击「插入用例」…</string>
+    <string name="chat_dev_send">发送</string>
+    <string name="chat_dev_insert_test">插入用例</string>
+    <string name="chat_dev_theme_light">🌙 暗色</string>
+    <string name="chat_dev_theme_dark">☀️ 亮色</string>
 </resources>

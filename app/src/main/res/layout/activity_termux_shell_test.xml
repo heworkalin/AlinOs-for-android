@@ -7,11 +7,11 @@
     android:background="#F5F5F5"
     android:fitsSystemWindows="true">
 
-    <!-- 标题栏 (紧贴状态栏) -->
+    <!-- 标题栏 -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Termux Shell 测试"
+        android:text="Termux Shell Agent 工具集"
         android:textSize="20sp"
         android:textStyle="bold"
         android:paddingHorizontal="16dp"
@@ -44,48 +44,7 @@
             android:textColor="#666666" />
     </LinearLayout>
 
-    <!-- 模式选择 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingBottom="0dp"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="执行模式:"
-            android:textSize="15sp"
-            android:textColor="#333333"
-            android:layout_marginEnd="16dp" />
-
-        <RadioGroup
-            android:id="@+id/rg_mode"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <RadioButton
-                android:id="@+id/rb_temp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="临时 (3s超时)"
-                android:textSize="14sp"
-                android:checked="true" />
-
-            <RadioButton
-                android:id="@+id/rb_perm"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="永久 (会话ID)"
-                android:textSize="14sp"
-                android:layout_marginStart="16dp" />
-        </RadioGroup>
-    </LinearLayout>
-
-    <!-- 会话管理区域 (永久模式) -->
+    <!-- 会话管理区域 (永久会话, 始终可见) -->
     <androidx.cardview.widget.CardView
         android:id="@+id/card_session"
         android:layout_width="match_parent"
@@ -93,7 +52,6 @@
         android:layout_marginHorizontal="12dp"
         android:layout_marginTop="2dp"
         android:layout_marginBottom="2dp"
-        android:visibility="gone"
         app:cardCornerRadius="6dp"
         app:cardElevation="2dp"
         app:cardBackgroundColor="#FFFFFF">
@@ -123,7 +81,7 @@
                     android:layout_width="0dp"
                     android:layout_height="32dp"
                     android:layout_weight="1"
-                    android:hint="会话ID (留空自动生成)"
+                    android:hint="会话ID (留空默认)"
                     android:textSize="12sp"
                     android:background="@drawable/shape_edittext"
                     android:paddingHorizontal="6dp"
@@ -172,7 +130,7 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- ======== 输出结果区域 (可滚动, 占据剩余空间) ======== -->
+    <!-- 输出结果区域 (可滚动, 占据剩余空间) -->
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -193,7 +151,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="测试结果"
+                android:text="终端输出"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:paddingBottom="4dp" />
@@ -208,7 +166,7 @@
                     android:id="@+id/tv_result"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="等待测试..."
+                    android:text="等待连接..."
                     android:textSize="13sp"
                     android:fontFamily="monospace"
                     android:background="#F0F0F0"
@@ -219,15 +177,13 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-
-    <!-- 虚拟终端按键 (永久模式) — 严格 4 行, 每行 4 键等宽 -->
+    <!-- 虚拟终端按键 (始终可见) -->
     <androidx.cardview.widget.CardView
         android:id="@+id/card_keypad"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="12dp"
         android:layout_marginBottom="2dp"
-        android:visibility="gone"
         app:cardCornerRadius="6dp"
         app:cardElevation="2dp"
         app:cardBackgroundColor="#FFFFFF">
@@ -424,7 +380,7 @@
                 android:layout_width="0dp"
                 android:layout_height="38dp"
                 android:layout_weight="1"
-                android:hint="例如: echo hello"
+                android:hint="输入命令或文本"
                 android:textSize="13sp"
                 android:inputType="text"
                 android:background="@drawable/shape_edittext"
@@ -437,7 +393,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="38dp"
                 android:layout_marginStart="6dp"
-                android:text="发送"
+                android:text="发送命令"
                 android:textSize="14sp"
                 android:paddingHorizontal="16dp"
                 android:backgroundTint="#2196F3" />
