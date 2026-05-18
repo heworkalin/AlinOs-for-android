@@ -1,12 +1,7 @@
 package alin.android.alinos.dev;
 
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.view.View;
@@ -20,7 +15,6 @@ import androidx.cardview.widget.CardView;
 import androidx.core.content.ContextCompat;
 
 import com.termux.app.TermuxApplication;
-import com.termux.app.TermuxService;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 
@@ -30,8 +24,8 @@ import java.util.Map;
 
 import alin.android.alinos.R;
 import alin.android.alinos.tools.TerminalTermuxExecutor;
-//这个界面其实还需要修复改因为它所引入的一些东西存在严重的问题。嗯，就是对于人类也不友好，对于AI也不绝对友好。
-public class TermuxShellTestActivity extends AppCompatActivity implements ServiceConnection {
+
+public class TermuxShellTestActivity extends AppCompatActivity {
 
     // ---- 常量 ----
     private static final String DEFAULT_SESSION_ID = "default";
@@ -56,8 +50,6 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
     private ScrollView mSvResult;
 
     // ---- 核心状态 ----
-    private TermuxService mTermuxService;
-    private boolean mServiceBound = false;
     private TerminalTermuxExecutor mExecutor;
     private String mCurrentSessionId = DEFAULT_SESSION_ID;
     private boolean mInputFocused = false;
@@ -86,33 +78,6 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
     //  ServiceConnection
     // ================================================================
 
-    private void doBindService() {
-        if (mServiceBound) return;
-        Intent intent = new Intent(this, TermuxService.class);
-        bindService(intent, this, Context.BIND_AUTO_CREATE);
-    }
-
-    private void doUnbindService() {
-        if (mServiceBound) {
-            unbindService(this);
-            mServiceBound = false;
-        }
-        mTermuxService = null;
-    }
-
-    @Override
-    public void onServiceConnected(ComponentName name, IBinder service) {
-        mTermuxService = ((TermuxService.LocalBinder) service).service;
-        mServiceBound = true;
-        initExecutor();
-    }
-
-    @Override
-    public void onServiceDisconnected(ComponentName name) {
-        mTermuxService = null;
-        mServiceBound = false;
-    }
-
     // ================================================================
     //  Lifecycle
     // ================================================================
@@ -127,7 +92,7 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
 
         bindViews();
         checkTermuxEnvironment();
-        doBindService();
+        // TerminalTermuxExecutor 内部自动绑定 TermuxService，无需 Activity 层维护
     }
 
     @Override
@@ -138,7 +103,6 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
 
     @Override
     protected void onDestroy() {
-        doUnbindService();
         stopScreenPolling();
         super.onDestroy();
     }
@@ -148,17 +112,14 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
     // ================================================================
 
     private void initExecutor() {
-        if (!mServiceBound || !mIsTermuxReady) return;
+        if (mExecutor != null) return;
+        if (!mIsTermuxReady) return;
 
+        TerminalTermuxExecutor.provideContext(this);
         mExecutor = TerminalTermuxExecutor.getInstance();
-        boolean ready = mExecutor.init(this, mTermuxService);
-        if (!ready) return;
 
-        // 仅当会话池中尚无 default 会话时才创建
-        Map<String, Boolean> status = mExecutor.getSessionStatus();
-        if (!Boolean.TRUE.equals(status.get(DEFAULT_SESSION_ID))) {
-            mExecutor.create_session(DEFAULT_SESSION_ID);
-        }
+        // create_session 内部自动完成初始化，无需手动 init
+        mExecutor.create_session(DEFAULT_SESSION_ID);
         mCurrentSessionId = DEFAULT_SESSION_ID;
         // 初始刷新画布
         String screen = mExecutor.getSessionStyledScreen(DEFAULT_SESSION_ID, true);
@@ -298,7 +259,7 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
         new Thread(() -> {
             JSONObject result = mExecutor.shell_exec(mCurrentSessionId, cmd);
             try {
-                String output = result.optString("output", "");
+                String output = result.optString("content", "");
                 int exitCode = result.optInt("exit_code", -1);
                 String status = result.optString("status", "error");
                 if (!TextUtils.isEmpty(output)) {
@@ -346,7 +307,7 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
         final String sid = rawSid;
 
         JSONObject result = mExecutor.create_session(sid);
-        if ("ok".equals(result.optString("status"))) {
+        if ("success".equals(result.optString("status"))) {
             mCurrentSessionId = sid;
             String screen = mExecutor.getSessionStyledScreen(sid, true);
             if (screen != null && !screen.isEmpty()) setResultText(screen);
@@ -401,7 +362,17 @@ public class TermuxShellTestActivity extends AppCompatActivity implements Servic
                 sb.append(isCurrent ? "▶ " : "  ").append(e.getKey()).append("\n");
             }
         }
-        mTvActiveSessions.setText(aliveCount == 0
+        // 显示持久化的历史会话（进程重启后也能恢复）
+        Map<String, String> known = mExecutor.getKnownSessions();
+        if (!known.isEmpty()) {
+            for (Map.Entry<String, String> e : known.entrySet()) {
+                if (!status.containsKey(e.getKey())) {
+                    sb.append("○ ").append(e.getKey())
+                      .append(" (").append(e.getValue()).append(")\n");
+                }
+            }
+        }
+        mTvActiveSessions.setText(aliveCount == 0 && sb.length() == 0
                 ? "当前无活跃会话"
                 : sb.toString().trim());
     }

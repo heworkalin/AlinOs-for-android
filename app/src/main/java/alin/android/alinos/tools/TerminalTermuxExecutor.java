@@ -1,7 +1,12 @@
 package alin.android.alinos.tools;
 
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.IBinder;
 import android.text.TextUtils;
 
 import com.termux.app.TermuxService;
@@ -20,40 +25,57 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Termux Shell 面向 Agent 的工具集。
+ * Termux Shell —— Agent 用纯净终端工具集。
  *
- * <p>彻底移除临时一次性执行（{@code bash -c}），全部操作收敛到永久 PTY 会话。
- * 所有接口返回结构化 JSON，面向 Agent 调用设计。
+ * <p><b>核心理念：终端只做纯粹的 IO 通道。</b>
+ * 所有命令「原样发送、原样返回」，不追加任何额外指令。
+ * Agent 如需获取目录、环境变量等信息，请自行执行对应命令。</p>
  *
- * <p>设计原则：
+ * <p>全部操作收敛到永久 PTY 会话，不做 bash -c 一次性执行。
+ * 所有接口返回结构化 JSON，至少包含 {@code status} 字段。</p>
+ *
  * <ul>
- *   <li>纯文本优先 — 默认无颜色/行号/标记</li>
- *   <li>结构化响应 — 至少包含 {@code status} 字段</li>
+ *   <li>纯净性 — 不在命令前后插入任何额外指令（无 pwd/echo 注入）</li>
+ *   <li>结构化响应 — status + 业务数据 + 终端标识 (id/name)</li>
  *   <li>显式生命周期 — 会话必须显式创建/销毁</li>
- *   <li>枚举式按键 — 控制键/方向键使用枚举</li>
- *   <li>智能等待 — 检测提示符而非盲睡</li>
+ *   <li>枚举式按键 — 控制键/方向键使用枚举映射</li>
  * </ul>
  *
- * <p>使用前需确保：
- * {@code TermuxApplication.init(context)}、{@code TermuxShellEnvironment.init(context)}、
- * {@link #init(Context, TermuxService)} 均已完成。
+ * <p>前置条件：{@code TermuxApplication.init(context)}、
+ * {@code TermuxShellEnvironment.init(context)}、
+ * {@link #init(Context, TermuxService)} 均已完成。</p>
  */
 public class TerminalTermuxExecutor {
 
-    private static final String DEFAULT_SESSION_ID = "default";
-    private static final long SHELL_EXEC_POLL_MS = 80;
-    private static final long SHELL_EXEC_DEFAULT_TIMEOUT_MS = 10000;
-    private static final Pattern EXIT_MARKER = Pattern.compile("__ALINOS_EXIT__:(\\d+)");
+    // ── 默认值 ──
+    private static final int DEFAULT_RETURN_LINES = 20;
+    private static final long SHELL_EXEC_DEFAULT_WAIT_MS = 200;
+    private static final long SHELL_EXEC_MIN_WAIT_MS = 200;
+    private static final long SHELL_EXEC_MAX_WAIT_MS = 1200;
+    private static final long SCREEN_READ_POLL_MS = 80;
+    private static final long SCREEN_SETTLE_MS = 150;
+    private static final int SESSION_ID_MAX_LENGTH = 64;
+    private static final int SHELL_READ_MAX_LINES = 5000;
+    private static final int MAX_RECENT_COMMANDS = 3;
+    /** 等待 TermuxService 绑定的最大时间（毫秒）。 */
+    private static final long SERVICE_BIND_WAIT_MAX_MS = 3000;
+    /** 等待 TermuxService 绑定的轮询间隔（毫秒）。 */
+    private static final long SERVICE_BIND_POLL_MS = 100;
+    private static final String HISTORY_ARCHIVE_DIR = "termux_history";
 
     private static final String[] ANSI_COLOR_NAMES = {
         "黑色", "红色", "绿色", "黄色", "蓝色", "紫色", "青色", "白色",
@@ -63,16 +85,81 @@ public class TerminalTermuxExecutor {
     // ── 按键枚举 → ANSI 序列映射 ──
     private static final Map<String, String> KEY_ANSI_MAP = new HashMap<>();
     static {
+        // Ctrl 组合
+        KEY_ANSI_MAP.put("CTRL_A", "\001");
+        KEY_ANSI_MAP.put("CTRL_B", "\002");
         KEY_ANSI_MAP.put("CTRL_C", "\003");
         KEY_ANSI_MAP.put("CTRL_D", "\004");
-        KEY_ANSI_MAP.put("CTRL_Z", "\026");
+        KEY_ANSI_MAP.put("CTRL_E", "\005");
+        KEY_ANSI_MAP.put("CTRL_F", "\006");
+        KEY_ANSI_MAP.put("CTRL_G", "\007");
+        KEY_ANSI_MAP.put("CTRL_H", "\010");
+        KEY_ANSI_MAP.put("CTRL_I", "\011");
+        KEY_ANSI_MAP.put("CTRL_J", "\012");
+        KEY_ANSI_MAP.put("CTRL_K", "\013");
+        KEY_ANSI_MAP.put("CTRL_L", "\014");
+        KEY_ANSI_MAP.put("CTRL_M", "\015");
+        KEY_ANSI_MAP.put("CTRL_N", "\016");
+        KEY_ANSI_MAP.put("CTRL_O", "\017");
+        KEY_ANSI_MAP.put("CTRL_P", "\020");
+        KEY_ANSI_MAP.put("CTRL_Q", "\021");
+        KEY_ANSI_MAP.put("CTRL_R", "\022");
+        KEY_ANSI_MAP.put("CTRL_S", "\023");
+        KEY_ANSI_MAP.put("CTRL_T", "\024");
+        KEY_ANSI_MAP.put("CTRL_U", "\025");
+        KEY_ANSI_MAP.put("CTRL_V", "\026");
+        KEY_ANSI_MAP.put("CTRL_W", "\027");
+        KEY_ANSI_MAP.put("CTRL_X", "\030");
+        KEY_ANSI_MAP.put("CTRL_Y", "\031");
+        KEY_ANSI_MAP.put("CTRL_Z", "\032");
+
+        // 特殊键
         KEY_ANSI_MAP.put("TAB", "\t");
         KEY_ANSI_MAP.put("ENTER", "\r");
         KEY_ANSI_MAP.put("ESCAPE", "\033");
+        KEY_ANSI_MAP.put("BACKSPACE", "\177");
+        KEY_ANSI_MAP.put("DELETE", "\033[3~");
+
+        // 方向键
         KEY_ANSI_MAP.put("UP", "\033[A");
         KEY_ANSI_MAP.put("DOWN", "\033[B");
         KEY_ANSI_MAP.put("LEFT", "\033[D");
         KEY_ANSI_MAP.put("RIGHT", "\033[C");
+
+        // 翻页键
+        KEY_ANSI_MAP.put("PAGE_UP", "\033[5~");
+        KEY_ANSI_MAP.put("PAGE_DOWN", "\033[6~");
+        KEY_ANSI_MAP.put("HOME", "\033[H");
+        KEY_ANSI_MAP.put("END", "\033[F");
+
+        // 功能键 F1-F12
+        KEY_ANSI_MAP.put("F1", "\033OP");
+        KEY_ANSI_MAP.put("F2", "\033OQ");
+        KEY_ANSI_MAP.put("F3", "\033OR");
+        KEY_ANSI_MAP.put("F4", "\033OS");
+        KEY_ANSI_MAP.put("F5", "\033[15~");
+        KEY_ANSI_MAP.put("F6", "\033[17~");
+        KEY_ANSI_MAP.put("F7", "\033[18~");
+        KEY_ANSI_MAP.put("F8", "\033[19~");
+        KEY_ANSI_MAP.put("F9", "\033[20~");
+        KEY_ANSI_MAP.put("F10", "\033[21~");
+        KEY_ANSI_MAP.put("F11", "\033[23~");
+        KEY_ANSI_MAP.put("F12", "\033[24~");
+    }
+
+    private static String normalizeKeyName(String key) {
+        if (key == null) return null;
+        String normalized = key.trim().toUpperCase(Locale.US);
+        normalized = normalized.replace("CTRL+", "CTRL_");
+        normalized = normalized.replace("CTRL ", "CTRL_");
+        if (!normalized.contains("_") && !normalized.contains("+")) {
+            normalized = normalized.replace("PAGEUP", "PAGE_UP")
+                .replace("PAGEDOWN", "PAGE_DOWN")
+                .replace("BACKSPACE", "BACKSPACE")
+                .replace("ESCAPE", "ESCAPE")
+                .replace("DELETE", "DELETE");
+        }
+        return normalized;
     }
 
     // ── 单例 ──
@@ -95,15 +182,82 @@ public class TerminalTermuxExecutor {
     //  实例状态
     // ────────────────────────────────────────────────────────────────
 
-    private final HashMap<String, PtySession> sessionPool = new HashMap<>();
-    /** 每个会话的「增量读取」位置追踪 */
-    private final HashMap<String, Integer> lastReadLineCount = new HashMap<>();
+    private final ConcurrentHashMap<String, PtySession> sessionPool = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Integer> lastReadLineCount = new ConcurrentHashMap<>();
 
     private Context context;
     private TermuxService termuxService;
     private TermuxShellEnvironment termuxEnv;
     private volatile boolean initialized = false;
     private volatile boolean envReady = false;
+
+    /** 应用级 Context 暂存，供 AI 静默初始化使用。 */
+    private static volatile Context appContext;
+
+    /**
+     * 注入应用 Context。Activities/Application 在启动时调用一次，
+     * 此后 AI 通过 {@link #create_session} 即可自动完成初始化。
+     */
+    public static void provideContext(Context context) {
+        if (context != null) {
+            appContext = context.getApplicationContext();
+        }
+    }
+
+    /**
+     * 自动初始化（仅当未初始化且有可用 Context 时）。
+     * @return null 表示就绪，非 null 为错误 JSON
+     */
+    private JSONObject ensureInitialized() {
+        if (initialized && envReady) return null;
+        if (!initialized) {
+            if (appContext == null) {
+                return errorJson("NOT_INITIALIZED",
+                    "Executor not initialized. Call provideContext() first.");
+            }
+            init(appContext, null);
+        }
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        return null;
+    }
+
+    private boolean mServiceBound = false;
+    private volatile boolean mServiceBindingInitiated = false;
+    private TermuxService mLocalService = null;
+
+    private final ServiceConnection mServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            mLocalService = ((TermuxService.LocalBinder) service).service;
+            mServiceBound = true;
+            if (TerminalTermuxExecutor.this.termuxService == null) {
+                TerminalTermuxExecutor.this.termuxService = mLocalService;
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            mLocalService = null;
+            mServiceBound = false;
+
+            // 关闭所有会话，清空会话池
+            for (PtySession s : sessionPool.values()) {
+                s.close();
+            }
+            sessionPool.clear();
+            lastReadLineCount.clear();
+
+            // 重置执行器状态 → 后续所有调用返回 NOT_INITIALIZED
+            initialized = false;
+            envReady = false;
+            termuxService = null;
+        }
+    };
+
+    private SharedPreferences mSessionPrefs;
+    private static final String PREFS_NAME = "termux_session_meta";
+    private static final String KEY_SESSION_NAMES = "session_id_name_map";
 
     private static final String MSG_ENV_NOT_READY =
             "Termux 环境尚未初始化，请先在「Agent Main」中完成初始化。\n"
@@ -115,9 +269,13 @@ public class TerminalTermuxExecutor {
 
     static class PtySession {
         final String id;
+        String name;
         final TerminalSession session;
         final TerminalEmulator emulator;
         final Object lock = new Object();
+        final List<String> recentCommands = new ArrayList<>();
+        final boolean createdViaService;
+        volatile boolean serviceDead;
 
         private final TerminalSessionClient sessionClient = new TerminalSessionClient() {
             @Override public void onTextChanged(TerminalSession s) {}
@@ -141,6 +299,8 @@ public class TerminalTermuxExecutor {
 
         PtySession(String id, String shellPath, String cwd, String[] env) {
             this.id = id;
+            this.name = id;
+            this.createdViaService = false;
             this.session = new TerminalSession(shellPath, cwd, null, env,
                 TerminalEmulator.DEFAULT_TERMINAL_TRANSCRIPT_ROWS, sessionClient);
             this.session.updateSize(80, 24);
@@ -149,21 +309,48 @@ public class TerminalTermuxExecutor {
 
         PtySession(String id, TerminalSession existingSession) {
             this.id = id;
+            this.name = id;
+            this.createdViaService = true;
             this.session = existingSession;
             this.session.updateSize(80, 24);
             this.emulator = session.getEmulator();
         }
 
-        void sendKey(String sequence) {
-            if (session.isRunning()) session.write(sequence);
+        boolean sendKey(String sequence) {
+            if (session.isRunning()) {
+                session.write(sequence);
+                return true;
+            }
+            return false;
         }
 
         boolean isAlive() {
-            return session != null && session.isRunning();
+            if (session == null) return false;
+            if (serviceDead) return false;
+            return session.isRunning();
         }
 
         synchronized void close() {
             session.finishIfRunning();
+        }
+
+        void recordCommand(String cmd) {
+            synchronized (recentCommands) {
+                recentCommands.add(cmd);
+                while (recentCommands.size() > MAX_RECENT_COMMANDS) {
+                    recentCommands.remove(0);
+                }
+            }
+        }
+
+        JSONArray getRecentCommandsJson() {
+            JSONArray arr = new JSONArray();
+            synchronized (recentCommands) {
+                for (String c : recentCommands) {
+                    arr.put(c);
+                }
+            }
+            return arr;
         }
     }
 
@@ -177,7 +364,46 @@ public class TerminalTermuxExecutor {
         this.termuxEnv = new TermuxShellEnvironment();
         this.initialized = true;
         envReady = checkEnvironmentReady();
+        initPersistence(this.context);
+        if (!mServiceBound) {
+            bindTermuxService(this.context);
+        }
+        // 同步等待 TermuxService 绑定完成（仅在自动初始化时等待）
+        if (this.termuxService == null && mServiceBindingInitiated) {
+            long deadline = System.currentTimeMillis() + SERVICE_BIND_WAIT_MAX_MS;
+            while (System.currentTimeMillis() < deadline) {
+                if (this.termuxService != null) break;
+                try {
+                    Thread.sleep(SERVICE_BIND_POLL_MS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
         return envReady;
+    }
+
+    private void initPersistence(Context ctx) {
+        if (mSessionPrefs != null) return;
+        mSessionPrefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    private void bindTermuxService(Context ctx) {
+        mServiceBindingInitiated = true;
+        try {
+            Intent intent = new Intent(ctx, TermuxService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ctx.startForegroundService(intent);
+            } else {
+                ctx.startService(intent);
+            }
+            if (!ctx.bindService(intent, mServiceConnection, 0)) {
+                // bindService 返回 false → 服务不可用，回退到 createDirect
+            }
+        } catch (Exception e) {
+            // 绑定失败 → 回退到 createDirect 创建会话
+        }
     }
 
     public boolean isInitialized() { return initialized; }
@@ -193,18 +419,58 @@ public class TerminalTermuxExecutor {
     }
 
     // ================================================================
-    //  内部辅助：构建 JSON 响应
+    //  会话元数据持久化
     // ================================================================
 
-    private static JSONObject okJson() {
-        return okJson(null);
+    private void saveSessionMeta() {
+        if (mSessionPrefs == null) return;
+        try {
+            JSONObject meta = new JSONObject();
+            for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
+                JSONObject entry = new JSONObject();
+                entry.put("name", e.getValue().name);
+                entry.put("alive", e.getValue().isAlive());
+                meta.put(e.getKey(), entry);
+            }
+            mSessionPrefs.edit().putString(KEY_SESSION_NAMES, meta.toString()).apply();
+        } catch (Exception ignored) {}
     }
 
-    private static JSONObject okJson(String message) {
+    private Map<String, String> loadSessionMeta() {
+        Map<String, String> result = new HashMap<>();
+        if (mSessionPrefs == null) return result;
+        try {
+            String json = mSessionPrefs.getString(KEY_SESSION_NAMES, "{}");
+            JSONObject meta = new JSONObject(json);
+            for (java.util.Iterator<String> it = meta.keys(); it.hasNext();) {
+                String id = it.next();
+                JSONObject entry = meta.optJSONObject(id);
+                if (entry != null) {
+                    result.put(id, entry.optString("name", id));
+                }
+            }
+        } catch (Exception ignored) {}
+        return result;
+    }
+
+    // ================================================================
+    //  内部辅助：JSON 响应
+    // ================================================================
+
+    private static JSONObject successJson() {
+        return successJson(null, null);
+    }
+
+    private static JSONObject successJson(String message) {
+        return successJson(message, null);
+    }
+
+    private static JSONObject successJson(String message, JSONObject data) {
         try {
             JSONObject o = new JSONObject();
-            o.put("status", "ok");
+            o.put("status", "success");
             if (message != null) o.put("message", message);
+            if (data != null) o.put("data", data);
             return o;
         } catch (Exception e) {
             return errorJson("INTERNAL_ERROR", e.getMessage());
@@ -223,6 +489,119 @@ public class TerminalTermuxExecutor {
         }
     }
 
+    /** 向 JSON 响应中附加终端 id 和 name。 */
+    private static JSONObject attachSessionInfo(JSONObject base, PtySession session) {
+        try {
+            base.put("id", session.id);
+            base.put("name", session.name);
+        } catch (Exception ignored) {}
+        return base;
+    }
+
+    // ================================================================
+    //  参数校验
+    // ================================================================
+
+    private JSONObject checkInit() {
+        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
+        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        return null;
+    }
+
+    private JSONObject checkSessionId(String sessionId) {
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            return errorJson("INVALID_SESSION_ID", "session_id cannot be null or empty");
+        }
+        String trimmed = sessionId.trim();
+        if (trimmed.length() > SESSION_ID_MAX_LENGTH) {
+            return errorJson("INVALID_SESSION_ID",
+                "session_id too long (max " + SESSION_ID_MAX_LENGTH + " chars)");
+        }
+        if (!trimmed.matches("[a-zA-Z0-9_\\-]+")) {
+            return errorJson("INVALID_SESSION_ID",
+                "session_id must match [a-zA-Z0-9_\\-]+");
+        }
+        return null;
+    }
+
+    private static class SessionResult {
+        final PtySession session;
+        final JSONObject error;
+        SessionResult(PtySession s, JSONObject e) { this.session = s; this.error = e; }
+    }
+
+    private SessionResult requireAliveSession(String sessionId) {
+        if (sessionId == null) {
+            return new SessionResult(null, errorJson("INVALID_SESSION_ID", "session_id cannot be null"));
+        }
+        PtySession s = sessionPool.get(sessionId);
+        if (s == null) {
+            return new SessionResult(null, errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId));
+        }
+        if (!s.isAlive()) {
+            return new SessionResult(null, errorJson("SESSION_DEAD", "Session is terminated: " + sessionId));
+        }
+        return new SessionResult(s, null);
+    }
+
+    // ================================================================
+    //  输出渲染 — 颜色转义 / 光标位置模式
+    // ================================================================
+
+    /**
+     * 根据颜色转义和光标位置模式渲染终端缓冲区文本。
+     * 复用 {@link #dumpStyledScreen} 作为完整渲染引擎，然后按模式后处理。
+     */
+    private String renderScreen(PtySession session, boolean colorEscape, boolean cursorMark) {
+        // colorEscape: false = 纯文本（清除ANSI转义序列）, true = 中文样式标签
+        // cursorMark:  false = 无标记, true = 可视化标记光标位置
+
+        // 无样式 + 无光标 → 纯文本快速路径
+        if (!colorEscape && !cursorMark) {
+            return getScreenText(session);
+        }
+
+        String output = dumpStyledScreen(session, cursorMark);
+
+        if (!colorEscape) {
+            // 原始模式：移除 [样式名] 标签
+            output = output.replaceAll("\\[[\\u4e00-\\u9fff|+]+\\] ", "");
+            output = output.replaceAll(" {2,}", " ");
+        }
+
+        if (!cursorMark) {
+            output = output.replaceAll("(?m)^\\[\\d+\\] ", "");
+        }
+
+        output = output.replaceAll("(?m) +$", "");
+        return output;
+    }
+
+    // ================================================================
+    //  内部辅助：返回模式处理 + 响应构建
+    // ================================================================
+
+    /**
+     * 根据返回模式从渲染文本中提取内容。
+     * @return { output, lineCount }
+     */
+    private static String[] applyReturnMode(String text, String returnMode, int lines) {
+        String output;
+        switch (returnMode) {
+            case "last_n":
+                output = getLastNLines(text, lines);
+                break;
+            case "all":
+                output = text.trim();
+                break;
+            default: // last_20
+                output = getLastNLines(text, DEFAULT_RETURN_LINES);
+                break;
+        }
+        int lineCount = output.isEmpty() ? 0 : output.split("\n", -1).length;
+        return new String[]{ output, String.valueOf(lineCount) };
+    }
+
     // ================================================================
     //  会话管理 — Agent API
     // ================================================================
@@ -230,58 +609,84 @@ public class TerminalTermuxExecutor {
     // ── create_session ──
 
     /**
-     * 创建一个新的永久 PTY 会话。若 ID 已存在则返回错误。
+     * 创建一个新的永久 PTY 会话。
+     *
+     * @param sessionId 唯一标识，正则 [a-zA-Z0-9_\-]+，最长 64 字符
+     * @param sessionName 可读名称，null 则默认等于 id
      */
-    public JSONObject create_session(String sessionId) {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
-        if (sessionId == null || sessionId.trim().isEmpty()) {
-            return errorJson("INVALID_SESSION_ID", "session_id cannot be empty");
-        }
+    public JSONObject create_session(String sessionId, String sessionName) {
+        JSONObject err;
+
+        // AI 静默初始化：未初始化时自动完成
+        err = ensureInitialized();
+        if (err != null) return err;
+
+        err = checkSessionId(sessionId);
+        if (err != null) return err;
 
         String sid = sessionId.trim();
+
         synchronized (sessionPool) {
             PtySession existing = sessionPool.get(sid);
-            if (existing != null && existing.isAlive()) {
-                return errorJson("ALREADY_EXISTS", "Session already exists: " + sid);
+            if (existing != null) {
+                if (existing.isAlive()) {
+                    return errorJson("ALREADY_EXISTS",
+                        "Session already exists and is alive: " + sid
+                        + ". Destroy it first or use a different ID.");
+                }
+                existing.close();
+                sessionPool.remove(sid);
             }
-        }
 
-        try {
-            PtySession session;
-            if (termuxService != null) {
-                session = createViaService(sid);
-            } else {
-                session = createDirect(sid);
+            try {
+                PtySession session;
+                // init() 已确保 termuxService 就绪（自动初始化时同步等待绑定完成）
+                if (termuxService != null) {
+                    session = createViaService(sid);
+                } else {
+                    session = createDirect(sid);
+                }
+                if (session == null) {
+                    return errorJson("CREATE_FAILED", "Failed to create session: " + sid);
+                }
+                if (sessionName != null && !sessionName.trim().isEmpty()) {
+                    session.name = sessionName.trim();
+                }
+                saveSessionMeta();
+                JSONObject result = new JSONObject();
+                result.put("status", "success");
+                result.put("id", sid);
+                result.put("name", session.name);
+                return result;
+            } catch (Exception e) {
+                String msg = e.getClass().getSimpleName();
+                if (e.getMessage() != null) msg += ": " + e.getMessage();
+                return errorJson("CREATE_FAILED", msg);
             }
-            if (session == null) {
-                return errorJson("CREATE_FAILED", "Failed to create session: " + sid);
-            }
-            return okJson("Session created: " + sid);
-        } catch (Exception e) {
-            return errorJson("CREATE_FAILED", e.getMessage());
         }
+    }
+
+    /** create_session 仅 id 版本（名称默认等于 id）。 */
+    public JSONObject create_session(String sessionId) {
+        return create_session(sessionId, null);
     }
 
     // ── destroy_session ──
 
-    /**
-     * 关闭指定会话并释放所有资源。会话不存在则返回错误。
-     */
     public JSONObject destroy_session(String sessionId) {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        JSONObject err = checkInit();
+        if (err != null) return err;
+
         if (sessionId == null) {
             return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
         }
 
-        PtySession session;
-        synchronized (sessionPool) {
-            session = sessionPool.remove(sessionId);
-        }
+        PtySession session = sessionPool.remove(sessionId);
         if (session == null) {
             return errorJson("NOT_FOUND", "Session not found: " + sessionId);
         }
+
+        String sessionName = session.name;
 
         synchronized (session.lock) {
             if (termuxService != null) {
@@ -290,31 +695,86 @@ public class TerminalTermuxExecutor {
             session.close();
         }
         lastReadLineCount.remove(sessionId);
-        return okJson("Session destroyed: " + sessionId);
+        saveSessionMeta();
+        JSONObject result = new JSONObject();
+        try {
+            result.put("status", "success");
+            result.put("id", sessionId);
+            result.put("name", sessionName);
+            result.put("message", "终端已终止");
+        } catch (Exception e) {
+            return errorJson("INTERNAL_ERROR", e.getMessage());
+        }
+        return result;
     }
 
     // ── list_sessions ──
 
-    /**
-     * 列出当前所有会话及其存活状态。
-     */
     public JSONObject list_sessions() {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
+        JSONObject err = checkInit();
+        if (err != null) return err;
 
         try {
             JSONArray arr = new JSONArray();
-            synchronized (sessionPool) {
-                for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
-                    JSONObject item = new JSONObject();
-                    item.put("session_id", e.getKey());
-                    item.put("alive", e.getValue().isAlive());
-                    item.put("cwd", getCwd(e.getValue()));
-                    arr.put(item);
-                }
+            for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
+                PtySession s = e.getValue();
+                JSONObject item = new JSONObject();
+                item.put("session_id", e.getKey());
+                item.put("name", s.name);
+                item.put("alive", s.isAlive());
+                item.put("recent_commands", s.getRecentCommandsJson());
+                arr.put(item);
             }
-            JSONObject result = okJson();
+            JSONObject result = successJson();
             result.put("sessions", arr);
+            return result;
+        } catch (Exception e) {
+            return errorJson("INTERNAL_ERROR", e.getMessage());
+        }
+    }
+
+    // ── search_session ──
+
+    public JSONObject search_session(String query, String by) {
+        JSONObject err = checkInit();
+        if (err != null) return err;
+
+        if (query == null || query.trim().isEmpty()) {
+            return errorJson("INVALID_QUERY", "query cannot be empty");
+        }
+        if (by == null) by = "name";
+
+        try {
+            JSONObject result = successJson();
+
+            if ("id".equals(by)) {
+                PtySession s = sessionPool.get(query.trim());
+                if (s != null) {
+                    JSONObject info = new JSONObject();
+                    info.put("id", s.id);
+                    info.put("name", s.name);
+                    info.put("recent_commands", s.getRecentCommandsJson());
+                    result.put("found", true);
+                    result.put("data", info);
+                } else {
+                    result.put("found", false);
+                }
+            } else {
+                String lowerQuery = query.trim().toLowerCase(Locale.US);
+                JSONArray matches = new JSONArray();
+                for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
+                    PtySession s = e.getValue();
+                    if (s.id.toLowerCase(Locale.US).contains(lowerQuery)
+                            || s.name.toLowerCase(Locale.US).contains(lowerQuery)) {
+                        JSONObject info = new JSONObject();
+                        info.put("id", s.id);
+                        info.put("name", s.name);
+                        matches.put(info);
+                    }
+                }
+                result.put("found", matches.length() > 0);
+                result.put("matches", matches);
+            }
             return result;
         } catch (Exception e) {
             return errorJson("INTERNAL_ERROR", e.getMessage());
@@ -323,34 +783,62 @@ public class TerminalTermuxExecutor {
 
     // ── session_status ──
 
-    /**
-     * 查询指定会话的详细信息：存活状态、当前工作目录、是否有运行中的命令。
-     */
     public JSONObject session_status(String sessionId) {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
-        if (sessionId == null) {
-            return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
-        }
+        JSONObject err = checkInit();
+        if (err != null) return err;
 
-        PtySession session;
-        synchronized (sessionPool) {
-            session = sessionPool.get(sessionId);
-        }
-        if (session == null) {
-            return errorJson("NOT_FOUND", "Session not found: " + sessionId);
-        }
+        SessionResult sr = requireAliveSession(sessionId);
+        if (sr.error != null) return sr.error;
 
         try {
             JSONObject data = new JSONObject();
-            boolean alive = session.isAlive();
-            data.put("alive", alive);
-            data.put("cwd", alive ? getCwd(session) : "");
-            data.put("has_running_command", alive && hasRunningCommand(session));
+            data.put("alive", sr.session.isAlive());
+            data.put("session_id", sr.session.id);
+            data.put("name", sr.session.name);
+            return successJson(null, data);
+        } catch (Exception e) {
+            return errorJson("INTERNAL_ERROR", e.getMessage());
+        }
+    }
 
-            JSONObject result = okJson();
-            result.put("data", data);
-            return result;
+    // ── rename_session ──
+
+    public JSONObject rename_session(String sessionId, String newName) {
+        JSONObject err = checkInit();
+        if (err != null) return err;
+
+        if (sessionId == null) {
+            return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        }
+        if (newName == null || newName.trim().isEmpty()) {
+            return errorJson("INVALID_NAME", "new_name cannot be null or empty");
+        }
+
+        String trimmed = newName.trim();
+        if (trimmed.length() > SESSION_ID_MAX_LENGTH) {
+            return errorJson("INVALID_NAME",
+                "new_name too long (max " + SESSION_ID_MAX_LENGTH + " chars)");
+        }
+        if (!trimmed.matches("[a-zA-Z0-9_\\-\\u4e00-\\u9fff]+")) {
+            return errorJson("INVALID_NAME",
+                "new_name must match [a-zA-Z0-9_\\-\\u4e00-\\u9fff]+");
+        }
+
+        PtySession session = sessionPool.get(sessionId);
+        if (session == null) {
+            return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        }
+
+        String oldName = session.name;
+        session.name = trimmed;
+        saveSessionMeta();
+
+        try {
+            JSONObject data = new JSONObject();
+            data.put("session_id", sessionId);
+            data.put("old_name", oldName);
+            data.put("new_name", trimmed);
+            return successJson("Session renamed: \"" + oldName + "\" → \"" + trimmed + "\"", data);
         } catch (Exception e) {
             return errorJson("INTERNAL_ERROR", e.getMessage());
         }
@@ -363,132 +851,96 @@ public class TerminalTermuxExecutor {
     // ── shell_exec ──
 
     /**
-     * 在指定会话中执行一条 Shell 命令，自动追加回车，等待命令结束（提示符重新出现或超时），
-     * 返回纯净文本输出和退出码。
+     * 在指定会话中执行一条命令。不注入任何额外指令。
      *
-     * <p>内部通过追加 {@code ;echo __ALINOS_EXIT__:$?} 标记来获取退出码。
-     *
-     * @param sessionId 目标会话 ID
-     * @param command   要执行的 Shell 命令
-     * @param timeoutMs 最长等待毫秒数（默认 10000）
+     * @param sessionId    目标会话 ID
+     * @param command      要执行的命令（服务器自动补 \r）
+     * @param waitMs       等待毫秒数，默认 200，范围 [200, 1200]
+     * @param returnMode   返回模式：last_20（默认）、last_n（需 n）
+     * @param lines        last_n 时有效
+     * @param colorEscape  颜色转义：false=纯文本（清除ANSI）, true=中文样式标签
      */
-    public JSONObject shell_exec(String sessionId, String command, long timeoutMs) {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
-        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+    public JSONObject shell_exec(String sessionId, String command, long waitMs,
+                                  String returnMode, int lines, boolean colorEscape) {
+        JSONObject err = checkInit();
+        if (err != null) return err;
+
+        if (sessionId == null) {
+            return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        }
         if (command == null || command.trim().isEmpty()) {
             return errorJson("EMPTY_COMMAND", "command cannot be empty");
         }
 
-        PtySession session = getSession(sessionId);
-        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        PtySession session = sessionPool.get(sessionId);
+        if (session == null) {
+            return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        }
 
-        if (timeoutMs <= 0) timeoutMs = SHELL_EXEC_DEFAULT_TIMEOUT_MS;
+        if (waitMs <= 0) waitMs = SHELL_EXEC_DEFAULT_WAIT_MS;
+        if (waitMs < SHELL_EXEC_MIN_WAIT_MS) waitMs = SHELL_EXEC_MIN_WAIT_MS;
+        if (waitMs > SHELL_EXEC_MAX_WAIT_MS) waitMs = SHELL_EXEC_MAX_WAIT_MS;
+        if (returnMode == null) returnMode = "last_20";
+        if ("all".equals(returnMode)) returnMode = "last_20";
+        if (lines <= 0) lines = DEFAULT_RETURN_LINES;
+
         String cmd = command.trim();
+        session.recordCommand(cmd);
 
         synchronized (session.lock) {
+            if (!session.sendKey(cmd + "\r")) {
+                return errorJson("SESSION_DEAD",
+                    "Session is not running, cannot send command: " + sessionId);
+            }
+
             try {
-                // 发送命令（带退出码标记）
-                String sentinel = cmd + " ;echo __ALINOS_EXIT__:$?";
-                session.sendKey(sentinel + "\r");
+                Thread.sleep(waitMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return errorJson("INTERRUPTED", "Interrupted while waiting");
+            }
 
-                // 轮询等待标记出现
-                long deadline = System.currentTimeMillis() + timeoutMs;
-                boolean finished = false;
-
-                while (System.currentTimeMillis() < deadline) {
-                    try { Thread.sleep(SHELL_EXEC_POLL_MS); }
-                    catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        return errorJson("INTERRUPTED", "Interrupted while waiting");
-                    }
-
-                    String current = getScreenText(session);
-                    Matcher m = EXIT_MARKER.matcher(current);
-                    if (m.find()) {
-                        finished = true;
-                        break;
-                    }
-                }
-
-                // 读取最终画面并解析
-                String finalScreen = getScreenText(session);
-
-                if (!finished) {
-                    // 超时：返回已产生的输出
-                    String partialOutput = extractOutputBeforeMarker(finalScreen, cmd);
+            if (!session.isAlive()) {
+                String partial = renderScreen(session, colorEscape, false);
+                try {
                     JSONObject result = new JSONObject();
-                    result.put("status", "timeout");
-                    result.put("output", partialOutput);
-                    result.put("exit_code", JSONObject.NULL);
-                    result.put("cwd", getCwd(session));
-                    return result;
+                    result.put("status", "session_died");
+                    result.put("content", partial);
+                    return attachSessionInfo(result, session);
+                } catch (Exception e) {
+                    return errorJson("EXEC_FAILED", e.getMessage());
                 }
+            }
 
-                // 解析退出码和输出
-                int exitCode = -1;
-                String output = "";
-                String[] lines = finalScreen.split("\n", -1);
-                int markerLineIdx = -1;
+            String rendered = renderScreen(session, colorEscape, false);
 
-                for (int i = lines.length - 1; i >= 0; i--) {
-                    Matcher m = EXIT_MARKER.matcher(lines[i]);
-                    if (m.find()) {
-                        exitCode = Integer.parseInt(m.group(1));
-                        markerLineIdx = i;
-                        break;
-                    }
-                }
-
-                // 找到命令所在行（从 marker 行往前找，该行同时包含 command 和 __ALINOS_EXIT__）
-                int cmdLineIdx = -1;
-                for (int i = markerLineIdx - 1; i >= 0; i--) {
-                    if (lines[i].contains(cmd) && lines[i].contains("__ALINOS_EXIT__")) {
-                        cmdLineIdx = i;
-                        break;
-                    }
-                }
-                // 回退：只包含命令即可
-                if (cmdLineIdx < 0) {
-                    for (int i = markerLineIdx - 1; i >= 0; i--) {
-                        if (lines[i].contains(cmd)) {
-                            cmdLineIdx = i;
-                            break;
-                        }
-                    }
-                }
-
-                // 提取输出 = 命令行之后、标记行之前的行
-                StringBuilder outputBuf = new StringBuilder();
-                int start = Math.max(0, cmdLineIdx + 1);
-                for (int i = start; i < markerLineIdx; i++) {
-                    String line = lines[i].trim();
-                    if (line.isEmpty()) continue;
-                    // 跳过可能出现的提示符行
-                    if (isPromptLike(line)) continue;
-                    if (outputBuf.length() > 0) outputBuf.append("\n");
-                    outputBuf.append(line);
-                }
-                output = outputBuf.toString();
-
+            String[] modeResult = applyReturnMode(rendered, returnMode, lines);
+            try {
                 JSONObject result = new JSONObject();
-                result.put("status", "ok");
-                result.put("output", output);
-                result.put("exit_code", exitCode);
-                result.put("cwd", getCwd(session));
-                return result;
-
+                result.put("status", "success");
+                result.put("content", modeResult[0]);
+                result.put("line_count", Integer.parseInt(modeResult[1]));
+                return attachSessionInfo(result, session);
             } catch (Exception e) {
                 return errorJson("EXEC_FAILED", e.getMessage());
             }
         }
     }
 
-    /**
-     * shell_exec 默认超时版本（10 秒）。
-     */
+    /** shell_exec 简化版（stripAnsi=true 去除颜色，false 保留标签）。 */
+    public JSONObject shell_exec(String sessionId, String command, long waitMs, boolean stripAnsi) {
+        return shell_exec(sessionId, command, waitMs,
+            "last_20", DEFAULT_RETURN_LINES,
+            !stripAnsi);
+    }
+
+    public JSONObject shell_exec(String sessionId, String command, long waitMs) {
+        return shell_exec(sessionId, command, waitMs, "last_20", DEFAULT_RETURN_LINES, false);
+    }
+
     public JSONObject shell_exec(String sessionId, String command) {
-        return shell_exec(sessionId, command, SHELL_EXEC_DEFAULT_TIMEOUT_MS);
+        return shell_exec(sessionId, command, SHELL_EXEC_DEFAULT_WAIT_MS,
+            "last_20", DEFAULT_RETURN_LINES, false);
     }
 
     // ================================================================
@@ -498,143 +950,290 @@ public class TerminalTermuxExecutor {
     // ── shell_write ──
 
     /**
-     * 向会话发送文本，不追加回车。用于交互式程序应答（如密码、提示确认）。
+     * 向会话写入文本，不追加回车。用于交互式程序应答。
+     *
+     * @param returnMode   返回模式：last_20（默认）、last_n、all
+     * @param lines        last_n 时有效
+     * @param colorEscape  颜色转义：false=纯文本（清除ANSI）, true=中文样式标签
+     * @param cursorMark   光标位置：false=无标记, true=标记
      */
-    public JSONObject shell_write(String sessionId, String text) {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
-        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
-        if (text == null) return errorJson("INVALID_TEXT", "text cannot be null");
+    public JSONObject shell_write(String sessionId, String text,
+                                   String returnMode, int lines,
+                                   boolean colorEscape, boolean cursorMark) {
+        JSONObject err = checkInit();
+        if (err != null) return err;
 
-        PtySession session = getSession(sessionId);
-        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        if (sessionId == null) {
+            return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        }
+        if (text == null) {
+            return errorJson("INVALID_TEXT", "text cannot be null");
+        }
+
+        PtySession session = sessionPool.get(sessionId);
+        if (session == null) {
+            return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        }
+
+        if (returnMode == null) returnMode = "last_20";
+        if (lines <= 0) lines = DEFAULT_RETURN_LINES;
 
         synchronized (session.lock) {
-            session.sendKey(text);
+            if (!session.sendKey(text)) {
+                return errorJson("SESSION_DEAD", "Session is not running: " + sessionId);
+            }
+
+            try { Thread.sleep(SCREEN_SETTLE_MS); }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return errorJson("INTERRUPTED", "Interrupted");
+            }
+
+            String rendered = renderScreen(session, colorEscape, cursorMark);
+            String[] modeResult = applyReturnMode(rendered, returnMode, lines);
+
+            try {
+                JSONObject result = successJson();
+                result.put("content", modeResult[0]);
+                result.put("line_count", Integer.parseInt(modeResult[1]));
+                return attachSessionInfo(result, session);
+            } catch (Exception e) {
+                return errorJson("READ_FAILED", e.getMessage());
+            }
         }
-        return okJson();
+    }
+
+    /** shell_write 简化版。 */
+    public JSONObject shell_write(String sessionId, String text) {
+        return shell_write(sessionId, text, "last_20", DEFAULT_RETURN_LINES, false, false);
+    }
+
+    public JSONObject shell_write(String sessionId, String text,
+                                   int returnLines, boolean stripAnsi) {
+        return shell_write(sessionId, text,
+            returnLines > 0 ? "last_n" : "last_20",
+            returnLines > 0 ? returnLines : DEFAULT_RETURN_LINES,
+            !stripAnsi, false);
     }
 
     // ── shell_send_key ──
 
     /**
-     * 向会话发送一个控制键或方向键（枚举值）。
-     * 支持：CTRL_C, CTRL_D, CTRL_Z, TAB, ENTER, ESCAPE,
-     *       UP, DOWN, LEFT, RIGHT
+     * 向会话发送控制键或方向键。
+     * 支持 Ctrl+A~Z, Tab, Enter, Escape, Backspace, Delete,
+     * Up, Down, Left, Right, PageUp, PageDown, Home, End, F1~F12
+     *
+     * @param returnMode  返回模式：last_20（默认）、last_n、all
+     * @param lines        last_n 时有效
+     * @param colorEscape  颜色转义：false=纯文本（清除ANSI）, true=中文样式标签
+     * @param cursorMark   光标位置：false=无标记, true=标记
      */
-    public JSONObject shell_send_key(String sessionId, String key) {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
-        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+    public JSONObject shell_send_key(String sessionId, String key,
+                                      String returnMode, int lines,
+                                      boolean colorEscape, boolean cursorMark) {
+        JSONObject err = checkInit();
+        if (err != null) return err;
 
-        String ansi = KEY_ANSI_MAP.get(key);
+        if (sessionId == null) {
+            return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        }
+
+        String canonicalKey = normalizeKeyName(key);
+        String ansi = KEY_ANSI_MAP.get(canonicalKey);
         if (ansi == null) {
             return errorJson("INVALID_KEY", "Unsupported key: " + key
-                + ". Supported: CTRL_C, CTRL_D, CTRL_Z, TAB, ENTER, ESCAPE, UP, DOWN, LEFT, RIGHT");
+                + ". Supported: Ctrl+A~Z, Tab, Enter, Escape, Backspace, Delete, "
+                + "Up, Down, Left, Right, PageUp, PageDown, Home, End, F1~F12");
         }
 
-        PtySession session = getSession(sessionId);
-        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        PtySession session = sessionPool.get(sessionId);
+        if (session == null) {
+            return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        }
+
+        if (returnMode == null) returnMode = "last_20";
+        if (lines <= 0) lines = DEFAULT_RETURN_LINES;
 
         synchronized (session.lock) {
-            session.sendKey(ansi);
+            if (!session.sendKey(ansi)) {
+                return errorJson("SESSION_DEAD", "Session is not running: " + sessionId);
+            }
+
+            try { Thread.sleep(SCREEN_SETTLE_MS); }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return errorJson("INTERRUPTED", "Interrupted");
+            }
+
+            String rendered = renderScreen(session, colorEscape, cursorMark);
+            String[] modeResult = applyReturnMode(rendered, returnMode, lines);
+
+            try {
+                JSONObject result = successJson();
+                result.put("content", modeResult[0]);
+                result.put("line_count", Integer.parseInt(modeResult[1]));
+                return attachSessionInfo(result, session);
+            } catch (Exception e) {
+                return errorJson("READ_FAILED", e.getMessage());
+            }
         }
-        return okJson();
+    }
+
+    /** shell_send_key 简化版。 */
+    public JSONObject shell_send_key(String sessionId, String key) {
+        return shell_send_key(sessionId, key, "last_20", DEFAULT_RETURN_LINES, false, false);
+    }
+
+    public JSONObject shell_send_key(String sessionId, String key,
+                                      int returnLines, boolean stripAnsi) {
+        return shell_send_key(sessionId, key,
+            returnLines > 0 ? "last_n" : "last_20",
+            returnLines > 0 ? returnLines : DEFAULT_RETURN_LINES,
+            !stripAnsi, false);
     }
 
     // ================================================================
     //  输出读取 — Agent API
     // ================================================================
 
-    // ── shell_read ──
+    // ── shell_read（当前画布） ──
 
     /**
-     * 读取会话终端当前的文本内容。
+     * 读取终端当前画布（屏幕可见区域）内容。
      *
-     * @param mode     "last_n"（默认，返回最后 N 行）、"all"（全部历史）、"new"（增量）
-     * @param lines    mode=last_n 时有效，默认 20
-     * @param stripAnsi true=移除 ANSI 转义码（默认），false=保留
+     * @param returnMode   返回模式：last_20（默认）、last_n（需 n）、all
+     * @param lines        last_n 时有效
+     * @param colorEscape  颜色转义：false=纯文本（清除ANSI）, true=中文样式标签
+     * @param cursorMark   光标位置：false=无标记, true=标记
      */
-    public JSONObject shell_read(String sessionId, String mode, int lines, boolean stripAnsi) {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
-        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+    public JSONObject shell_read(String sessionId, String returnMode, int lines,
+                                  boolean colorEscape, boolean cursorMark) {
+        JSONObject err = checkInit();
+        if (err != null) return err;
 
-        PtySession session = getSession(sessionId);
-        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        SessionResult sr = requireAliveSession(sessionId);
+        if (sr.error != null) return sr.error;
 
-        if (mode == null) mode = "last_n";
-        if (lines <= 0) lines = 20;
+        if (returnMode == null) returnMode = "last_20";
+        if (lines <= 0) lines = DEFAULT_RETURN_LINES;
+        if (lines > SHELL_READ_MAX_LINES) lines = SHELL_READ_MAX_LINES;
 
         try {
-            String raw;
-            synchronized (session.lock) {
-                raw = getScreenText(session);
-            }
-            if (stripAnsi) raw = stripAnsiCodes(raw);
-
-            String output;
-            int lineCount;
-
-            switch (mode) {
-                case "all":
-                    output = raw.trim();
-                    lineCount = output.isEmpty() ? 0 : output.split("\n", -1).length;
-                    break;
-
-                case "new":
-                    output = getIncrementalOutput(sessionId, raw);
-                    lineCount = output.isEmpty() ? 0 : output.split("\n", -1).length;
-                    break;
-
-                default: // last_n
-                    output = getLastNLines(raw, lines);
-                    lineCount = output.isEmpty() ? 0 : output.split("\n", -1).length;
-                    break;
+            String rendered;
+            synchronized (sr.session.lock) {
+                rendered = renderScreen(sr.session, colorEscape, cursorMark);
             }
 
-            JSONObject result = okJson();
-            result.put("output", output);
-            result.put("line_count", lineCount);
-            return result;
+            String[] modeResult = applyReturnMode(rendered, returnMode, lines);
+
+            JSONObject result = successJson();
+            result.put("content", modeResult[0]);
+            result.put("line_count", Integer.parseInt(modeResult[1]));
+            return attachSessionInfo(result, sr.session);
 
         } catch (Exception e) {
             return errorJson("READ_FAILED", e.getMessage());
         }
     }
 
-    /**
-     * shell_read 默认参数版本（last_n, 20 行, 去除ANSI）。
-     */
+    /** shell_read 默认参数版本（last_20, false, false）。 */
     public JSONObject shell_read(String sessionId) {
-        return shell_read(sessionId, "last_n", 20, true);
+        return shell_read(sessionId, "last_20", DEFAULT_RETURN_LINES, false, false);
+    }
+
+    public JSONObject shell_read(String sessionId, String mode, int lines,
+                                  boolean stripAnsi, boolean showCursor,
+                                  boolean preserveRaw) {
+        String returnMode = "all".equals(mode) ? "all"
+                          : ("new".equals(mode) ? "all" : "last_n");
+        boolean cursorMark = showCursor || preserveRaw;
+        return shell_read(sessionId, returnMode, lines, !stripAnsi, cursorMark);
+    }
+
+    // ── read_history_canvas（历史画布 + 归档） ──
+
+    /**
+     * 读取终端自创建至今的全部历史输出（含已滚出屏幕的内容）。
+     * 每次调用会生成一个带时间戳的归档文件用于审计。
+     *
+     * <p>无光标参数（历史记录不维护实时光标状态）。</p>
+     *
+     * @param returnMode   返回模式：last_20（默认）、last_n（需 n）、all
+     * @param lines        last_n 时有效
+     * @param colorEscape  颜色转义：false=纯文本（清除ANSI）, true=中文样式标签
+     */
+    public JSONObject read_history_canvas(String sessionId, String returnMode,
+                                           int lines, boolean colorEscape) {
+        JSONObject err = checkInit();
+        if (err != null) return err;
+
+        SessionResult sr = requireAliveSession(sessionId);
+        if (sr.error != null) return sr.error;
+
+        if (returnMode == null) returnMode = "last_20";
+        if (lines <= 0) lines = DEFAULT_RETURN_LINES;
+        if (lines > SHELL_READ_MAX_LINES) lines = SHELL_READ_MAX_LINES;
+
+        try {
+            String rendered;
+            synchronized (sr.session.lock) {
+                // 历史画布不支持光标标记
+                rendered = renderScreen(sr.session, colorEscape, false);
+            }
+
+            String[] modeResult = applyReturnMode(rendered, returnMode, lines);
+
+            // 归档始终使用 getScreenText（原始缓冲区内容）
+            String archiveRaw;
+            synchronized (sr.session.lock) {
+                archiveRaw = getScreenText(sr.session, true);
+            }
+            String archivePath = writeHistoryArchive(sessionId, archiveRaw);
+
+            JSONObject result = successJson();
+            result.put("content", modeResult[0]);
+            result.put("line_count", Integer.parseInt(modeResult[1]));
+            if (archivePath != null) {
+                result.put("archive_file", archivePath);
+            }
+            return attachSessionInfo(result, sr.session);
+
+        } catch (Exception e) {
+            return errorJson("READ_FAILED", e.getMessage());
+        }
+    }
+
+    /** read_history_canvas 默认参数版本（last_20, false）。 */
+    public JSONObject read_history_canvas(String sessionId) {
+        return read_history_canvas(sessionId, "last_20", DEFAULT_RETURN_LINES, false);
+    }
+
+    public JSONObject read_history_canvas(String sessionId, String mode,
+                                           int lines, boolean stripAnsi,
+                                           boolean preserveRaw) {
+        return read_history_canvas(sessionId,
+            "all".equals(mode) ? "all" : "last_n",
+            lines, !stripAnsi);
     }
 
     // ================================================================
     //  调试视图 — Agent API
     // ================================================================
 
-    // ── shell_get_debug_view ──
-
-    /**
-     * 获取当前终端画面的完整带标记文本（行号、样式名称、可选光标位置）。
-     * 仅在需要分析终端样式/光标时使用。
-     */
     public JSONObject shell_get_debug_view(String sessionId,
                                             boolean showLineNumbers,
                                             boolean showStyles,
                                             boolean showCursor) {
-        if (!initialized) return errorJson("NOT_INITIALIZED", "Executor not initialized");
-        if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
-        if (sessionId == null) return errorJson("INVALID_SESSION_ID", "session_id cannot be null");
+        JSONObject err = checkInit();
+        if (err != null) return err;
 
-        PtySession session = getSession(sessionId);
-        if (session == null) return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
+        SessionResult sr = requireAliveSession(sessionId);
+        if (sr.error != null) return sr.error;
 
         try {
             String view;
-            synchronized (session.lock) {
-                view = dumpStyledScreen(session, showCursor);
+            synchronized (sr.session.lock) {
+                view = dumpStyledScreen(sr.session, showCursor);
             }
 
             if (!showLineNumbers) {
@@ -645,7 +1244,7 @@ public class TerminalTermuxExecutor {
             }
             view = view.trim();
 
-            JSONObject result = okJson();
+            JSONObject result = successJson();
             result.put("view", view);
             return result;
         } catch (Exception e) {
@@ -653,7 +1252,6 @@ public class TerminalTermuxExecutor {
         }
     }
 
-    /** 默认显示全部标记（行号、样式、光标）。 */
     public JSONObject shell_get_debug_view(String sessionId) {
         return shell_get_debug_view(sessionId, true, true, true);
     }
@@ -662,68 +1260,57 @@ public class TerminalTermuxExecutor {
     //  UI 层辅助方法（非 JSON，保持向后兼容供 Activity 轮询使用）
     // ================================================================
 
-    /**
-     * 返回所有已注册会话的 ID → 是否活跃映射。
-     */
     public Map<String, Boolean> getSessionStatus() {
         Map<String, Boolean> result = new HashMap<>();
-        synchronized (sessionPool) {
-            for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
-                result.put(e.getKey(), e.getValue().isAlive());
-            }
+        for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
+            result.put(e.getKey(), e.getValue().isAlive());
         }
         return result;
     }
 
-    /**
-     * 获取指定会话的终端纯文本内容（供 UI 轮询刷新）。
-     */
+    public Map<String, String> getKnownSessions() {
+        return loadSessionMeta();
+    }
+
     public String getSessionPlainScreen(String sessionId) {
         if (!initialized || !envReady || sessionId == null) return "";
-        synchronized (sessionPool) {
-            PtySession s = sessionPool.get(sessionId);
-            if (s != null && s.isAlive()) {
-                synchronized (s.lock) {
-                    return getScreenText(s);
-                }
+        PtySession s = sessionPool.get(sessionId);
+        if (s != null && s.isAlive()) {
+            synchronized (s.lock) {
+                return getScreenText(s);
             }
         }
         return "";
     }
 
-    /**
-     * 获取指定会话的结构化终端内容（带行号与样式标记，可选光标）。
-     */
     public String getSessionStyledScreen(String sessionId, boolean showCursor) {
         if (!initialized || !envReady || sessionId == null) return "";
-        synchronized (sessionPool) {
-            PtySession s = sessionPool.get(sessionId);
-            if (s != null && s.isAlive()) {
-                synchronized (s.lock) {
-                    return dumpStyledScreen(s, showCursor);
-                }
+        PtySession s = sessionPool.get(sessionId);
+        if (s != null && s.isAlive()) {
+            synchronized (s.lock) {
+                return dumpStyledScreen(s, showCursor);
             }
         }
         return "";
     }
 
-    /** 获取 default 会话的终端纯文本。 */
     public String getDefaultSessionScreen() {
-        return getSessionPlainScreen(DEFAULT_SESSION_ID);
+        return getSessionPlainScreen("default");
+    }
+
+    public String getCwd(String sessionId) {
+        if (!initialized || !envReady || sessionId == null) return "";
+        PtySession s = sessionPool.get(sessionId);
+        if (s == null || !s.isAlive()) return "";
+        synchronized (s.lock) {
+            return doGetCwd(s);
+        }
     }
 
     // ================================================================
     //  内部与会话创建
     // ================================================================
 
-    /** 仅查找不自动创建（与旧 getOrCreateSession 区别）。 */
-    private PtySession getSession(String sessionId) {
-        synchronized (sessionPool) {
-            return sessionPool.get(sessionId);
-        }
-    }
-
-    /** 供 create_session 内部使用的创建路径（线程安全由 caller 保证）。 */
     private PtySession createViaService(String sessionId) {
         String bashPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash";
         String workingDir = TermuxConstants.TERMUX_HOME_DIR_PATH;
@@ -736,25 +1323,35 @@ public class TerminalTermuxExecutor {
         termuxService.addPermanentSessionHandle(termuxSession.getTerminalSession().mHandle);
 
         TerminalSession terminalSession = termuxSession.getTerminalSession();
-        PtySession session = new PtySession(sessionId, terminalSession);
+        if (terminalSession == null) return null;
 
-        synchronized (sessionPool) {
-            sessionPool.put(sessionId, session);
-        }
+        PtySession session = new PtySession(sessionId, terminalSession);
+        sessionPool.put(sessionId, session);
         return session;
     }
 
     private PtySession createDirect(String sessionId) {
-        String bashPath = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash";
+        String prefixBin = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
+        String shellPath = prefixBin + "/bash";
+        if (!new File(shellPath).isFile()) {
+            shellPath = prefixBin + "/sh";
+            if (!new File(shellPath).isFile()) {
+                return null;
+            }
+        }
         String workingDir = TermuxConstants.TERMUX_HOME_DIR_PATH;
         String[] env = termuxEnv != null
                 ? toEnvArray(termuxEnv.getEnvironment(context, false))
                 : new String[0];
 
-        PtySession session = new PtySession(sessionId, bashPath, workingDir, env);
-        synchronized (sessionPool) {
-            sessionPool.put(sessionId, session);
+        PtySession session = new PtySession(sessionId, shellPath, workingDir, env);
+
+        if (!session.isAlive()) {
+            session.close();
+            return null;
         }
+
+        sessionPool.put(sessionId, session);
         return session;
     }
 
@@ -762,8 +1359,12 @@ public class TerminalTermuxExecutor {
     //  内部工具：屏幕读取
     // ================================================================
 
-    /** 从 TerminalEmulator 读取全部纯文本。 */
+    /** 从 TerminalEmulator 读取全部文本。调用方须持有 session.lock。 */
     private String getScreenText(PtySession session) {
+        return getScreenText(session, false);
+    }
+
+    private String getScreenText(PtySession session, boolean preserveRaw) {
         if (session == null || session.emulator == null) return "";
         TerminalBuffer screen = session.emulator.getScreen();
         if (screen == null) return "";
@@ -777,7 +1378,10 @@ public class TerminalTermuxExecutor {
         for (int extRow = -transcriptRows; extRow < screenRows; extRow++) {
             TerminalRow row = screen.getRowOrNull(extRow);
             if (row == null) continue;
-            if (isRowBlank(row, cols)) continue;
+
+            if (!preserveRaw) {
+                if (isRowBlank(row, cols)) continue;
+            }
 
             StringBuilder line = new StringBuilder();
             for (int col = 0; col < cols; col++) {
@@ -787,48 +1391,24 @@ public class TerminalTermuxExecutor {
                     if (ch != '\0') line.append(ch);
                 }
             }
-            String lineStr = line.toString().replaceAll("\\s+$", "");
-            if (lineStr.isEmpty()) continue;
-            sb.append(lineStr).append('\n');
+
+            if (preserveRaw) {
+                sb.append(line).append('\n');
+            } else {
+                String lineStr = line.toString().replaceAll("\\s+$", "");
+                if (lineStr.isEmpty()) continue;
+                sb.append(lineStr).append('\n');
+            }
         }
         return sb.toString();
     }
 
-    /** 检测某行是否看起来像 Shell 提示符。 */
-    private static boolean isPromptLike(String line) {
-        String t = line.trim();
-        return t.endsWith("$") || t.endsWith("#") || ">".equals(t);
-    }
-
-    /** 从屏幕文本中提取命令输出（超时场景，在标记出现前）。 */
-    private static String extractOutputBeforeMarker(String screen, String command) {
-        String[] lines = screen.split("\n", -1);
-        boolean foundCmd = false;
-        StringBuilder out = new StringBuilder();
-        for (String line : lines) {
-            String t = line.trim();
-            if (!foundCmd) {
-                if (t.contains(command)) {
-                    foundCmd = true;
-                }
-                continue;
-            }
-            if (t.isEmpty() || isPromptLike(t)) continue;
-            if (t.contains("__ALINOS_EXIT__:")) break;
-            if (out.length() > 0) out.append("\n");
-            out.append(t);
-        }
-        return out.toString();
-    }
-
-    /** 增量读取：返回自上次读取后的新行。 */
     private String getIncrementalOutput(String sessionId, String currentText) {
         String[] currentLines = currentText.split("\n", -1);
         int currentCount = currentLines.length;
 
         Integer lastCount = lastReadLineCount.get(sessionId);
         if (lastCount == null || currentCount <= lastCount) {
-            // 首次读取或滚屏导致重置 → 返回全部
             lastReadLineCount.put(sessionId, currentCount);
             return currentText.trim();
         }
@@ -845,57 +1425,61 @@ public class TerminalTermuxExecutor {
         return sb.toString();
     }
 
-    /** 获取会话当前工作目录（通过发送 pwd 读取）。 */
-    private String getCwd(PtySession session) {
-        if (session == null || !session.isAlive()) return "";
-        synchronized (session.lock) {
-            try {
-                // 记录当前屏幕作为基线
-                String before = getScreenText(session);
-                int beforeLineCount = before.isEmpty() ? 0 : before.split("\n", -1).length;
+    // ================================================================
+    //  内部工具：历史归档
+    // ================================================================
 
-                session.sendKey("pwd\r");
-                Thread.sleep(200);
+    private String writeHistoryArchive(String sessionId, String rawContent) {
+        if (context == null) return null;
+        try {
+            File dir = new File(context.getFilesDir(), HISTORY_ARCHIVE_DIR);
+            if (!dir.exists() && !dir.mkdirs()) return null;
 
-                String after = getScreenText(session);
-                String[] lines = after.split("\n", -1);
+            String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
+                    .format(new Date());
+            String safeName = sessionId.replaceAll("[^a-zA-Z0-9_-]", "_");
+            File file = new File(dir, safeName + "_" + timestamp + ".log");
 
-                // 在新增行中查找 pwd 输出（以 / 开头）
-                for (int i = beforeLineCount; i < lines.length && i >= 0; i++) {
-                    String t = lines[i].trim();
-                    if (t.startsWith("/")) {
-                        // 清理可能的换行符
-                        return t.replaceAll("[\\r\\n]", "").trim();
-                    }
-                }
-                return "";
-            } catch (Exception e) {
-                return "";
-            }
+            FileWriter fw = new FileWriter(file);
+            fw.write(rawContent);
+            fw.close();
+            return file.getAbsolutePath();
+        } catch (Exception e) {
+            return null;
         }
     }
 
-    /** 判断会话当前是否有命令在运行（基于屏幕最后一行是否像提示符）。 */
-    private boolean hasRunningCommand(PtySession session) {
-        String screen = getScreenText(session);
-        if (screen.isEmpty()) return false;
-        String[] lines = screen.split("\n");
-        for (int i = lines.length - 1; i >= 0; i--) {
-            String t = lines[i].trim();
-            if (!t.isEmpty()) {
-                // 最后非空行不像提示符 → 可能正在运行命令
-                boolean isPrompt = t.endsWith("$") || t.endsWith("#");
-                if (isPrompt) return false;
-                // 若很短的命令可能是提示符
-                if (t.length() < 5 && (t.contains("$") || t.contains("#"))) return false;
-                return true;
+    // ================================================================
+    //  内部工具：UI 用 getCwd
+    // ================================================================
+
+    private String doGetCwd(PtySession session) {
+        if (session == null || !session.isAlive()) return "";
+        try {
+            String before = getScreenText(session);
+            int beforeLineCount = before.isEmpty() ? 0 : before.split("\n", -1).length;
+
+            session.sendKey("pwd\r");
+            Thread.sleep(200);
+
+            String after = getScreenText(session);
+            String[] lines = after.split("\n", -1);
+
+            for (int i = beforeLineCount; i < lines.length && i >= 0; i++) {
+                String t = lines[i].trim();
+                if (t.startsWith("/")) {
+                    return t.replaceAll("[\\r\\n]", "").trim();
+                }
             }
+            return "";
+        } catch (Exception e) {
+            return "";
         }
-        return false;
     }
 
     // ================================================================
     //  dumpStyledScreen — 结构化样式输出
+    //  ===== 保留不变，按你的要求不修改 =====
     // ================================================================
 
     private String dumpStyledScreen(PtySession session, boolean showCursor) {
