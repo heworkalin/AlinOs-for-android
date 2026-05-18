@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F5F5F5"
+    android:fitsSystemWindows="true">
+
+    <!-- ── 标题栏 ── -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="#1976D2"
+        android:paddingHorizontal="12dp">
+
+        <TextView
+            android:id="@+id/tv_title"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_centerVertical="true"
+            android:text="工具测试中心"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center_vertical" />
+
+        <TextView
+            android:id="@+id/tv_help"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_alignParentEnd="true"
+            android:text="帮助"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:gravity="center_vertical"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingHorizontal="8dp" />
+    </RelativeLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <!-- ── 工具选择 ── -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                app:cardCornerRadius="6dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="选择工具"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:paddingBottom="4dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <EditText
+                            android:id="@+id/actv_tool_selector"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:hint="搜索工具..."
+                            android:textSize="14sp"
+                            android:singleLine="true"
+                            android:background="@drawable/shape_edittext"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="4dp"
+                            android:inputType="text" />
+
+                        <TextView
+                            android:id="@+id/tv_tool_help"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:text="?"
+                            android:textSize="18sp"
+                            android:textColor="#1976D2"
+                            android:gravity="center"
+                            android:layout_marginStart="6dp"
+                            android:background="@drawable/shape_edittext"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tv_function_signature"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textSize="11sp"
+                        android:textColor="#888888"
+                        android:paddingTop="4dp" />
+
+                    <ListView
+                        android:id="@+id/lv_tool_results"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxHeight="200dp"
+                        android:visibility="gone"
+                        android:background="#FFFFFF"
+                        android:divider="@null"
+                        android:dividerHeight="0dp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- ── 参数输入区 ── -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                app:cardCornerRadius="6dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="参数输入"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/switch_mode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="JSON"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <!-- 表单模式 -->
+                    <LinearLayout
+                        android:id="@+id/layout_form"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="6dp">
+
+                        <TextView
+                            android:id="@+id/tv_no_params"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="此工具无参数"
+                            android:textSize="13sp"
+                            android:textColor="#999999"
+                            android:gravity="center"
+                            android:padding="12dp" />
+                    </LinearLayout>
+
+                    <!-- JSON 模式 -->
+                    <EditText
+                        android:id="@+id/et_json_editor"
+                        android:layout_width="match_parent"
+                        android:layout_height="180dp"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:background="#F0F0F0"
+                        android:padding="8dp"
+                        android:gravity="top"
+                        android:inputType="text|textMultiLine"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- ── 操作按钮 ── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <Button
+                    android:id="@+id/btn_execute"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:text="▶ 执行"
+                    android:textSize="15sp"
+                    android:backgroundTint="#4CAF50"
+                    android:layout_marginEnd="6dp" />
+
+                <Button
+                    android:id="@+id/btn_reset"
+                    android:layout_width="wrap_content"
+                    android:layout_height="42dp"
+                    android:text="⟳ 重置"
+                    android:textSize="14sp"
+                    android:backgroundTint="#9E9E9E" />
+            </LinearLayout>
+
+            <!-- ── 状态行 ── -->
+            <TextView
+                android:id="@+id/tv_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="就绪"
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:paddingBottom="4dp" />
+
+            <!-- ── 结果展示区 ── -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                app:cardCornerRadius="6dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="返回结果"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tv_view_raw"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="原始 JSON"
+                            android:textSize="12sp"
+                            android:textColor="#1976D2"
+                            android:paddingHorizontal="8dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true" />
+
+                        <TextView
+                            android:id="@+id/tv_view_pretty"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="可阅读"
+                            android:textSize="12sp"
+                            android:textColor="#999999"
+                            android:paddingHorizontal="8dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
+
+                    <ScrollView
+                        android:id="@+id/sv_result"
+                        android:layout_width="match_parent"
+                        android:layout_height="250dp"
+                        android:paddingTop="4dp"
+                        android:fillViewport="true">
+
+                        <TextView
+                            android:id="@+id/tv_result"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="等待执行..."
+                            android:textSize="12sp"
+                            android:fontFamily="monospace"
+                            android:background="#F8F8F8"
+                            android:padding="8dp"
+                            android:gravity="top"
+                            android:textIsSelectable="true" />
+                    </ScrollView>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

@@ -53,5 +53,16 @@ public class AgentConfigActivity extends AppCompatActivity {
                 startActivity(intent);
             }
         });
+
+        // 找到工具测试中心卡片
+        CardView cvDevTools = findViewById(R.id.cv_dev_tools);
+        cvDevTools.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(AgentConfigActivity.this,
+                        alin.android.alinos.dev.DevToolsActivity.class);
+                startActivity(intent);
+            }
+        });
     }
 }
