@@ -266,4 +266,11 @@
     <string name="chat_dev_insert_test">插入用例</string>
     <string name="chat_dev_theme_light">🌙 暗色</string>
     <string name="chat_dev_theme_dark">☀️ 亮色</string>
+    <string name="init_proot_termux">初始化proot_Termux 环境</string>
+    <string name="termux_shell">Termux Shell 测试</string>
+    <string name="return_shell">输入命令并查看返回参数</string>
+    <string name="tool_test_center">🧰 工具测试中心</string>
+    <string name="json_tool_test">JSON 工具函数测试</string>
+    <string name="markdown_latex">Markdown + LaTeX 渲染测试</string>
+    <string name="markdown_latex_text">标题/表格/代码/公式</string>
 </resources>

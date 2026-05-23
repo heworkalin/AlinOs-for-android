@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
 import alin.android.alinos.dev.ChatActivityDev;
+import alin.android.alinos.dev.LocalShellTestActivity;
 import alin.android.alinos.dev.TermuxShellTestActivity;
 
 //AlinOs\app\src\main\java\alin\android\alinos\AgentConfigActivity.java
@@ -64,5 +65,16 @@ public class AgentConfigActivity extends AppCompatActivity {
                 startActivity(intent);
             }
         });
+
+        // 找到本地 Shell 测试卡片
+        CardView cvLocalShellTest = findViewById(R.id.cv_local_shell_test);
+        cvLocalShellTest.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(AgentConfigActivity.this, LocalShellTestActivity.class);
+                startActivity(intent);
+            }
+        });
+
     }
 }

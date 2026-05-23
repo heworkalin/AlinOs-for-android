@@ -17,6 +17,8 @@ public class AmApkInstaller {
     // 4. 开发调试必做：开发者选项 → 选择调试应用，取消本应用调试标记（设为「无」），am 即可正常调用。
     // 目标路径，的目的只是去修复AM，核心原因是因为原版内置的和我们的应用包名不一致，导致AM无法正常工作
     // 这个虽然是工具，但是请注意这个。只是用于修复am的不需要把它做到tools搜索服务中
+    //这个适用于proot启动的内部com.termux如果要想真正的在localshell实现的话不建议，
+    // 当然可以在工具中增加这个功能。就在工具中直接增加AM通过java城调用java服务来处理这个操作就可以保证了。这个的话只是闲的没事干家的s
     public static String getTargetPath(Context ctx) {
         return ctx.getFilesDir().getAbsolutePath()
                 + "/usr/libexec/termux-am/am.apk";

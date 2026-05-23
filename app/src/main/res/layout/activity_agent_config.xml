@@ -58,7 +58,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="初始化 Termux 环境"
+                        android:text="@string/init_proot_termux"
                         android:textSize="18sp" />
 
                     <ImageView
@@ -93,13 +93,13 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Termux Shell 测试"
+                        android:text="@string/termux_shell"
                         android:textSize="18sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="输入命令并查看返回参数"
+                        android:text="@string/return_shell"
                         android:textSize="12sp"
                         android:textColor="#999999"
                         android:layout_marginEnd="8dp" />
@@ -136,13 +136,13 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🧰 工具测试中心"
+                        android:text="@string/tool_test_center"
                         android:textSize="18sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="JSON 工具函数测试"
+                        android:text="@string/json_tool_test"
                         android:textSize="12sp"
                         android:textColor="#999999"
                         android:layout_marginEnd="8dp" />
@@ -179,13 +179,13 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Markdown + LaTeX 渲染测试"
+                        android:text="@string/markdown_latex"
                         android:textSize="18sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="标题/表格/代码/公式"
+                        android:text="@string/markdown_latex_text"
                         android:textSize="12sp"
                         android:textColor="#999999"
                         android:layout_marginEnd="8dp" />
@@ -198,6 +198,47 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cv_local_shell_test"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="default shell"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="一个精简的shell环境,ssh"
+                        android:textSize="12sp"
+                        android:textColor="#999999"
+                        android:layout_marginEnd="8dp" />
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="@string/arrow_right"
+                        android:src="@drawable/ic_arrow_right" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
         </LinearLayout>
     </ScrollView>
 </LinearLayout>
