@@ -198,6 +198,17 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize|stateHidden"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+            //
+        <activity
+            android:name="alin.android.alinos.dev.LocalShellTestActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|keyboard|keyboardHidden|navigation"
+            android:label="@string/application_name"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.TermuxActivity.DayNight.NoActionBar"
+            tools:targetApi="n" />
 
         <!-- ========== Termux 核心组件（保留功能，移除启动入口） ========== -->
         <!-- Termux主界面（取消启动入口，仅作为内部跳转） -->
@@ -358,6 +369,14 @@
         </service>
 
         <!-- ========== AlinOs 核心服务 ========== -->
+        <service
+            android:name="alin.android.alinos.localshell.LocalShellService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="LocalShell provides persistent PTY terminal sessions for shell command execution." />
+        </service>
+
         <service
             android:name="alin.android.alinos.service.DeviceAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"

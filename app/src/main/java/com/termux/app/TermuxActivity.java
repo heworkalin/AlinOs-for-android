@@ -84,14 +84,14 @@ import alin.android.alinos.tools.AmApkInstaller;
  * </ul>
  * about memory leaks.
  */
-public final class TermuxActivity extends AppCompatActivity implements ServiceConnection {
+public class TermuxActivity extends AppCompatActivity implements ServiceConnection {
 
     /**
      * The connection to the {@link TermuxService}. Requested in {@link #onCreate(Bundle)} with a call to
      * {@link #bindService(Intent, ServiceConnection, int)}, and obtained and stored in
      * {@link #onServiceConnected(ComponentName, IBinder)}.
      */
-    TermuxService mTermuxService;
+    protected TermuxService mTermuxService;
 
     /**
      * The {@link TerminalView} shown in  {@link TermuxActivity} that displays the terminal.
@@ -272,16 +272,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
 
         try {
-            // Start the {@link TermuxService} and make it run regardless of who is bound to it
-            Intent serviceIntent = new Intent(this, TermuxService.class);
-            startService(serviceIntent);
-
-            // Attempt to bind to the service, this will call the {@link #onServiceConnected(ComponentName, IBinder)}
-            // callback if it succeeds.
-            if (!bindService(serviceIntent, this, 0))
-                throw new RuntimeException("bindService() failed");
+            onBindToService();
         } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG,"TermuxActivity failed to start TermuxService", e);
+            Logger.logStackTraceWithMessage(LOG_TAG,"TermuxActivity failed to start service", e);
             Logger.showToast(this,
                 getString(e.getMessage() != null && e.getMessage().contains("app is in background") ?
                     R.string.error_termux_service_start_failed_bg : R.string.error_termux_service_start_failed_general),
@@ -541,7 +534,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalSessionActivityClient.onCreate();
     }
 
-    private void setTermuxSessionsListView() {
+    protected void setTermuxSessionsListView() {
         ListView termuxSessionsListView = findViewById(R.id.terminal_sessions_list);
         mTermuxSessionListViewController = new TermuxSessionsListViewController(this, mTermuxService.getTermuxSessions());
         termuxSessionsListView.setAdapter(mTermuxSessionListViewController);
@@ -1074,6 +1067,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
+
+    protected Intent createServiceIntent() {
+        return new Intent(this, TermuxService.class);
+    }
+
+    protected void onBindToService() {
+        Intent serviceIntent = createServiceIntent();
+        startService(serviceIntent);
+        if (!bindService(serviceIntent, this, 0))
+            throw new RuntimeException("bindService() failed");
+    }
 
     public static void startTermuxActivity(@NonNull final Context context) {
         ActivityUtils.startActivity(context, newInstance(context));
