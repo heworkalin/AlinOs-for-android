@@ -39,9 +39,6 @@ import androidx.core.content.ContextCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
 import alin.android.alinos.R;
-import com.termux.app.activities.HelpActivity;
-import com.termux.app.activities.SettingsActivity;
-import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxSessionsListViewController;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -73,7 +70,6 @@ import com.termux.view.TerminalViewClient;
 
 import java.util.Arrays;
 import java.util.Objects;
-import alin.android.alinos.tools.AmApkInstaller;
 /**
  * A terminal emulator activity.
  * <p/>
@@ -209,8 +205,6 @@ public class TermuxActivity extends AppCompatActivity implements ServiceConnecti
 	
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // 内嵌兼容
-		TermuxApplication.init(this);
 
 		Logger.logDebug(LOG_TAG, "onCreate");
         mIsOnResumeAfterOnCreate = true;
@@ -222,7 +216,7 @@ public class TermuxActivity extends AppCompatActivity implements ServiceConnecti
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
 
         // Load Termux app SharedProperties from disk
-        mProperties = TermuxAppSharedProperties.getProperties();
+        mProperties = TermuxAppSharedProperties.init(this);
         reloadProperties();
 
         setActivityTheme();
@@ -269,7 +263,6 @@ public class TermuxActivity extends AppCompatActivity implements ServiceConnecti
 
         registerForContextMenu(mTerminalView);
 
-        FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
 
         try {
             onBindToService();
@@ -430,21 +423,17 @@ public class TermuxActivity extends AppCompatActivity implements ServiceConnecti
 
         if (mTermuxService.isTermuxSessionsEmpty()) {
             if (mIsVisible) {
-                TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
-                    // 修复 TermuxAm APK，am.apk 是 TermuxAm 的核心组件，必须确保它被正确安装
-                    //目的 修复termux的am命令，原因默认包名不一致
-                    AmApkInstaller.installIfNeeded(this);
-                    if (mTermuxService == null) return; // Activity might have been destroyed.
-                    try {
-                        boolean launchFailsafe = false;
-                        if (intent != null && intent.getExtras() != null) {
-                            launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
-                        }
-                        mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
-                    } catch (WindowManager.BadTokenException e) {
-                        // Activity finished - ignore.
+                // Bootstrap check removed - LocalShell manages its own paths
+                if (mTermuxService == null) return; // Activity might have been destroyed.
+                try {
+                    boolean launchFailsafe = false;
+                    if (intent != null && intent.getExtras() != null) {
+                        launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
                     }
-                });
+                    mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                } catch (WindowManager.BadTokenException e) {
+                    // Activity finished - ignore.
+                }
             } else {
                 // The service connected while not in foreground - just bail out.
                 finishActivityIfNotFinishing();
@@ -603,7 +592,7 @@ public class TermuxActivity extends AppCompatActivity implements ServiceConnecti
     private void setSettingsButtonView() {
         ImageButton settingsButton = findViewById(R.id.settings_button);
         settingsButton.setOnClickListener(v -> {
-            ActivityUtils.startActivity(this, new Intent(this, SettingsActivity.class));
+            // SettingsActivity removed
         });
     }
 
@@ -744,10 +733,10 @@ public class TermuxActivity extends AppCompatActivity implements ServiceConnecti
                 toggleKeepScreenOn();
                 return true;
             case CONTEXT_MENU_HELP_ID:
-                ActivityUtils.startActivity(this, new Intent(this, HelpActivity.class));
+                // HelpActivity removed - no-op
                 return true;
             case CONTEXT_MENU_SETTINGS_ID:
-                ActivityUtils.startActivity(this, new Intent(this, SettingsActivity.class));
+                // SettingsActivity removed
                 return true;
             case CONTEXT_MENU_REPORT_ID:
                 mTermuxTerminalViewClient.reportIssueFromTranscript();
@@ -840,13 +829,13 @@ public class TermuxActivity extends AppCompatActivity implements ServiceConnecti
                     TermuxActivity.this, requestCode, false, !isPermissionCallback)) {
                     if (isPermissionCallback)
                         Logger.logInfoAndShowToast(TermuxActivity.this, LOG_TAG,
-                            getString(com.termux.shared.R.string.msg_storage_permission_granted_on_request));
+                            getString(R.string.msg_storage_permission_granted_on_request));
 
-                    TermuxInstaller.setupStorageSymlinks(TermuxActivity.this);
+                    // TermuxInstaller.setupStorageSymlinks removed - LocalShell handles its own paths
                 } else {
                     if (isPermissionCallback)
                         Logger.logInfoAndShowToast(TermuxActivity.this, LOG_TAG,
-                            getString(com.termux.shared.R.string.msg_storage_permission_not_granted_on_request));
+                            getString(R.string.msg_storage_permission_not_granted_on_request));
                 }
             }
         }.start();
@@ -1049,7 +1038,6 @@ public class TermuxActivity extends AppCompatActivity implements ServiceConnecti
         setMargins();
         setTerminalToolbarHeight();
 
-        FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
 
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onReloadActivityStyling();

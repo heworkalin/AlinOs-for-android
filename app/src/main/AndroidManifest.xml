@@ -180,18 +180,9 @@
             android:name="alin.android.alinos.TextToSpeechActivity"
             android:exported="true"/>
         <activity
-            android:name="alin.android.alinos.dev.TermuxShellTestActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize|stateHidden" />
-        <activity
             android:name="alin.android.alinos.dev.DevToolsActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize|stateHidden" />
-        <activity
-            android:name="alin.android.alinos.dev.ChatActivityDev"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize|stateHidden"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         <activity
             android:name="alin.android.alinos.ChatActivity"
             android:launchMode="singleTask"
@@ -251,65 +242,9 @@
         </activity-alias>
 
         <activity
-            android:name="com.termux.app.activities.HelpActivity"
-            android:exported="false"
-            android:label="@string/application_name"
-            android:parentActivityName=".app.TermuxActivity"
-            android:resizeableActivity="true"
-            tools:targetApi="n" />
-
-        <activity
-            android:name="com.termux.app.activities.SettingsActivity"
-            android:exported="true"
-            android:label="@string/title_activity_termux_settings"
-            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
-
-        <activity
             android:name="com.termux.shared.activities.ReportActivity"
             android:theme="@style/Theme.MarkdownViewActivity.DayNight"
             android:documentLaunchMode="intoExisting" />
-
-        <activity
-            android:name="com.termux.app.api.file.FileReceiverActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:noHistory="true"
-            android:resizeableActivity="true"
-            android:taskAffinity="${applicationId}.filereceiver"
-            tools:targetApi="n">
-        </activity>
-
-        <activity-alias
-            android:name="com.termux.app.api.file.FileShareReceiverActivity"
-            android:exported="true"
-            android:targetActivity="com.termux.app.api.file.FileReceiverActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/*" />
-                <data android:mimeType="audio/*" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="message/*" />
-                <data android:mimeType="multipart/*" />
-                <data android:mimeType="text/*" />
-                <data android:mimeType="video/*" />
-            </intent-filter>
-        </activity-alias>
-
-        <activity-alias
-            android:name="com.termux.app.api.file.FileViewReceiverActivity"
-            android:exported="true"
-            android:targetActivity="com.termux.app.api.file.FileReceiverActivity">
-            <intent-filter tools:ignore="AppLinkUrlError">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/*" />
-                <data android:mimeType="audio/*" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="text/*" />
-                <data android:mimeType="video/*" />
-            </intent-filter>
-        </activity-alias>
 
         <!-- ========== Termux 提供者/接收器/服务（保留 proot 核心能力） ========== -->
         <provider
@@ -323,18 +258,7 @@
             </intent-filter>
         </provider>
 
-        <provider
-            android:name="com.termux.app.TermuxOpenReceiver$ContentProvider"
-            android:authorities="${applicationId}.files"
-            android:exported="true"
-            android:grantUriPermissions="true"
-            android:permission="${applicationId}.permission.RUN_COMMAND" />
-
-        <receiver
-            android:name="com.termux.app.TermuxOpenReceiver"
-            android:exported="false" />
-
-        <receiver
+<receiver
             android:name="com.termux.app.event.SystemEventReceiver"
             android:exported="false">
             <intent-filter>
@@ -357,15 +281,6 @@
                 For example, a user might start a web server that serves HTML pages and then interact with that from the browser app while the Termux
                 app is in the background. If the system were to interrupt or defer the Termux app while it is in the background the user
                 experience would be negatively affected since the above described use case would be broken." />
-        </service>
-
-        <service
-            android:name="com.termux.app.RunCommandService"
-            android:exported="true"
-            android:permission="${applicationId}.permission.RUN_COMMAND">
-            <intent-filter>
-                <action android:name="${applicationId}.RUN_COMMAND" />
-            </intent-filter>
         </service>
 
         <!-- ========== AlinOs 核心服务 ========== -->

@@ -10,7 +10,6 @@ import android.widget.Toast;
 import com.termux.app.TermuxActivity;
 import com.termux.shared.logger.Logger;
 import alin.android.alinos.localshell.LocalShellService;
-import alin.android.alinos.tools.AmApkInstaller;
 
 /**
  * Standalone terminal activity bound to LocalShellService.
@@ -38,7 +37,6 @@ public class LocalShellTestActivity extends TermuxActivity {
         if (mTermuxService.isTermuxSessionsEmpty()) {
             if (isVisible()) {
                 setupEnvironmentIfNeeded(() -> {
-                    AmApkInstaller.installIfNeeded(LocalShellTestActivity.this);
                     if (mTermuxService == null) return;
                     try {
                         getTermuxTerminalSessionClient().addNewSession(false, null);

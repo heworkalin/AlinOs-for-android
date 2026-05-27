@@ -31,7 +31,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "AlinOs"
 include ':app'
-include ":terminal-view"
-include ":termux-shared"
-include ":terminal-emulator"
-include ":TermuxAm"

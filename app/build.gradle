@@ -50,6 +50,7 @@ dependencies {
     // 基础依赖
     implementation libs.appcompat
     implementation libs.material
+    implementation libs.firebase.crashlytics.buildtools
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
@@ -65,6 +66,7 @@ dependencies {
     implementation 'androidx.media3:media3-extractor:1.2.0'
     implementation 'androidx.media3:media3-datasource-okhttp:1.2.0'
     implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'commons-io:commons-io:2.15.1'
 
     // Shizuku 依赖
     def shizuku_version = "13.1.5"
@@ -75,6 +77,8 @@ dependencies {
     // Markwon 核心库，处理基础的 Markdown 解析与渲染
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:inline-parser:4.6.2'
+    implementation 'io.noties.markwon:linkify:4.6.2'
+    implementation 'io.noties.markwon:recycler:4.6.2'
     implementation 'io.noties.markwon:ext-latex:4.6.2'
     implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
     implementation 'io.noties.markwon:ext-tables:4.6.2'
@@ -91,6 +95,5 @@ dependencies {
     // ✅ 移除单独的 JNA 依赖，Vosk AAR 已经包含了正确的 JNA
     // implementation 'net.java.dev.jna:jna:5.14.0@aar'
     implementation 'androidx.preference:preference:1.2.0'
-    implementation project(':termux-shared')
-    implementation project(':terminal-view')
+    implementation 'androidx.window:window:1.2.0'
 }
