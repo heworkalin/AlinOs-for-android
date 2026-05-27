@@ -30,11 +30,9 @@ import java.util.List;
 import java.util.Map;
 
 import alin.android.alinos.R;
-import alin.android.alinos.tools.TerminalTermuxExecutor;
+import alin.android.alinos.localshell.LocalShellExecutor;
 import alin.android.alinos.tools.ToolMeta;
 import alin.android.alinos.tools.ToolRegistry;
-import com.termux.app.TermuxApplication;
-
 /**
  * 通用工具测试界面。
  * 从 {@link ToolRegistry} 加载所有工具，支持表单/JSON 双模式输入，
@@ -71,11 +69,8 @@ public class DevToolsActivity extends AppCompatActivity {
         allTools = ToolRegistry.getAllTools();
         bindViews();
 
-        // 确保 Termux 环境已初始化（Manifest 未配置 TermuxApplication，需手动调用）
-        TermuxApplication.init(this);
-
         // 注入 Context，此后 AI 通过 create_session 即可自动完成初始化
-        TerminalTermuxExecutor.provideContext(this);
+        LocalShellExecutor.provideContext(this);
 
         setupToolSelector();
         setupModeToggle();

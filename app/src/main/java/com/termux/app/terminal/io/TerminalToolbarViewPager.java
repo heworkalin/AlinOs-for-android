@@ -52,7 +52,7 @@ public class TerminalToolbarViewPager {
 
                 // apply extra keys fix if enabled in prefs
                 if (mActivity.getProperties().isUsingFullScreen() && mActivity.getProperties().isUsingFullScreenWorkAround()) {
-                    FullScreenWorkAround.apply(mActivity);
+                    // FullScreenWorkAround removed
                 }
 
             } else {

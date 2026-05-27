@@ -20,6 +20,7 @@ import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
+import com.termux.shared.logger.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +32,8 @@ import java.util.List;
 public class LocalShellService extends TermuxService {
 
     private static final String CHANNEL_ID = "localshell_service";
-    private static final int NOTIFICATION_ID = 1;
+    private static final int NOTIFICATION_ID = TermuxConstants.TERMUX_APP_NOTIFICATION_ID;
+    private static final String LOG_TAG = "LocalShellService";
 
     private final List<TermuxSession> mOwnSessions = new ArrayList<>();
     private final LocalBinder mBinder = new LocalBinder();
@@ -42,7 +44,7 @@ public class LocalShellService extends TermuxService {
         // Skip TermuxService.onCreate() — use our own session list
         setupNotificationChannel();
         Notification n = buildNotification();
-        if (n != null) startForeground(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, n);
+        if (n != null) startForeground(NOTIFICATION_ID, n);
     }
 
     @Override
@@ -57,12 +59,15 @@ public class LocalShellService extends TermuxService {
 
     @Override
     public void onDestroy() {
+        // 正常流程下用户已通过 Enter 确认清除所有 session，此处仅做兜底清理
         for (TermuxSession s : new ArrayList<>(mOwnSessions)) {
-            s.getTerminalSession().finishIfRunning();
+            TerminalSession ts = s.getTerminalSession();
+            if (ts != null && ts.isRunning()) ts.finishIfRunning();
         }
         mOwnSessions.clear();
         stopForeground(true);
-        super.onDestroy();
+        // 不调 super.onDestroy() —— 父类的 killAllTermuxExecutionCommands() 会访问
+        // 未初始化的 mShellManager（onCreate 跳过了 super.onCreate），导致 NPE
     }
 
     // ── Session management overrides ──
@@ -121,6 +126,12 @@ public class LocalShellService extends TermuxService {
             int newIdx = getIndexOfSession(ts);
             if (newIdx >= 0) mOwnSessions.remove(newIdx);
         }
+        updateNotification();
+        // 不再有 session → 停止前台服务，通知自然消失
+        if (mOwnSessions.isEmpty()) {
+            stopForeground(true);
+            stopSelf();
+        }
         return idx;
     }
 
@@ -133,13 +144,13 @@ public class LocalShellService extends TermuxService {
             shellPath, arguments, stdin, workingDirectory, Runner.TERMINAL_SESSION.getName(), isFailSafe);
         cmd.shellName = sessionName;
         cmd.setShellCommandShellEnvironment = true;
+        cmd.isPermanent = true; // 阻止 TermuxTerminalSessionActivityClient auto-remove，由用户按 Enter 确认后清理
 
         TermuxSession session = TermuxSession.execute(this, cmd,
             getTermuxTerminalSessionClient(), termuxSession -> {
-                mOwnSessions.remove(termuxSession);
+                // 不移除 mOwnSessions —— 保留 finished session 让用户查看终端输出，
+                // 按 Enter 后由 removeFinishedSession → removeTermuxSession 清理
                 updateNotification();
-                com.termux.app.terminal.TermuxTerminalSessionActivityClient ac = getTermuxTerminalSessionActivityClient();
-                if (ac != null) ac.termuxSessionListNotifyUpdated();
             }, new LocalShellEnvironment(), null, false);
         if (session != null) {
             mOwnSessions.add(session);
@@ -216,11 +227,28 @@ public class LocalShellService extends TermuxService {
                 : PendingIntent.FLAG_UPDATE_CURRENT);
 
         int count = getTermuxSessionsSize();
+        // 检查是否所有 session 都已结束（进程退出，等待用户按 Enter 确认）
+        boolean allFinished = count > 0;
+        for (TermuxSession s : mOwnSessions) {
+            if (s.getTerminalSession() != null && s.getTerminalSession().isRunning()) {
+                allFinished = false;
+                break;
+            }
+        }
+        String notifText;
+        if (count == 0) {
+            notifText = "0 sessions";
+        } else if (allFinished) {
+            notifText = "Session ended — press Enter to close";
+        } else {
+            notifText = count + " session" + (count == 1 ? "" : "s");
+        }
+
         Notification.Builder b = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
             ? new Notification.Builder(this, CHANNEL_ID)
             : new Notification.Builder(this);
         return b.setContentTitle("LocalShell")
-            .setContentText(count + " session" + (count == 1 ? "" : "s"))
+            .setContentText(notifText)
             .setSmallIcon(R.drawable.ic_service_notification)
             .setContentIntent(pi)
             .setOngoing(true)

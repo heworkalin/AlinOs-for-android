@@ -1,5 +1,6 @@
 package alin.android.alinos.tools;
 
+import alin.android.alinos.localshell.LocalShellExecutor;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -9,14 +10,14 @@ import java.util.Map;
 
 /**
  * 工具注册表 + 分发器。
- * 所有 {@link TerminalTermuxExecutor} 的方法在此注册，供 DevToolsActivity 调用。
+ * 所有 {@link LocalShellExecutor} 的方法在此注册，供 DevToolsActivity 调用。
  */
 public class ToolRegistry {
 
     private static final Map<String, ToolMeta> tools = new LinkedHashMap<>();
 
     static {
-        TerminalTermuxExecutor exec = TerminalTermuxExecutor.getInstance();
+        LocalShellExecutor exec = LocalShellExecutor.getInstance();
         registerTool("termux_create_session",
             "创建一个新的永久 PTY 会话。提供 id 或 name（二选一）。"
             + " id 格式 [a-zA-Z0-9_-]+，最大 64 字符，已存在则报错。"

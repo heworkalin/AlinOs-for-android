@@ -258,19 +258,67 @@
     <string name="agent_main_name">Agent Main</string>
     <string name="accessibility_service_description">Accessibility Service for AlinOs</string>
 
-    <!-- ChatActivityDev strings -->
-    <string name="chat_dev_welcome"># ✅ Markdown + LaTeX 渲染测试\n\n欢迎使用测试页面！您可以通过以下方式测试：\n\n1. 在输入框**手动输入** Markdown 文本后点击发送\n2. 点击右上角 **「插入用例」** 选择预置测试场景\n3. 点击 **「🌙 暗色」** 切换暗色模式\n\n**覆盖测试项：**\n- 标题（1-6级）、粗体、斜体、删除线\n- 有序/无序列表、任务列表\n- 表格、引用块、分割线\n- 行内代码、代码块（语法高亮）\n- LaTeX 行内公式（$...$）\n- LaTeX 块级公式（$$...$$）\n- 混合复杂场景\n- 暗色模式适配</string>
-    <string name="chat_dev_title">Markdown + LaTeX 渲染测试</string>
-    <string name="chat_dev_input_hint">输入 Markdown 文本，或点击「插入用例」…</string>
-    <string name="chat_dev_send">发送</string>
-    <string name="chat_dev_insert_test">插入用例</string>
-    <string name="chat_dev_theme_light">🌙 暗色</string>
-    <string name="chat_dev_theme_dark">☀️ 亮色</string>
     <string name="init_proot_termux">初始化proot_Termux 环境</string>
     <string name="termux_shell">Termux Shell 测试</string>
     <string name="return_shell">输入命令并查看返回参数</string>
     <string name="tool_test_center">🧰 工具测试中心</string>
     <string name="json_tool_test">JSON 工具函数测试</string>
-    <string name="markdown_latex">Markdown + LaTeX 渲染测试</string>
-    <string name="markdown_latex_text">标题/表格/代码/公式</string>
+
+    <!-- ========== termux-shared strings ========== -->
+    <string name="msg_directory_absolute_path">Directory: %s</string>
+    <string name="error_app_not_installed_or_disabled_warning">The app %s is either not installed or disabled.</string>
+    <string name="error_get_package_context_failed_title">Get Package Context Failed</string>
+    <string name="error_get_package_context_failed_message">Failed to get package context for package %s.</string>
+    <string name="error_get_package_context_failed_help_url_message">The error was: %s</string>
+    <string name="error_get_component_state_failed">Failed to get component state for %s.</string>
+    <string name="error_enable_component_failed">Failed to enable component %s.</string>
+    <string name="error_disable_component_failed">Failed to disable component %s.</string>
+    <string name="message_sudo_please_grant_permissions">Please grant the following permissions to be able to use \"sudo\" and \"tsu\" commands:\n\n- %s</string>
+    <string name="error_failed_to_request_permissions">Failed to request permissions for %s.</string>
+    <string name="error_attempted_to_check_for_permissions_not_requested">Check for permissions that were not requested.</string>
+    <string name="error_attempted_to_ask_for_permissions_not_requested">Ask for permissions that were not requested.</string>
+    <string name="error_has_not_requested_legacy_external_storage">Legacy external storage permission has not been requested.</string>
+    <string name="msg_requires_dump_and_package_usage_stats_permissions">This requires %s and %s permissions.</string>
+    <string name="error_display_over_other_apps_permission_not_granted">Display over other apps permission is not granted. Grant it in system settings to allow Termux to open the terminal from background.</string>
+    <string name="error_allow_external_apps_ungranted">The Allow external apps preference has not been granted. Open Termux and run the \"termux-allow-external-apps\" command to grant it.</string>
+    <string name="title_report_text">Report Text</string>
+    <string name="msg_report_truncated">Report truncated at %d characters.</string>
+    <string name="title_share_with">Share with</string>
+    <string name="title_open_url_with">Open URL with</string>
+    <string name="msg_storage_permission_not_granted">Storage permission not granted.</string>
+    <string name="msg_file_saved_successfully">File saved to %s</string>
+    <string name="error_sending_sigkill_to_process">Sending SIGKILL to process %s.</string>
+    <string name="error_executable_unset">Executable path unset.</string>
+    <string name="error_execution_cancelled">Execution cancelled.</string>
+    <string name="error_failed_to_execute_termux_session_command">Failed to execute terminal session command.</string>
+    <string name="error_failed_to_execute_app_shell_command">Failed to execute app shell command.</string>
+    <string name="error_exception_received_while_executing_termux_session_command">Exception received while executing terminal session command.</string>
+    <string name="error_exception_received_while_executing_app_shell_command">Exception received while executing app shell command.</string>
+    <string name="msg_report_issue">Report issue</string>
+    <string name="msg_termux_app_required_by_app">%s requires Termux app to be installed to run.</string>
+    <string name="error_termux_app_package_context_not_accessible">Termux app package context is not accessible for \'%s\'.</string>
+    <string name="error_termux_prefix_dir_path_not_accessible">Termux app prefix directory path is not accessible at \'%s\'.</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_share">Share</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save_to_file">Save to file</string>
+    <string name="msg_storage_permission_granted_on_request">Storage permission granted.</string>
+    <string name="msg_storage_permission_not_granted_on_request">Storage permission not granted.</string>
+    <string name="action_enable_launcher_icon">Enable launcher icon</string>
+    <string name="action_disable_launcher_icon">Disable launcher icon</string>
+    <string name="msg_enabling_launcher_icon">Enabling launcher icon</string>
+    <string name="msg_disabling_launcher_icon">Disabling launcher icon</string>
+    <string name="setting_launcher_icon_title">Launcher Icon</string>
+    <string name="log_level_title">Log Level</string>
+    <string name="log_level_off">Off</string>
+    <string name="log_level_normal">Normal</string>
+    <string name="log_level_debug">Debug</string>
+    <string name="log_level_verbose">Verbose</string>
+    <string name="log_level_unknown">Unknown</string>
+    <string name="log_level_value">Log Level: %s</string>
+
+    <!-- Text selection -->
+    <string name="copy_text">Copy</string>
+    <string name="paste_text">Paste</string>
+    <string name="text_selection_more">More</string>
 </resources>
