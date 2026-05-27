@@ -35,7 +35,7 @@ dependencies {
     implementation "io.noties.markwon:recycler:4.6.2"
     implementation "org.lsposed.hiddenapibypass:hiddenapibypass:6.1"
     implementation "androidx.window:window:1.5.1"
-    implementation "commons-io:commons-io:2.21.0"
+    implementation "commons-io:commons-io:2.5"
 
     // 依赖 terminal-view 模块（已注册，注意：此处存在依赖闭环，app 也依赖该模块，若无需可移除）
     implementation project(":terminal-view")

@@ -72,8 +72,6 @@ dependencies {
     implementation "dev.rikka.shizuku:provider:$shizuku_version"
     implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:6.1'
 
-    // ✅ 简化 Vosk 依赖 - 仅使用最新版 Vosk，JNA 会自动包含
-    implementation 'com.alphacephei:vosk-android:0.3.47'
     // Markwon 核心库，处理基础的 Markdown 解析与渲染
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:inline-parser:4.6.2'
