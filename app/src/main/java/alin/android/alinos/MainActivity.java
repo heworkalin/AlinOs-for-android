@@ -19,7 +19,7 @@ import androidx.cardview.widget.CardView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import alin.android.alinos.manager.ConsentDialogManager;
-import alin.android.alinos.manager.FloatWindowManager;
+
 import alin.android.alinos.manager.ShizukuManager;
 
 
@@ -33,10 +33,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private ConsentDialogManager consentDialogManager;
 
     // 权限请求码
-    private static final int REQUEST_RECORD_AUDIO_PERMISSION = 1001;
-    // 标记是否等待权限结果以显示悬浮窗
-    private boolean pendingShowFloatWindow = false;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -115,13 +111,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         } else if (id == R.id.cv_screen_share) {
             // 点击卡片切换屏幕共享开关
             swScreenShare.setChecked(!swScreenShare.isChecked());
-        } else if (id == R.id.cv_overlay_test) {
-            // 悬浮窗权限测试，长按电源键调用AI测试
-            testOverlayPermission();
-        } else if (id == R.id.cv_ChatActivity ) {
+        }  else if (id == R.id.cv_ChatActivity ) {
             // 会话AI测试，跳转到ChatActivity2
             startActivity(new Intent(this, ChatActivity.class));
-            Toast.makeText(this, "已唤起AI助手会话", Toast.LENGTH_SHORT).show();
+            //Toast.makeText(this, "已唤起AI助手会话", Toast.LENGTH_SHORT).show();
         
         } else if (id == R.id.cv_background_keep) {
             // 后台饱和配置（保活引导）
@@ -182,78 +175,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     /**
      * 悬浮窗权限测试
      */
-    // 悬浮窗权限测试
-private void testOverlayPermission() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        if (Settings.canDrawOverlays(this)) {
-            // 已授权悬浮窗权限，检查录音权限
-            checkAndRequestRecordAudioPermission();
-        } else {
-            // 引导申请悬浮窗权限
-            consentDialogManager.showConsentDialog(
-                    "悬浮窗权限申请",
-                    "悬浮窗用于快速唤起AI助手，是否前往开启？",
-                    () -> {
-                        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:" + getPackageName()));
-                        startActivity(intent);
-                    },
-                    () -> Toast.makeText(this, "拒绝悬浮窗权限将无法使用快速唤起功能", Toast.LENGTH_SHORT).show()
-            );
-        }
-    } else {
-        // Android 6.0以下默认允许悬浮窗权限
-        checkAndRequestRecordAudioPermission();
-    }
-}
- 
-
-    /**
-     * 检查并请求录音权限
-     */
-    private void checkAndRequestRecordAudioPermission() {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            // 已有录音权限，显示悬浮窗
-            showFloatWindow();
-        } else {
-            // 请求录音权限
-            pendingShowFloatWindow = true;
-            ActivityCompat.requestPermissions(this,
-                    new String[]{android.Manifest.permission.RECORD_AUDIO},
-                    REQUEST_RECORD_AUDIO_PERMISSION);
-        }
-    }
-
-    /**
-     * 显示悬浮窗
-     */
-    private void showFloatWindow() {
-        FloatWindowManager.getInstance(this).showFloatWindow();
-        Toast.makeText(this, "悬浮窗已显示", Toast.LENGTH_SHORT).show();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        if (requestCode == REQUEST_RECORD_AUDIO_PERMISSION) {
-            // 先更新FloatWindowManager的权限状态
-            FloatWindowManager.getInstance(this).onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-            // 处理录音权限请求结果
-            if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                // 权限被授予
-                if (pendingShowFloatWindow) {
-                    showFloatWindow();
-                }
-            } else {
-                // 权限被拒绝
-                Toast.makeText(this, "录音权限被拒绝，将无法使用语音识别功能", Toast.LENGTH_LONG).show();
-            }
-            pendingShowFloatWindow = false;
-        }
-    }
 
     /**
      * 引导后台保活配置
@@ -282,6 +203,5 @@ private void testOverlayPermission() {
     protected void onDestroy() {
         super.onDestroy();
         // 释放悬浮窗资源
-        FloatWindowManager.getInstance(this).hideFloatWindow();
     }
 }

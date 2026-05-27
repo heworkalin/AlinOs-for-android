@@ -198,7 +198,7 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize|stateHidden"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-            //
+
         <activity
             android:name="alin.android.alinos.dev.LocalShellTestActivity"
             android:exported="true"

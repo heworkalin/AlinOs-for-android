@@ -68,7 +68,12 @@ public class NotificationUtils {
         final CharSequence notificationText, final CharSequence notificationBigText,
         final PendingIntent contentIntent, final PendingIntent deleteIntent, final int notificationMode) {
         if (context == null) return null;
-        Notification.Builder builder = new Notification.Builder(context, channelId);
+        Notification.Builder builder;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder = new Notification.Builder(context, channelId);
+        } else {
+            builder = new Notification.Builder(context);
+        }
         builder.setContentTitle(title);
         builder.setContentText(notificationText);
         builder.setStyle(new Notification.BigTextStyle().bigText(notificationBigText));

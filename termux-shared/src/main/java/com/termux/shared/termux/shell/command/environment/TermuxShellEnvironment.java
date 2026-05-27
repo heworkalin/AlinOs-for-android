@@ -167,9 +167,11 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
 		File ld_config_txt_file = new File(cacheDirFile, "ld.config.txt");
 		if (!ld_config_txt_file.exists() || ld_config_txt_file.length() == 0) {
 			try {
-				Files.copy(Paths.get("/linkerconfig/ld.config.txt"), ld_config_txt_file.toPath(),
-						StandardCopyOption.REPLACE_EXISTING);
-				ld_config_txt_file.setReadable(true, false);
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+					java.nio.file.Files.copy(java.nio.file.Paths.get("/linkerconfig/ld.config.txt"),
+						ld_config_txt_file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+					ld_config_txt_file.setReadable(true, false);
+				}
 			} catch (Throwable e) {
 				e.printStackTrace();
 			}
@@ -193,11 +195,11 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
 		}
 
 		//自定义参数，来自其他应用，随时更正，不是目前项目的，迁移时的遗留的，可改成ai cli tools调用方法  ///
-		environment.put("ANDROID_HOME", TermuxConstants.TERMUX_HOME_DIR_PATH + "/android-sdk");
-		environment.put("GRADLE_HOME", TermuxConstants.TERMUX_HOME_DIR_PATH + "/.gradle");
-		environment.put("GRADLE", "bash ./gradlew -Pandroid.aapt2FromMavenOverride="
-				+ TermuxConstants.TERMUX_HOME_DIR_PATH + "/.androidide/aapt2");
-		environment.put("JAVA_TOOL_OPTIONS", "-Duser.language=zh -Duser.region=CN");
+		//environment.put("ANDROID_HOME", TermuxConstants.TERMUX_HOME_DIR_PATH + "/android-sdk");
+		//environment.put("GRADLE_HOME", TermuxConstants.TERMUX_HOME_DIR_PATH + "/.gradle");
+		//environment.put("GRADLE", "bash ./gradlew -Pandroid.aapt2FromMavenOverride="
+		//		+ TermuxConstants.TERMUX_HOME_DIR_PATH + "/.androidide/aapt2");
+		//environment.put("JAVA_TOOL_OPTIONS", "-Duser.language=zh -Duser.region=CN");
 	}
 }
 
