@@ -7,7 +7,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.drawerlayout.widget.DrawerLayout;
 
-import com.termux.app.TermuxActivity;
+import alin.android.alinos.dev.LocalShellTestActivity;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
 import com.termux.shared.logger.Logger;
@@ -24,13 +24,13 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
 
     private ExtraKeysInfo mExtraKeysInfo;
 
-    final TermuxActivity mActivity;
+    final LocalShellTestActivity mActivity;
     final TermuxTerminalViewClient mTermuxTerminalViewClient;
     final TermuxTerminalSessionActivityClient mTermuxTerminalSessionActivityClient;
 
     private static final String LOG_TAG = "TermuxTerminalExtraKeys";
 
-    public TermuxTerminalExtraKeys(TermuxActivity activity, @NonNull TerminalView terminalView,
+    public TermuxTerminalExtraKeys(LocalShellTestActivity activity, @NonNull TerminalView terminalView,
                                    TermuxTerminalViewClient termuxTerminalViewClient,
                                    TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
         super(terminalView);

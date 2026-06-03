@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
 import alin.android.alinos.dev.LocalShellTestActivity;
+import alin.android.alinos.dev.SshTestActivity;
 
 //AlinOs\app\src\main\java\alin\android\alinos\AgentConfigActivity.java
 public class AgentConfigActivity extends AppCompatActivity {
@@ -33,6 +34,16 @@ public class AgentConfigActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 Intent intent = new Intent(AgentConfigActivity.this, LocalShellTestActivity.class);
+                startActivity(intent);
+            }
+        });
+
+        // 找到 SSH 测试卡片
+        CardView cvSshTest = findViewById(R.id.cv_ssh_test);
+        cvSshTest.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(AgentConfigActivity.this, SshTestActivity.class);
                 startActivity(intent);
             }
         });

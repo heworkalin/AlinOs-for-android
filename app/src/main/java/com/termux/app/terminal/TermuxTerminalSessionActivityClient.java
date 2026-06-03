@@ -20,7 +20,7 @@ import alin.android.alinos.R;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
-import com.termux.app.TermuxActivity;
+import alin.android.alinos.dev.LocalShellTestActivity;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.app.TermuxService;
@@ -40,7 +40,7 @@ import java.util.Properties;
 /** The {@link TerminalSessionClient} implementation that may require an {@link Activity} for its interface methods. */
 public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionClientBase {
 
-    private final TermuxActivity mActivity;
+    private final LocalShellTestActivity mActivity;
 
     private static final int MAX_SESSIONS = 8;
 
@@ -50,7 +50,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
 
-    public TermuxTerminalSessionActivityClient(TermuxActivity activity) {
+    public TermuxTerminalSessionActivityClient(LocalShellTestActivity activity) {
         this.mActivity = activity;
     }
 
@@ -279,7 +279,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             try {
                 mBellSoundId = mBellSoundPool.load(mActivity, R.raw.bell, 1);
             } catch (Exception e){
-                // Catch java.lang.RuntimeException: Unable to resume activity {com.termux/com.termux.app.TermuxActivity}: android.content.res.Resources$NotFoundException: File res/raw/bell.ogg from drawable resource ID
+                // Catch java.lang.RuntimeException: Unable to resume activity {com.termux/com.termux.app.LocalShellTestActivity}: android.content.res.Resources$NotFoundException: File res/raw/bell.ogg from drawable resource ID
                 Logger.logStackTraceWithMessage(LOG_TAG, "Failed to load bell sound pool", e);
             }
         }

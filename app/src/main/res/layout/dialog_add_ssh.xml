@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingTop="8dp">
+
+    <!-- 别称 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="别称"
+        android:textSize="10sp"
+        android:textColor="#909399"
+        android:paddingLeft="10dp"
+        android:paddingBottom="2dp"/>
+
+    <EditText
+        android:id="@+id/et_name"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_ssh_input"
+        android:paddingHorizontal="10dp"
+        android:textSize="13sp"
+        android:textColor="#303133"
+        android:hint="给这个SSH配置起个名字"
+        android:inputType="text"
+        android:singleLine="true"
+        android:layout_marginBottom="8dp"/>
+
+    <!-- ======================================================== -->
+    <!--  顶层 Tab: 本地termux / 远程                              -->
+    <!-- ======================================================== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_ssh_tab_bar"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tab_remote"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_ssh_tab_active"
+            android:clickable="true"
+            android:gravity="center"
+            android:text="本地termux"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tab_local"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:gravity="center"
+            android:text="远程"
+            android:textColor="#909399"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- 主机名/IP -->
+    <TextView
+        android:id="@+id/tv_label_host"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="IP 地址"
+        android:textSize="10sp"
+        android:textColor="#909399"
+        android:paddingLeft="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="2dp"/>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_ssh_input">
+
+        <EditText
+            android:id="@+id/et_ip"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingHorizontal="10dp"
+            android:paddingEnd="70dp"
+            android:textSize="13sp"
+            android:textColor="#303133"
+            android:hint="127.0.0.1"
+            android:inputType="text"
+            android:singleLine="true"
+            android:background="@null"/>
+
+        <TextView
+            android:id="@+id/tv_ip_extra"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:paddingEnd="10dp"
+            android:textSize="9sp"
+            android:textColor="#C0C4CC"/>
+    </RelativeLayout>
+
+    <!-- 端口 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="端口"
+        android:textSize="10sp"
+        android:textColor="#909399"
+        android:paddingLeft="10dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="2dp"/>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_ssh_input">
+
+        <EditText
+            android:id="@+id/et_port"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingHorizontal="10dp"
+            android:paddingEnd="70dp"
+            android:textSize="13sp"
+            android:textColor="#303133"
+            android:hint="8022"
+            android:inputType="number"
+            android:singleLine="true"
+            android:background="@null"/>
+
+        <TextView
+            android:id="@+id/tv_port_extra"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:paddingEnd="10dp"
+            android:textSize="9sp"
+            android:textColor="#C0C4CC"/>
+    </RelativeLayout>
+
+    <!-- 用户名 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="用户名"
+        android:textSize="10sp"
+        android:textColor="#909399"
+        android:paddingLeft="10dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="2dp"/>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_ssh_input">
+
+        <EditText
+            android:id="@+id/et_username"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingHorizontal="10dp"
+            android:paddingEnd="70dp"
+            android:textSize="13sp"
+            android:textColor="#303133"
+            android:hint="root"
+            android:inputType="text"
+            android:singleLine="true"
+            android:background="@null"/>
+
+        <TextView
+            android:id="@+id/tv_username_display"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="10dp"
+            android:paddingEnd="70dp"
+            android:textSize="13sp"
+            android:textColor="#303133"
+            android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/tv_username_extra"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:paddingEnd="10dp"
+            android:textSize="9sp"
+            android:textColor="#C0C4CC"/>
+    </RelativeLayout>
+
+    <!-- ======================================================== -->
+    <!--  远程模式专用: 认证方式 (密码/密钥)                        -->
+    <!-- ======================================================== -->
+    <LinearLayout
+        android:id="@+id/layout_auth"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="认证方式"
+            android:textSize="10sp"
+            android:textColor="#909399"
+            android:paddingLeft="10dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="2dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="#E0E8F7"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:id="@+id/tab_auth_password"
+                android:layout_width="0dp"
+                android:layout_height="28dp"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:gravity="center"
+                android:text="密码"
+                android:textSize="11sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_ssh_auth_tab_active"
+                android:clickable="true"/>
+
+            <TextView
+                android:id="@+id/tab_auth_key"
+                android:layout_width="0dp"
+                android:layout_height="28dp"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:gravity="center"
+                android:text="密钥"
+                android:textSize="11sp"
+                android:textColor="#909399"
+                android:clickable="true"/>
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/et_password"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_ssh_input"
+            android:paddingHorizontal="10dp"
+            android:textSize="13sp"
+            android:textColor="#303133"
+            android:hint="请输入密码"
+            android:inputType="textPassword"
+            android:singleLine="true"/>
+
+        <EditText
+            android:id="@+id/et_key"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_ssh_input"
+            android:paddingHorizontal="10dp"
+            android:textSize="13sp"
+            android:textColor="#303133"
+            android:hint="请输入密钥路径或粘贴密钥内容"
+            android:inputType="text"
+            android:singleLine="true"
+            android:visibility="gone"/>
+    </LinearLayout>
+
+    <!-- ======================================================== -->
+    <!--  本地模式专用: 密码 + 状态 + 帮助                        -->
+    <!-- ======================================================== -->
+    <LinearLayout
+        android:id="@+id/layout_local_password"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="visible">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="密码"
+            android:textSize="10sp"
+            android:textColor="#909399"
+            android:paddingLeft="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="2dp"/>
+
+        <EditText
+            android:id="@+id/et_local_password"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_ssh_input"
+            android:paddingHorizontal="10dp"
+            android:textSize="13sp"
+            android:textColor="#303133"
+            android:hint="请输入密码"
+            android:inputType="textPassword"
+            android:singleLine="true"/>
+
+        <TextView
+            android:id="@+id/tv_local_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="10sp"
+            android:textColor="#909399"
+            android:paddingLeft="10dp"
+            android:paddingTop="6dp"
+            android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/tv_local_help"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#2D8CF0"
+            android:paddingLeft="10dp"
+            android:paddingTop="6dp"
+            android:clickable="true"
+            android:visibility="gone"/>
+    </LinearLayout>
+
+    <!-- 描述 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="描述"
+        android:textSize="10sp"
+        android:textColor="#909399"
+        android:paddingLeft="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="2dp"/>
+
+    <EditText
+        android:id="@+id/et_description"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@drawable/bg_ssh_input"
+        android:paddingHorizontal="10dp"
+        android:textSize="13sp"
+        android:textColor="#303133"
+        android:hint="简单描述这个SSH连接"
+        android:inputType="text"
+        android:gravity="top"
+        android:singleLine="false"/>
+
+</LinearLayout>

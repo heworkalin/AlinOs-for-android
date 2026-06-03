@@ -3,6 +3,7 @@
  * @AIDE AIDE+
 */
 package com.termux.app;
+import alin.android.alinos.dev.LocalShellTestActivity;
 import android.content.Intent;
 import android.os.Environment;
 import android.text.TextUtils;
@@ -29,7 +30,7 @@ public class EventHandler {
 	
 	static Intent lastIntent;
 
-	public static void distribute(Intent intent, TermuxActivity termuxActivity) {
+	public static void distribute(Intent intent, LocalShellTestActivity termuxActivity) {
 		if (intent == null 
 		//  过滤重复 intent
 		|| intent.equals(EventHandler.lastIntent) 
@@ -44,7 +45,7 @@ public class EventHandler {
 		handlerGradleCmdLine(termuxActivity, intent);
 	}
 
-	private static void handlerGradleCmdLine(TermuxActivity termuxActivity, final Intent intent) {
+	private static void handlerGradleCmdLine(LocalShellTestActivity termuxActivity, final Intent intent) {
 		
 		final TerminalView terminalView = termuxActivity.getTerminalView();
 		//接收传入的命令并异步运行
@@ -106,8 +107,8 @@ public class EventHandler {
 		}, 200);
 	}
 	
-	private static void handlerGradleCmdLine2(TermuxActivity termuxActivity, final Intent intent) {
-		termuxActivity.mTermuxService.createTermuxSession(null);
+	private static void handlerGradleCmdLine2(LocalShellTestActivity termuxActivity, final Intent intent) {
+		termuxActivity.getTermuxService().createTermuxSession(null);
 	}
 }
 

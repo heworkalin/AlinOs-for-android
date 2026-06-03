@@ -27,7 +27,7 @@ import java.util.List;
 
 /**
  * Independent foreground service for LocalShell sessions.
- * Extends TermuxService so that TermuxActivity's view clients can work with it.
+ * Extends TermuxService so that LocalShellTestActivity's view clients can work with it.
  */
 public class LocalShellService extends TermuxService {
 
@@ -127,10 +127,10 @@ public class LocalShellService extends TermuxService {
             if (newIdx >= 0) mOwnSessions.remove(newIdx);
         }
         updateNotification();
-        // 不再有 session → 停止前台服务，通知自然消失
+        // 不再有 session 时仅退出前台模式，不停止服务
+        // （stopSelf 会导致正在进行的 SSH 连接中断和其他客户端黑屏）
         if (mOwnSessions.isEmpty()) {
-            stopForeground(true);
-            stopSelf();
+            stopForeground(false);
         }
         return idx;
     }
@@ -148,8 +148,9 @@ public class LocalShellService extends TermuxService {
 
         TermuxSession session = TermuxSession.execute(this, cmd,
             getTermuxTerminalSessionClient(), termuxSession -> {
-                // 不移除 mOwnSessions —— 保留 finished session 让用户查看终端输出，
-                // 按 Enter 后由 removeFinishedSession → removeTermuxSession 清理
+                android.util.Log.d("LocalShellService", "TermuxSession finished: sid=" + sessionName
+                    + ", exitCode=" + termuxSession.getTerminalSession().getExitStatus()
+                    + ", running=" + termuxSession.getTerminalSession().isRunning());
                 updateNotification();
             }, new LocalShellEnvironment(), null, false);
         if (session != null) {

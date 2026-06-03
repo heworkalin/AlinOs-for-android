@@ -10,7 +10,7 @@ import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
 import alin.android.alinos.R;
-import com.termux.app.TermuxActivity;
+import alin.android.alinos.dev.LocalShellTestActivity;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.terminal.TerminalSession;
 
@@ -18,10 +18,10 @@ public class TerminalToolbarViewPager {
 
     public static class PageAdapter extends PagerAdapter {
 
-        final TermuxActivity mActivity;
+        final LocalShellTestActivity mActivity;
         String mSavedTextInput;
 
-        public PageAdapter(TermuxActivity activity, String savedTextInput) {
+        public PageAdapter(LocalShellTestActivity activity, String savedTextInput) {
             this.mActivity = activity;
             this.mSavedTextInput = savedTextInput;
         }
@@ -94,10 +94,10 @@ public class TerminalToolbarViewPager {
 
     public static class OnPageChangeListener extends ViewPager.SimpleOnPageChangeListener {
 
-        final TermuxActivity mActivity;
+        final LocalShellTestActivity mActivity;
         final ViewPager mTerminalToolbarViewPager;
 
-        public OnPageChangeListener(TermuxActivity activity, ViewPager viewPager) {
+        public OnPageChangeListener(LocalShellTestActivity activity, ViewPager viewPager) {
             this.mActivity = activity;
             this.mTerminalToolbarViewPager = viewPager;
         }

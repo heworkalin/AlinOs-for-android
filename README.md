@@ -17,5 +17,4 @@
 
 ### 项目现状与规划
 - **当前状态**：已完成安卓应用基础框架搭建，已实现云端 Open API 基础调用流程，ollama部分兼容由于舍弃了一部分后续可能会拆剪，后续将对接以下4种AP接口OpenAI (Responses)  OpenAI (Chat Completions)   Vertex AI (Express Mode)  Anthropic Messages API ，同时增加tools提示此对接能力
-- **Termux 环境**已集成，基于项目[aide termux](https://github.com/heworkalin/AIDE-Termux)这个项目通过prooT伪造环境，已达到正常类似于[termux](https://github.com/termux/termux-app)所有包环境能力，当然，基于我的测试还可以再嵌套一层proot，但是这个终端执行能力存在一个最令人难说的能力，proot它的最低执行SDK是支持到安卓设备的安卓9。所以，规划并准备使用独立静态编译或动态编译的一个新的执行能力。
-- **未来规划**：proot termux本地执行能成功优先使用这个，其次，对接SSH相关的其他服务端或客户端,保证所有的能力都能正常执行,就是让AI能本地执行执行终端命令通过SSH连接其他客户端进行深度对接，或者SCP完成文件工作文件的迁移
+- **未来规划**：对接SSH相关的其他服务端或客户端,保证所有的能力都能正常执行,就是让AI能本地执行执行终端命令通过SSH连接其他客户端进行深度对接，或者SCP完成文件工作文件的迁移

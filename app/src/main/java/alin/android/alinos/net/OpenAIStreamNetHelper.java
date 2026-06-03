@@ -35,7 +35,7 @@ import alin.android.alinos.utils.TokenEstimator;
  * 重构说明：将两个方法中重复的 onResponse 解析逻辑抽取为 parseStreamResponse()，
  * 消除代码重复，确保 usage 判断修复只需维护一处。
  */
-public class OpenAIStreamNetHelper implements BaseNetHelper {
+public class OpenAIStreamNetHelper {
     private static final String TAG = "OpenAIStreamNetHelper";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
@@ -93,20 +93,17 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
         initTimeoutRunnables();
     }
 
-    // ========== 接口实现 ==========
+    // ========== 公共方法 ==========
 
-    @Override
     public String sendMessage(String message) {
         Log.w(TAG, "请使用sendStreamMessage触发流式");
         return "[提示] 长按发送按钮触发流式响应";
     }
 
-    @Override
     public String getServiceType() {
         return mConfig != null ? mConfig.getType() : "openai_stream";
     }
 
-    @Override
     public boolean validateConfig() {
         if (mConfig == null) { showToast("配置为空"); return false; }
         if (TextUtils.isEmpty(mConfig.getServerUrl()) || TextUtils.isEmpty(mConfig.getModel())) {
@@ -115,7 +112,6 @@ public class OpenAIStreamNetHelper implements BaseNetHelper {
         return true;
     }
 
-    @Override
     public void setContextAndConfig(Context context, ConfigBean config) {
         this.mContext = context;
         this.mConfig = config;
