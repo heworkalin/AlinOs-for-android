@@ -23,7 +23,6 @@ import alin.android.alinos.adapter.ConfigAdapter;
 import alin.android.alinos.adapter.OnConfigOperationListener;
 import alin.android.alinos.bean.ConfigBean;
 import alin.android.alinos.db.ConfigDBHelper;
-import alin.android.alinos.net.OllamaApiClient;
 
 public class AiConfigActivity extends AppCompatActivity implements OnConfigOperationListener {
     private RecyclerView rvConfigList;
@@ -123,30 +122,7 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
             btnDownloadModel.setVisibility(View.GONE);
         }
 
-        // Ollama下载按钮点击事件（保持不变）
-        btnDownloadModel.setOnClickListener(v -> {
-            String serverUrl = etServer.getText().toString().trim();
-            String modelName = etModel.getText().toString().trim();
-            if (serverUrl.isEmpty()) {
-                Toast.makeText(this, "请先填写Ollama服务器地址", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            if (modelName.isEmpty()) {
-                Toast.makeText(this, "请填写要下载的模型名称（如llama3）", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            OllamaApiClient.downloadModel(serverUrl, modelName, new OllamaApiClient.OnDownloadListener() {
-                @Override
-                public void onSuccess() {
-                    Toast.makeText(AiConfigActivity.this, "模型" + modelName + "下载请求已发送", Toast.LENGTH_SHORT).show();
-                }
-
-                @Override
-                public void onError(String error) {
-                    Toast.makeText(AiConfigActivity.this, "模型下载失败：" + error, Toast.LENGTH_SHORT).show();
-                }
-            });
-        });
+        // 模型下载功能已移除（仅保留流式对话）
 
         // -------------------- 修改重点：构建并显示对话框，自定义确定按钮点击 --------------------
         AlertDialog.Builder builder = new AlertDialog.Builder(this)

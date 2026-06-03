@@ -258,11 +258,10 @@
     <string name="agent_main_name">Agent Main</string>
     <string name="accessibility_service_description">Accessibility Service for AlinOs</string>
 
-    <string name="init_proot_termux">初始化proot_Termux 环境</string>
-    <string name="termux_shell">Termux Shell 测试</string>
-    <string name="return_shell">输入命令并查看返回参数</string>
     <string name="tool_test_center">🧰 工具测试中心</string>
     <string name="json_tool_test">JSON 工具函数测试</string>
+    <string name="ssh_test_title">SSH</string>
+    <string name="ssh_test_desc">SSH远程连接与本地连接测试</string>
 
     <!-- ========== termux-shared strings ========== -->
     <string name="msg_directory_absolute_path">Directory: %s</string>

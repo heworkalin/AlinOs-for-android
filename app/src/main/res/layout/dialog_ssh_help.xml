@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="8dp">
+
+    <!-- 下载来源 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="下载来源"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#303133"
+        android:paddingBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/tv_link_official"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="官方 Termux"
+        android:textSize="13sp"
+        android:textColor="#2D8CF0"
+        android:clickable="true"
+        android:paddingVertical="8dp"/>
+
+    <TextView
+        android:id="@+id/tv_link_zerotermux"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ZeroTermux 下载"
+        android:textSize="13sp"
+        android:textColor="#2D8CF0"
+        android:clickable="true"
+        android:paddingVertical="8dp"/>
+
+    <TextView
+        android:id="@+id/tv_link_zerotermux_project"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ZeroTermux 项目"
+        android:textSize="13sp"
+        android:textColor="#2D8CF0"
+        android:clickable="true"
+        android:paddingVertical="8dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E4E7ED"
+        android:layout_marginVertical="12dp"/>
+
+    <!-- 步骤3: 国内换源 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="国内用户换源 (可选)"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#303133"
+        android:paddingBottom="6dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_ssh_code_box"
+        android:padding="10dp">
+
+        <ScrollView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:scrollbars="horizontal">
+
+            <TextView
+                android:id="@+id/tv_code_mirror"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="10sp"
+                android:textColor="#303133"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"/>
+        </ScrollView>
+
+        <TextView
+            android:id="@+id/btn_copy_mirror"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="复制"
+            android:textSize="11sp"
+            android:textColor="#2D8CF0"
+            android:clickable="true"
+            android:paddingLeft="8dp"
+            android:layout_gravity="center_vertical"/>
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E4E7ED"
+        android:layout_marginVertical="12dp"/>
+
+    <!-- 步骤4: 安装SSH -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="安装 SSH 服务"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#303133"
+        android:paddingBottom="6dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_ssh_code_box"
+        android:padding="10dp">
+
+        <ScrollView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:scrollbars="horizontal">
+
+            <TextView
+                android:id="@+id/tv_code_ssh"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="10sp"
+                android:textColor="#303133"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"/>
+        </ScrollView>
+
+        <TextView
+            android:id="@+id/btn_copy_ssh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="复制"
+            android:textSize="11sp"
+            android:textColor="#2D8CF0"
+            android:clickable="true"
+            android:paddingLeft="8dp"
+            android:layout_gravity="center_vertical"/>
+    </LinearLayout>
+
+</LinearLayout>

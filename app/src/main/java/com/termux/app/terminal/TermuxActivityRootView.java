@@ -15,13 +15,13 @@ import android.widget.LinearLayout;
 import androidx.annotation.Nullable;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.termux.app.TermuxActivity;
+import alin.android.alinos.dev.LocalShellTestActivity;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.view.ViewUtils;
 
 
 /**
- * The {@link TermuxActivity} relies on {@link android.view.WindowManager.LayoutParams#SOFT_INPUT_ADJUST_RESIZE)}
+ * The {@link LocalShellTestActivity} relies on {@link android.view.WindowManager.LayoutParams#SOFT_INPUT_ADJUST_RESIZE)}
  * set by {@link TermuxTerminalViewClient#setSoftKeyboardState(boolean, boolean)} to automatically
  * resize the view and push the terminal up when soft keyboard is opened. However, this does not
  * always work properly. When `enforce-char-based-input=true` is set in `termux.properties`
@@ -52,7 +52,7 @@ import com.termux.shared.view.ViewUtils;
  *
  * To fix these issues, `activity_termux.xml` has the constant 1sp transparent
  * `activity_termux_bottom_space_view` View at the bottom. This will appear as a line matching the
- * activity theme. When {@link TermuxActivity} {@link ViewTreeObserver.OnGlobalLayoutListener} is
+ * activity theme. When {@link LocalShellTestActivity} {@link ViewTreeObserver.OnGlobalLayoutListener} is
  * called when any of the sub view layouts change,  like keyboard opening/closing keyboard,
  * extra keys/input view switched, etc, we check if the bottom space view is visible or not.
  * If its not, then we add a margin to the bottom of the root view, so that the keyboard does not
@@ -63,7 +63,7 @@ import com.termux.shared.view.ViewUtils;
  */
 public class TermuxActivityRootView extends LinearLayout implements ViewTreeObserver.OnGlobalLayoutListener {
 
-    public TermuxActivity mActivity;
+    public LocalShellTestActivity mActivity;
     public Integer marginBottom;
     public Integer lastMarginBottom;
     public long lastMarginBottomTime;
@@ -88,7 +88,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         super(context, attrs, defStyleAttr);
     }
 
-    public void setActivity(TermuxActivity activity) {
+    public void setActivity(LocalShellTestActivity activity) {
         mActivity = activity;
     }
 

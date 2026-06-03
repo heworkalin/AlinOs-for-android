@@ -18,7 +18,7 @@ public class ToolRegistry {
 
     static {
         LocalShellExecutor exec = LocalShellExecutor.getInstance();
-        registerTool("termux_create_session",
+        registerTool("localshell_create_session",
             "创建一个新的永久 PTY 会话。提供 id 或 name（二选一）。"
             + " id 格式 [a-zA-Z0-9_-]+，最大 64 字符，已存在则报错。"
             + " 仅提供 name 时自动生成随机 id。返回 { id, name }。",
@@ -44,19 +44,19 @@ public class ToolRegistry {
                 return exec.create_session(id, name.isEmpty() ? null : name);
             }
         );
-        registerTool("termux_destroy_session",
+        registerTool("localshell_destroy_session",
             "关闭指定会话并释放资源",
             params(
                 param("sessionId", "string", true, "", "终端会话 ID")
             ),
             p -> exec.destroy_session(p.getString("sessionId"))
         );
-        registerTool("termux_list_sessions",
+        registerTool("localshell_list_sessions",
             "列出所有会话及其存活状态",
             new ToolMeta.Param[0],
             p -> exec.list_sessions()
         );
-        registerTool("termux_search_session",
+        registerTool("localshell_search_session",
             "搜索会话（按 ID 或名称）",
             params(
                 param("query", "string", true, "", "搜索关键词"),
@@ -65,14 +65,14 @@ public class ToolRegistry {
             ),
             p -> exec.search_session(p.getString("query"), p.optString("by", "name"))
         );
-        registerTool("termux_session_status",
+        registerTool("localshell_session_status",
             "查询指定会话的存活状态",
             params(
                 param("sessionId", "string", true, "", "终端会话 ID")
             ),
             p -> exec.session_status(p.getString("sessionId"))
         );
-        registerTool("termux_rename_session",
+        registerTool("localshell_rename_session",
             "重命名会话（仅改标识，不影响终端）",
             params(
                 param("sessionId", "string", true, "", "终端会话 ID"),
@@ -80,7 +80,7 @@ public class ToolRegistry {
             ),
             p -> exec.rename_session(p.getString("sessionId"), p.getString("newName"))
         );
-        registerTool("termux_shell_exec",
+        registerTool("localshell_shell_exec",
             "向会话发送一条 Shell 命令并等待输出",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
@@ -99,7 +99,7 @@ public class ToolRegistry {
                 p.optInt("lines", 20),
                 p.optBoolean("colorEscape", false))
         );
-        registerTool("termux_shell_write",
+        registerTool("localshell_shell_write",
             "向会话写入文本（不追加回车），用于交互应答",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
@@ -118,7 +118,7 @@ public class ToolRegistry {
                 p.optBoolean("colorEscape", false),
                 p.optBoolean("cursorMode", false))
         );
-        registerTool("termux_shell_send_key",
+        registerTool("localshell_shell_send_key",
             "向会话发送控制键 / 方向键",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
@@ -143,7 +143,7 @@ public class ToolRegistry {
                 p.optBoolean("colorEscape", false),
                 p.optBoolean("cursorMode", false))
         );
-        registerTool("termux_shell_read",
+        registerTool("localshell_shell_read",
             "读取终端当前画布内容",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
@@ -160,7 +160,7 @@ public class ToolRegistry {
                 p.optBoolean("colorEscape", false),
                 p.optBoolean("cursorMode", false))
         );
-        registerTool("termux_read_history_canvas",
+        registerTool("localshell_read_history_canvas",
             "读取终端完整历史输出（含滚动区），生成归档文件",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
@@ -175,7 +175,7 @@ public class ToolRegistry {
                 p.optInt("lines", 20),
                 p.optBoolean("colorEscape", false))
         );
-        registerTool("termux_shell_get_debug_view",
+        registerTool("localshell_shell_get_debug_view",
             "获取终端的样式调试视图（行号/颜色/光标）",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
@@ -194,7 +194,7 @@ public class ToolRegistry {
     private static void registerTool(String displayName, String description,
                                      ToolMeta.Param[] params, ToolMeta.Executor executor) {
         tools.put(displayName, new ToolMeta(displayName, description,
-            displayName.replace("termux_", ""), params, executor));
+            displayName.replace("localshell_", ""), params, executor));
     }
 
     /** 获取完整工具列表。 */

@@ -1,105 +1,96 @@
-other
-
 AlinOs-for-android 开源协议声明
+==================================
 
-1. 项目总体声明
+本项目基于 termux/termux-app 深度定制，整合了多个上游开源项目。
+由于包含 GPLv3 代码，项目整体必须以 GPLv3 分发。
 
-本项目为基于 termux/termux-app 的早期原型整合版本。本项目不适用单一开源协议，其不同代码模块分别受 MIT、GPLv3、Apache 2.0 等多份协议约束。
 
-重要警告：
+一、代码模块归属
 
-您必须自行审查所有上游组件的原始协议文本，特别是 GPLv3 的传染性条款。本作者不提供任何商业可用性担保，也不对您因未遵守第三方协议而产生的法律风险负责。若您计划分发（包括 Release APK 或源代码）或商业使用本项目，请务必自行排查各模块的强制性协议要求。
+  A. 原创代码 — MIT License
+     开源协议：https://opensource.org/licenses/MIT
+     路径：app/src/main/java/alin/android/alinos/**
 
-1. 代码模块与协议归属（仅供参考，请以实际上游为准）
+  B. Termux App 层 — GPLv3 only
+     上游：https://github.com/termux/termux-app
+     路径：app/src/main/java/com/termux/app/**
+     说明：原 TermuxActivity 已删除，代码已融入 alin.android.alinos.dev.LocalShellTestActivity
 
-模块路径或组件：app/src/main/java/alin/android/alinos
-上游项目：原创代码
-协议：MIT License
-说明：详见本文件末尾附录。
+  C. Termux 共享库 (termux-shared) — 主体 MIT，部分例外
+     上游：https://github.com/termux/termux-app
+     路径：app/src/main/java/com/termux/shared/**
+     例外：
+       - termux/*           → GPLv3 only（TermuxConstants、TermuxPropertyConstants 为 MIT）
+       - file/filesystem/*  → GPLv2 + Classpath Exception（来自 OpenJDK）
+       - shell/StreamGobbler.java → Apache 2.0（来自 https://github.com/Chainfire/libsuperuser）
 
-模块路径或组件：app/src/main/java/com/termux/app
-上游项目：termux/termux-app
-协议：GPLv3 only
-说明：强 Copyleft。若分发此部分代码，整个项目必须开源且使用 GPLv3。
+  D. 终端模拟器 (terminal-emulator) — Apache 2.0
+     上游：https://github.com/jackpal/Android-Terminal-Emulator
+     路径：app/src/main/java/com/termux/terminal/**
 
-模块路径或组件：terminal-emulator / terminal-view
-上游项目：jackpal/Android-Terminal-Emulator
-协议：Apache License 2.0
-说明：需保留原作者版权声明。
+  E. 终端视图 (terminal-view) — Apache 2.0
+     上游：https://github.com/jackpal/Android-Terminal-Emulator
+     路径：app/src/main/java/com/termux/view/**
 
-模块路径或组件：termux-shared（核心子目录 com/termux/shared/termux/）
-上游项目：termux/termux-app
-协议：GPLv3 only（部分）
-说明：主体为 MIT License，但上述核心子目录受 GPLv3 only 约束。
+  F. 文件选择器 — GPLv3 only
+     上游：https://github.com/termux/termux-app
+     路径：app/src/main/java/com/termux/filepicker/**
 
-以上信息仅供快速参考，不保证完整或准确。您必须自行查阅各上游源码仓库的 LICENSE 文件。
 
-1. 使用者义务
+二、原生库 (jniLibs) — GPLv3 only
 
-自行排查：您需逐一确认所有使用的上游代码是否存在强制性协议（如 GPLv3、AGPL 等）。自行承担风险：若您违反 GPLv3（例如闭源分发核心模块），后果由您自负。本声明不替代专业法律咨询。
+  上游：termux/termux-app
 
-附录：原创代码 MIT 协议原文
+  arm64-v8a/            x86_64/
+    liblocal-socket.so    liblocal-socket.so
+    libtar.so             libtar.so
+    libtermux.so          libtermux.so
 
-MIT License
+  armeabi-v7a/ (备用)   x86/ (备用)
+    librmt.so, libtar.so  librmt.so, libtar.so
 
-Copyright (c) 2025 heworkalin
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+三、预编译运行环境 (assets/files.default.*.tar.gz.so)
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+  四个架构的预编译 Termux 根文件系统镜像（共约 160MB），内含 openssh、bash、
+  openssl、coreutils、openjdk-17 等。由 Termux 官方软件仓库的 .deb 包经魔改
+  构建流程裁剪合并而成，非 Termux 官方 bootstrap。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+  文件：app/src/main/assets/files.default.{aarch64,arm,x86_64,i686}.tar.gz.so
 
----
+  其中各软件的协议以 Termux 官方仓库对应包的 LICENSE 为准（多数为 GPLv2/v3、
+  MIT、BSD），本 tar.gz 仅作为聚合分发载体。
 
-English Version
 
-AlinOs-for-android Open Source License Statement
+四、第三方依赖库
 
-1. Project Overview
+  com.jcraft:jsch:0.1.55               BSD-style     SSH 客户端
+  dev.rikka.shizuku:api:13.1.5         Apache 2.0    ADB 权限代理
+  dev.rikka.shizuku:provider:13.1.5    Apache 2.0    Shizuku Provider
+  org.lsposed.hiddenapibypass:6.1      Apache 2.0    隐藏 API 绕过
+  com.squareup.okhttp3:okhttp          Apache 2.0    HTTP 客户端
+  com.google.code.gson:gson:2.10.1     Apache 2.0    JSON 解析
+  commons-io:commons-io:2.15.1         Apache 2.0    IO 工具
+  io.noties.markwon:core:4.6.2         Apache 2.0    Markdown 渲染
+  io.noties:prism4j:2.0.0              Apache 2.0    代码高亮
+  com.airbnb.android:lottie:6.1.0      Apache 2.0    动画
+  AndroidX 系列                         Apache 2.0    Android 支持库
 
-This project is an early prototype integration based on termux/termux-app. No single open source license applies to the whole project. Different code modules are governed by multiple licenses, including MIT, GPLv3, Apache 2.0, etc.
 
-Critical Warning:
+五、使用者义务
 
-You must independently review the original license texts of all upstream components, especially the viral nature of GPLv3. The author provides no warranty of commercial usability and assumes no liability for your failure to comply with third-party license terms. If you plan to distribute (including release APK or source code) or commercially use this project, you must personally verify the mandatory license requirements of each module.
+  1. 分发本项目（含 APK）必须同时提供完整源代码，且必须以 GPLv3 授权。
+  2. 必须保留所有上游版权声明和协议文本。
+  3. GPLv3 具有传染性——链接或组合本项目的衍生作品也必须以 GPLv3 开源。
+  4. 本文档仅供参考，不构成法律建议。
 
-1. Code Modules and License Breakdown (Reference Only - Always Check Upstream)
 
-Module Path or Component: app/src/main/java/alin/android/alinos
-Upstream Project: Original code
-License: MIT License
-Description: See appendix at the end of this file.
+相关上游链接
 
-Module Path or Component: app/src/main/java/com/termux/app
-Upstream Project: termux/termux-app
-License: GPLv3 only
-Description: Strong Copyleft. Distributing this part forces the entire project to be open source under GPLv3.
+  GPLv3:              https://www.gnu.org/licenses/gpl-3.0.html
+  GPLv2 + Classpath:  https://openjdk.java.net/legal/gplv2+ce.html
+  Apache 2.0:         https://www.apache.org/licenses/LICENSE-2.0
+  MIT:                https://opensource.org/licenses/MIT
 
-Module Path or Component: terminal-emulator / terminal-view
-Upstream Project: jackpal/Android-Terminal-Emulator
-License: Apache License 2.0
-Description: Attribution required.
-
-Module Path or Component: termux-shared (core subdirectory com/termux/shared/termux/)
-Upstream Project: termux/termux-app
-License: GPLv3 only (partial)
-Description: The main body is under MIT License, but the above core subdirectory is bound by GPLv3 only.
-
-The above information is for quick reference only and may be incomplete or inaccurate. You must check the actual LICENSE files in each upstream repository.
-
-1. User Obligations
-
-Self-audit: You must verify the license terms of all upstream code you use, especially copyleft licenses (GPLv3, AGPL, etc.). Assume all risks: If you violate GPLv3 (e.g., distributing core modules in closed source), you bear full legal responsibility. This statement does not replace professional legal counsel.
-
-Appendix: MIT License for Original Code
-
-MIT License
-
-Copyright (c) 2025 heworkalin
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+  termux/termux-app:                  https://github.com/termux/termux-app
+  jackpal/Android-Terminal-Emulator:  https://github.com/jackpal/Android-Terminal-Emulator

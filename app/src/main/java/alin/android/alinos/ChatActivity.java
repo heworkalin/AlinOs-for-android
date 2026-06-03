@@ -42,13 +42,11 @@ import alin.android.alinos.bean.ConfigBean;
 import alin.android.alinos.db.ChatDBHelper;
 import alin.android.alinos.db.ConfigDBHelper;
 
-import alin.android.alinos.manager.EventBus;
-import alin.android.alinos.net.MessageSender;
 import alin.android.alinos.manager.ChatStreamEventBus;
 import alin.android.alinos.prompt.PromptService;
 import alin.android.alinos.utils.TokenEstimator;
 
-public class ChatActivity extends AppCompatActivity implements EventBus.EventListener {
+public class ChatActivity extends AppCompatActivity {
 
     // 新增日志TAG
     private static final String TAG = "ChatActivity_Stream";
@@ -95,8 +93,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         // 初始化提示词服务
         mPromptService = new PromptService(this);
 
-        // 注册事件监听器
-        EventBus.getInstance().register(this);
         // 初始化所有控件
         initViews();
         // 初始化适配器
@@ -225,93 +221,9 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     }
 
 
-    // 普通发送消息
+    // 发送消息（统一走流式路径）
     private void sendMessage() {
-        String content = etInput.getText().toString().trim();
-
-        // 非空校验
-        if (TextUtils.isEmpty(content)) {
-            Toast.makeText(this, "输入内容不能为空", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        if (mCurrentSessionId == -1 || mCurrentConfig == null) {
-            Toast.makeText(this, "请先选择会话并配置AI服务", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        // 校验用户输入长度
-        int charLimit = mCurrentConfig.getUserInputCharLimit();
-        if (content.length() > charLimit) {
-            Toast.makeText(this, "输入内容超过限制（最多" + charLimit + "字符），请缩短内容", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // 添加用户消息到UI
-        mMessageList.add(new ChatMessage(content, ChatMessage.TYPE_USER, false));
-        mChatAdapter.notifyItemInserted(mMessageList.size() - 1);
-        rvChat.scrollToPosition(mMessageList.size() - 1);
-
-        // 保存用户消息到数据库
-        ChatRecordBean userRecord = new ChatRecordBean(
-                mCurrentSessionId,
-                0,
-                "我",
-                content,
-                System.currentTimeMillis()
-        );
-        addRecordToDb(userRecord);
-        etInput.setText("");
-
-        // 使用提示词服务异步生成AI回复（支持历史上下文）
-        mPromptService.sendMessageWithHistoryAsync(mCurrentConfig, mCurrentSessionId, content, null, new PromptService.Callback() {
-            @Override
-            public void onResult(String aiReply) {
-                // 回到主线程处理
-                runOnUiThread(() -> {
-                    // 添加AI回复到UI
-                    mMessageList.add(new ChatMessage(aiReply, ChatMessage.TYPE_AI, false));
-                    mChatAdapter.notifyItemInserted(mMessageList.size() - 1);
-                    rvChat.scrollToPosition(mMessageList.size() - 1);
-
-                    // 保存AI回复到数据库（没有token信息）
-                    ChatRecordBean aiRecord = new ChatRecordBean(
-                            mCurrentSessionId,
-                            1,
-                            mCurrentConfig.getType(),
-                            aiReply,
-                            System.currentTimeMillis()
-                    );
-                    addRecordToDb(aiRecord);
-                });
-            }
-
-            @Override
-            public void onResultWithTokens(String aiReply, int promptTokens, int completionTokens, int totalTokens) {
-                // 回到主线程处理
-                runOnUiThread(() -> {
-                    // 添加AI回复到UI
-                    mMessageList.add(new ChatMessage(aiReply, ChatMessage.TYPE_AI, false));
-                    mChatAdapter.notifyItemInserted(mMessageList.size() - 1);
-                    rvChat.scrollToPosition(mMessageList.size() - 1);
-
-                    // 保存AI回复到数据库（包含token信息）
-                    ChatRecordBean aiRecord = new ChatRecordBean(
-                            mCurrentSessionId,
-                            1,
-                            mCurrentConfig.getType(),
-                            aiReply,
-                            System.currentTimeMillis()
-                    );
-                    // 设置token信息
-                    aiRecord.setPromptTokens(promptTokens);
-                    aiRecord.setCompletionTokens(completionTokens);
-                    aiRecord.setTotalTokens(totalTokens);
-                    // 设置消息内容本身的token数为completionTokens（实际值）
-                    aiRecord.setTokenCount(completionTokens);
-                    addRecordToDb(aiRecord);
-                });
-            }
-        });
+        sendStreamMessage();
     }
 
     // 流式发送消息
@@ -803,7 +715,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        EventBus.getInstance().unregister(this);
         AiConfigActivity.ActivityStateManager.getInstance().setChatActivityVisible(false);
         // 移除监听器
         if (mGlobalLayoutListener != null) {
@@ -832,22 +743,6 @@ public class ChatActivity extends AppCompatActivity implements EventBus.EventLis
         super.onPause();
         // 暂停时标记为不可见
         AiConfigActivity.ActivityStateManager.getInstance().setChatActivityVisible(false);
-    }
-
-    @Override
-    public void onEvent(String eventType, Object data) {
-        if (MessageSender.EVENT_AI_RESPONSE_RECEIVED.equals(eventType) && data instanceof MessageSender.EventMessage) {
-            MessageSender.EventMessage event = (MessageSender.EventMessage) data;
-
-            // 如果事件中的会话ID与当前会话相同，则刷新界面
-            if (event.getSessionId() == mCurrentSessionId) {
-                runOnUiThread(() -> {
-                    // 重新加载聊天记录
-                    loadChatRecords(mCurrentSessionId);
-                    Toast.makeText(this, "收到新消息", Toast.LENGTH_SHORT).show();
-                });
-            }
-        }
     }
 
     // ==============================================

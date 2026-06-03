@@ -939,7 +939,7 @@ public final class TermuxConstants {
 				+ ".app.api.file.FileViewReceiverActivity"; // Default: "com.termux.app.api.file.FileViewReceiverActivity"
 
 		/** Termux app core activity name. */
-		public static final String TERMUX_ACTIVITY_NAME = TERMUX_PACKAGE_NAME + ".app.TermuxActivity"; // Default: "com.termux.app.TermuxActivity"
+		public static final String TERMUX_ACTIVITY_NAME = "alin.android.alinos.dev.LocalShellTestActivity";
 
 		/**
 		 * Termux app core activity.
@@ -963,7 +963,7 @@ public final class TermuxConstants {
 
 			/**  Intent {@code boolean} extra for whether to recreate activity for the TERMUX_ACTIVITY.ACTION_RELOAD_STYLE intent. */
 			public static final String EXTRA_RECREATE_ACTIVITY = TERMUX_APP.TERMUX_ACTIVITY_NAME
-					+ ".EXTRA_RECREATE_ACTIVITY"; // Default: "com.termux.app.TermuxActivity.EXTRA_RECREATE_ACTIVITY"
+					+ ".EXTRA_RECREATE_ACTIVITY"; // Default: "alin.android.alinos.dev.LocalShellTestActivity.EXTRA_RECREATE_ACTIVITY"
 
 			/** Intent action to make termux request storage permissions */
 			public static final String ACTION_REQUEST_PERMISSIONS = TermuxConstants.TERMUX_PACKAGE_NAME_TERMUX

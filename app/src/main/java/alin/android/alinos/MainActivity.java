@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat;
 import alin.android.alinos.manager.ConsentDialogManager;
 
 import alin.android.alinos.manager.ShizukuManager;
+import alin.android.alinos.localshell.LocalShellExecutor;
 
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
@@ -44,6 +45,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Window window = getWindow();
         window.addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         setContentView(R.layout.activity_main);
+        // 提前启动 LocalShellService 绑定，确保后续 create_session 调用时服务已就绪
+        LocalShellExecutor.provideContext(this);
 
         // 初始化管理类
         shizukuManager = ShizukuManager.getInstance(this);
