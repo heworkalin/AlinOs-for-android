@@ -251,4 +251,78 @@
     <string name="text_to_voice_test_title">文字转语音测试</string>
     <string name="agent_main_name">Agent 主程序</string>
     <string name="accessibility_service_description">AlinOs 的无障碍服务</string>
+
+    <!-- ========== 基本操作（补充翻译） ========== -->
+    <string name="action_cancel">取消</string>
+    <string name="action_copy">复制</string>
+    <string name="action_share">分享</string>
+    <string name="action_save_to_file">保存到文件</string>
+    <string name="action_enable_launcher_icon">启用启动器图标</string>
+    <string name="action_disable_launcher_icon">禁用启动器图标</string>
+    <string name="copy_text">复制</string>
+    <string name="paste_text">粘贴</string>
+    <string name="text_selection_more">更多</string>
+
+    <!-- ========== 日志级别 ========== -->
+    <string name="log_level_title">日志级别</string>
+    <string name="log_level_off">关闭</string>
+    <string name="log_level_normal">普通</string>
+    <string name="log_level_debug">调试</string>
+    <string name="log_level_verbose">详细</string>
+    <string name="log_level_unknown">未知</string>
+    <string name="log_level_value">日志级别：%s</string>
+
+    <!-- ========== 设置相关 ========== -->
+    <string name="setting_launcher_icon_title">启动器图标</string>
+    <string name="msg_enabling_launcher_icon">正在启用启动器图标</string>
+    <string name="msg_disabling_launcher_icon">正在禁用启动器图标</string>
+    <string name="msg_report_issue">报告问题</string>
+    <string name="title_report_text">报告文本</string>
+    <string name="msg_report_truncated">报告在 %d 个字符处截断。</string>
+    <string name="title_share_with">分享到</string>
+    <string name="title_open_url_with">用以下方式打开 URL：</string>
+
+    <!-- ========== 文件/存储 ========== -->
+    <string name="msg_storage_permission_not_granted">存储权限未授予。</string>
+    <string name="msg_storage_permission_granted_on_request">存储权限已授予。</string>
+    <string name="msg_storage_permission_not_granted_on_request">存储权限未授予。</string>
+    <string name="msg_file_saved_successfully">文件已保存到 %s</string>
+    <string name="msg_directory_absolute_path">目录：%s</string>
+
+    <!-- ========== 错误信息 ========== -->
+    <string name="error_execution_cancelled">执行已取消。</string>
+    <string name="error_executable_unset">可执行文件路径未设置。</string>
+    <string name="error_failed_to_execute_termux_session_command">执行终端会话命令失败。</string>
+    <string name="error_failed_to_execute_app_shell_command">执行应用 shell 命令失败。</string>
+    <string name="error_exception_received_while_executing_termux_session_command">执行终端会话命令时出现异常。</string>
+    <string name="error_exception_received_while_executing_app_shell_command">执行应用 shell 命令时出现异常。</string>
+    <string name="error_sending_sigkill_to_process">正在向进程 %s 发送 SIGKILL……</string>
+    <string name="error_get_package_context_failed_title">获取包上下文失败</string>
+    <string name="error_get_package_context_failed_message">获取包 %s 的上下文失败。</string>
+    <string name="error_get_package_context_failed_help_url_message">错误信息：%s</string>
+    <string name="error_get_component_state_failed">获取 %s 的组件状态失败。</string>
+    <string name="error_enable_component_failed">启用组件 %s 失败。</string>
+    <string name="error_disable_component_failed">禁用组件 %s 失败。</string>
+    <string name="error_failed_to_request_permissions">请求 %s 的权限失败。</string>
+    <string name="error_attempted_to_check_for_permissions_not_requested">检查未请求的权限。</string>
+    <string name="error_attempted_to_ask_for_permissions_not_requested">请求未请求的权限。</string>
+    <string name="error_has_not_requested_legacy_external_storage">尚未请求旧版外部存储权限。</string>
+
+    <!-- ========== 权限相关 ========== -->
+    <string name="error_allow_external_apps_ungranted">尚未授予「允许外部应用」偏好。请打开 Termux 并运行「termux-allow-external-apps」命令进行授权。</string>
+    <string name="error_display_over_other_apps_permission_not_granted">未授予在其他应用上层显示的权限。请在系统设置中授予此权限以允许 Termux 从后台打开终端。</string>
+    <string name="msg_requires_dump_and_package_usage_stats_permissions">这需要 %s 和 %s 权限。</string>
+    <string name="msg_termux_app_required_by_app">%s 需要安装 Termux 应用才能运行。</string>
+    <string name="message_sudo_please_grant_permissions">请授予以下权限才能使用「sudo」和「tsu」命令：\n\n- %s</string>
+
+    <!-- ========== 其他 ========== -->
+    <string name="error_app_not_installed_or_disabled_warning">应用 %s 未安装或已禁用。</string>
+    <string name="error_termux_app_package_context_not_accessible">无法访问「%s」的 Termux 应用包上下文。</string>
+    <string name="error_termux_prefix_dir_path_not_accessible">无法访问「%s」的 Termux 前缀目录路径。</string>
+    <string name="ssh_test_title">SSH</string>
+    <string name="ssh_test_desc">SSH 远程连接与本地连接测试</string>
+
+    <!-- ========== 测试工具（原 translatable=false） ========== -->
+    <string name="tool_test_center">🧰 工具测试中心</string>
+    <string name="json_tool_test">JSON 工具函数测试</string>
 </resources>

@@ -57,7 +57,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         CardView cvAccessibility = findViewById(R.id.cv_accessibility);
         CardView cvAdb = findViewById(R.id.cv_adb); // 触发ADB（Shizuku替换）
         CardView cvScreenShare = findViewById(R.id.cv_screen_share);
-        CardView cv_ChatActivity = findViewById(R.id.cv_ChatActivity); // 修改：跳转ChatActivity2
+        CardView cv_ChatActivity = findViewById(R.id.cv_ChatActivity); // 修改：跳转ChatActivity
         CardView cvOverlayTest = findViewById(R.id.cv_overlay_test); // 新增：悬浮窗测试
         CardView cvBackgroundKeep = findViewById(R.id.cv_background_keep); // 新增：后台保活
         CardView cvAgentConfig = findViewById(R.id.cv_agent_config); // Agent配置

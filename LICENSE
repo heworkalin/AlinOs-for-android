@@ -7,34 +7,36 @@ AlinOs-for-android 开源协议声明
 
 一、代码模块归属
 
-  A. 原创代码 — MIT License
-     开源协议：https://opensource.org/licenses/MIT
-     路径：app/src/main/java/alin/android/alinos/**
-
-  B. Termux App 层 — GPLv3 only
+ A. Termux App 层 — GPLv3 only
      上游：https://github.com/termux/termux-app
      路径：app/src/main/java/com/termux/app/**
+     路径：app/src/main/java/com/termux/app/terminal/**
+     路径：app/src/main/java/com/termux/app/terminal/io/**
+     路径：app/src/main/java/com/termux/app/event/**
+     路径：app/src/main/java/alin/android/alinos/dev/LocalShellTestActivity.java
      说明：原 TermuxActivity 已删除，代码已融入 alin.android.alinos.dev.LocalShellTestActivity
 
-  C. Termux 共享库 (termux-shared) — 主体 MIT，部分例外
+ B. 原创代码 — MIT License
+     开源协议：https://opensource.org/licenses/MIT
+     路径：app/src/main/java/alin/android/alinos/**（除 LocalShellTestActivity.java）
+
+ C. Termux 共享库 (termux-shared) — 主体 MIT，部分例外
      上游：https://github.com/termux/termux-app
      路径：app/src/main/java/com/termux/shared/**
      例外：
-       - termux/*           → GPLv3 only（TermuxConstants、TermuxPropertyConstants 为 MIT）
-       - file/filesystem/*  → GPLv2 + Classpath Exception（来自 OpenJDK）
-       - shell/StreamGobbler.java → Apache 2.0（来自 https://github.com/Chainfire/libsuperuser）
+       - termux/TermuxConstants.java                         → MIT（文件头标注）
+       - termux/settings/properties/TermuxPropertyConstants.java → MIT（文件头标注）
+       - termux/ 下除上述两个文件外的其他 *.java            → GPLv3 only
+       - file/filesystem/*                                   → GPLv2 + Classpath Exception（来自 OpenJDK）
+       - shell/StreamGobbler.java                            → Apache 2.0（来自 https://github.com/Chainfire/libsuperuser）
 
-  D. 终端模拟器 (terminal-emulator) — Apache 2.0
+ D. 终端模拟器 (terminal-emulator) — Apache 2.0
      上游：https://github.com/jackpal/Android-Terminal-Emulator
      路径：app/src/main/java/com/termux/terminal/**
 
-  E. 终端视图 (terminal-view) — Apache 2.0
+ E. 终端视图 (terminal-view) — Apache 2.0
      上游：https://github.com/jackpal/Android-Terminal-Emulator
      路径：app/src/main/java/com/termux/view/**
-
-  F. 文件选择器 — GPLv3 only
-     上游：https://github.com/termux/termux-app
-     路径：app/src/main/java/com/termux/filepicker/**
 
 
 二、原生库 (jniLibs) — GPLv3 only
@@ -64,17 +66,17 @@ AlinOs-for-android 开源协议声明
 
 四、第三方依赖库
 
-  com.jcraft:jsch:0.1.55               BSD-style     SSH 客户端
-  dev.rikka.shizuku:api:13.1.5         Apache 2.0    ADB 权限代理
-  dev.rikka.shizuku:provider:13.1.5    Apache 2.0    Shizuku Provider
-  org.lsposed.hiddenapibypass:6.1      Apache 2.0    隐藏 API 绕过
-  com.squareup.okhttp3:okhttp          Apache 2.0    HTTP 客户端
-  com.google.code.gson:gson:2.10.1     Apache 2.0    JSON 解析
-  commons-io:commons-io:2.15.1         Apache 2.0    IO 工具
-  io.noties.markwon:core:4.6.2         Apache 2.0    Markdown 渲染
-  io.noties:prism4j:2.0.0              Apache 2.0    代码高亮
-  com.airbnb.android:lottie:6.1.0      Apache 2.0    动画
-  AndroidX 系列                         Apache 2.0    Android 支持库
+  com.jcraft:jsch:0.1.55                 BSD-style     SSH 客户端
+  dev.rikka.shizuku:api:13.1.5           Apache 2.0    ADB 权限代理
+  dev.rikka.shizuku:provider:13.1.5      Apache 2.0    Shizuku Provider
+  org.lsposed.hiddenapibypass:6.1        Apache 2.0    隐藏 API 绕过
+  com.squareup.okhttp3:okhttp            Apache 2.0    HTTP 客户端（media3 传递依赖）
+  com.google.code.gson:gson:2.10.1       Apache 2.0    JSON 解析
+  commons-io:commons-io:2.15.1           Apache 2.0    IO 工具
+  io.noties.markwon:core:4.6.2           Apache 2.0    Markdown 渲染
+  io.noties:prism4j:2.0.0                Apache 2.0    代码高亮
+  com.airbnb.android:lottie:6.1.0        Apache 2.0    动画
+  AndroidX 系列                          Apache 2.0    Android 支持库
 
 
 五、使用者义务
