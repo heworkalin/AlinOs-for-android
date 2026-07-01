@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git commit:*)",
-      "Bash(git add:*)",
-      "Bash(find d:/Android/app/AlinOs -type f -name *setup*storage*)"
-    ]
-  }
-}

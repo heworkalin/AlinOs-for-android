@@ -2,23 +2,19 @@ package alin.android.alinos.bean;
 
 /**
  * 聊天消息数据模型
+ * TYPE_USER=1, TYPE_AI=2（与 ChatActivity 内部类版本一致）
  */
 public class ChatMessage {
+    public static final int TYPE_USER = 1;   // 用户消息
+    public static final int TYPE_AI = 2;     // AI消息
 
-    public static final int TYPE_USER = 0;
-    public static final int TYPE_AI = 1;
+    public String content;                  // 消息内容
+    public int type;                        // 消息类型
+    public boolean isLoading;               // AI是否加载中
 
-    private final int type;       // TYPE_USER 或 TYPE_AI
-    private final String content; // Markdown 原文
-    private long timestamp;
-
-    public ChatMessage(int type, String content) {
-        this.type = type;
+    public ChatMessage(String content, int type, boolean isLoading) {
         this.content = content;
-        this.timestamp = System.currentTimeMillis();
+        this.type = type;
+        this.isLoading = isLoading;
     }
-
-    public int getType() { return type; }
-    public String getContent() { return content; }
-    public long getTimestamp() { return timestamp; }
 }

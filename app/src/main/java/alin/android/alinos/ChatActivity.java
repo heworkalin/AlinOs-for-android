@@ -1,31 +1,24 @@
 package alin.android.alinos;
 
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.GravityCompat;
@@ -36,12 +29,14 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.List;
 
+import alin.android.alinos.adapter.ChatAdapter;
+import alin.android.alinos.adapter.SessionAdapter;
+import alin.android.alinos.bean.ChatMessage;
 import alin.android.alinos.bean.ChatRecordBean;
 import alin.android.alinos.bean.ChatSessionBean;
 import alin.android.alinos.bean.ConfigBean;
 import alin.android.alinos.db.ChatDBHelper;
 import alin.android.alinos.db.ConfigDBHelper;
-
 import alin.android.alinos.manager.ChatStreamEventBus;
 import alin.android.alinos.prompt.PromptService;
 import alin.android.alinos.utils.TokenEstimator;
@@ -170,8 +165,9 @@ public class ChatActivity extends AppCompatActivity {
 
     // 初始化适配器
     private void initAdapter() {
-        // 聊天消息适配器
-        mChatAdapter = new ChatAdapter(this, mMessageList, rvChat);
+        // 聊天消息适配器（注入重发回调）
+        mChatAdapter = new ChatAdapter(this, mMessageList, rvChat,
+                content -> etInput.setText(content));
         LinearLayoutManager chatLayoutManager = new LinearLayoutManager(this);
         chatLayoutManager.setStackFromEnd(true); // 从底部开始显示
         rvChat.setLayoutManager(chatLayoutManager);
@@ -950,273 +946,5 @@ public class ChatActivity extends AppCompatActivity {
 
     public void setKeyboardShowing(boolean keyboardShowing) {
         isKeyboardShowing = keyboardShowing;
-    }
-
-// -------------------- 会话列表适配器 --------------------
-    private static class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionViewHolder> {
-        private final List<ChatSessionBean> mList;
-        private final OnSessionSelectListener mSelectListener;
-        private final OnSessionLongClickListener mLongClickListener;
-        private final java.util.function.Function<Integer, String> mConfigTypeProvider;
-        private final java.util.function.Function<Integer, String> mModelNameProvider;
-
-        public SessionAdapter(List<ChatSessionBean> list,
-                              OnSessionSelectListener selectListener,
-                              OnSessionLongClickListener longClickListener,
-                              java.util.function.Function<Integer, String> configTypeProvider,
-                              java.util.function.Function<Integer, String> modelNameProvider) {
-            mList = list;
-            mSelectListener = selectListener;
-            mLongClickListener = longClickListener;
-            mConfigTypeProvider = configTypeProvider;
-            mModelNameProvider = modelNameProvider;
-        }
-
-        @NonNull
-        @Override
-        public SessionViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.item_session, parent, false);
-            return new SessionViewHolder(view);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull SessionViewHolder holder, int position) {
-            ChatSessionBean session = mList.get(position);
-            holder.tvSessionName.setText(session.getSessionName());
-
-            // 通过configId获取AI类型和模型名称（使用提供的函数）
-            String configType = mConfigTypeProvider.apply(session.getConfigId());
-            String modelName = mModelNameProvider.apply(session.getConfigId());
-            holder.tvConfigType.setText("AI类型：" + configType + " | 模型：" + modelName);
-
-            // 点击选中会话
-            holder.itemView.setOnClickListener(v -> mSelectListener.onSelect(session));
-
-            // 长按弹出菜单
-            final int pos = holder.getAdapterPosition();
-            holder.itemView.setOnLongClickListener(v -> {
-                if (pos != RecyclerView.NO_POSITION) {
-                    mLongClickListener.onLongClick(session, pos);
-                }
-                return true;
-            });
-        }
-
-        @Override
-        public int getItemCount() {
-            return mList == null ? 0 : mList.size();
-        }
-
-        class SessionViewHolder extends RecyclerView.ViewHolder {
-            TextView tvSessionName, tvConfigType;
-
-            public SessionViewHolder(@NonNull View itemView) {
-                super(itemView);
-                tvSessionName = itemView.findViewById(R.id.tv_session_name);
-                tvConfigType = itemView.findViewById(R.id.tv_config_type);
-            }
-        }
-
-        interface OnSessionSelectListener {
-            void onSelect(ChatSessionBean session);
-        }
-
-        interface OnSessionLongClickListener {
-            void onLongClick(ChatSessionBean session, int position);
-        }
-    }
-
-    // -------------------- 聊天消息实体类 --------------------
-    public static class ChatMessage {
-        public static final int TYPE_USER = 1;   // 用户消息
-        public static final int TYPE_AI = 2;     // AI消息
-        public String content;                  // 消息内容
-        public int type;                        // 消息类型
-        public boolean isLoading;               // AI是否加载中
-
-        public ChatMessage(String content, int type, boolean isLoading) {
-            this.content = content;
-            this.type = type;
-            this.isLoading = isLoading;
-        }
-    }
-
-    // -------------------- 聊天适配器 --------------------
-    public static class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
-        private final Context mContext;
-        private final List<ChatMessage> mMessageList;
-        private final RecyclerView mRecyclerView;
-
-        // 构造方法
-        public ChatAdapter(Context context, List<ChatMessage> messageList, RecyclerView recyclerView) {
-            this.mContext = context;
-            this.mMessageList = messageList;
-            this.mRecyclerView = recyclerView; // 传入RecyclerView引用
-        }
-
-        // 刷新单条AI消息（流式增量更新）
-        public void updateAiMessage(int position, String newContent, boolean isLoading) {
-            if (position >= 0 && position < mMessageList.size()) {
-                ChatMessage msg = mMessageList.get(position);
-                if (msg.type == ChatMessage.TYPE_AI) {
-                    msg.content = newContent;
-                    msg.isLoading = isLoading;
-                    notifyItemChanged(position); // 局部刷新，避免闪烁
-
-                    // 核心修复：直接获取当前显示的ViewHolder，强制控制控件
-                    RecyclerView.ViewHolder holder = mRecyclerView.findViewHolderForAdapterPosition(position);
-                    if (holder instanceof AiViewHolder) {
-                        AiViewHolder aiHolder = (AiViewHolder) holder;
-                        // 强制隐藏/显示loading布局和转圈
-                        aiHolder.llAiLoading.setVisibility(isLoading ? View.VISIBLE : View.GONE);
-                        // 额外：停止ProgressBar动画（防止动画残留）
-                        if (!isLoading) {
-                            aiHolder.pbLoadingCircle.clearAnimation();
-                            aiHolder.pbLoadingCircle.setVisibility(View.GONE);
-                        } else {
-                            aiHolder.pbLoadingCircle.setVisibility(View.VISIBLE);
-                        }
-                    }
-                }
-            }
-        }
-
-        @NonNull
-        @Override
-        public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            LayoutInflater inflater = LayoutInflater.from(mContext);
-            if (viewType == ChatMessage.TYPE_USER) {
-                // 用户消息布局
-                View view = inflater.inflate(R.layout.item_chat_user, parent, false);
-                return new UserViewHolder(view);
-            } else {
-                // AI消息布局（核心）
-                View view = inflater.inflate(R.layout.item_chat_ai, parent, false);
-                return new AiViewHolder(view);
-            }
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-            ChatMessage message = mMessageList.get(position);
-            if (holder instanceof AiViewHolder) {
-                AiViewHolder aiHolder = (AiViewHolder) holder;
-                // 设置AI消息内容
-                aiHolder.tvAiContent.setText(message.content);
-                // 强制同步loading状态（核心：覆盖所有复用情况）
-                boolean isLoading = message.isLoading;
-                aiHolder.llAiLoading.setVisibility(isLoading ? View.VISIBLE : View.GONE);
-                aiHolder.pbLoadingCircle.setVisibility(isLoading ? View.VISIBLE : View.GONE);
-                if (!isLoading) {
-                    aiHolder.pbLoadingCircle.clearAnimation(); // 停止动画
-                }
-                // 同步提示文案
-                if (isLoading) {
-                    aiHolder.tvLoadingTips.setText("模型正在思考中...");
-                }
-            } else if (holder instanceof UserViewHolder) {
-                UserViewHolder userHolder = (UserViewHolder) holder;
-                userHolder.tvUserContent.setText(message.content);
-
-                // 用户消息长按事件
-                holder.itemView.setOnLongClickListener(v -> {
-                    PopupMenu popupMenu = new PopupMenu(mContext, v);
-                    popupMenu.getMenuInflater().inflate(R.menu.user_message_menu, popupMenu.getMenu());
-                    popupMenu.setOnMenuItemClickListener(item -> {
-                        int itemId = item.getItemId();
-                        if (itemId == R.id.menu_copy) {
-                            copyToClipboard(mContext, message.content);
-                            return true;
-                        } else if (itemId == R.id.menu_resend) {
-                            ((ChatActivity)mContext).etInput.setText(message.content);
-                            Toast.makeText(mContext, "已复制到输入框", Toast.LENGTH_SHORT).show();
-                            return true;
-                        } else if (itemId == R.id.menu_delete) {
-                            Toast.makeText(mContext, "删除消息功能待实现", Toast.LENGTH_SHORT).show();
-                            return true;
-                        }
-                        return false;
-                    });
-                    popupMenu.show();
-                    return true;
-                });
-            }
-        }
-
-        // 复制到剪贴板
-        private void copyToClipboard(Context context, String text) {
-            ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clip = ClipData.newPlainText("聊天消息", text);
-            clipboard.setPrimaryClip(clip);
-            Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show();
-        }
-
-        @Override
-        public int getItemViewType(int position) {
-            return mMessageList.get(position).type;
-        }
-
-        @Override
-        public int getItemCount() {
-            return mMessageList.size();
-        }
-
-        // AI消息ViewHolder
-        static class AiViewHolder extends RecyclerView.ViewHolder {
-            TextView tvAiContent;
-            LinearLayout llAiLoading;
-            TextView tvLoadingTips;
-            ProgressBar pbLoadingCircle;
-
-            public AiViewHolder(@NonNull View itemView) {
-                super(itemView);
-                tvAiContent = itemView.findViewById(R.id.tv_ai_content);
-                llAiLoading = itemView.findViewById(R.id.ll_ai_loading);
-                tvLoadingTips = itemView.findViewById(R.id.tv_loading_tips);
-                pbLoadingCircle = itemView.findViewById(R.id.pb_loading_circle);
-
-                // AI消息长按事件
-                itemView.setOnLongClickListener(v -> {
-                    Context context = itemView.getContext();
-                    PopupMenu popupMenu = new PopupMenu(context, v);
-                    popupMenu.getMenuInflater().inflate(R.menu.ai_message_menu, popupMenu.getMenu());
-                    popupMenu.setOnMenuItemClickListener(item -> {
-                        int itemId = item.getItemId();
-                        if (itemId == R.id.menu_copy) {
-                            copyToClipboard(context, tvAiContent.getText().toString());
-                            return true;
-                        } else if (itemId == R.id.menu_regenerate) {
-                            Toast.makeText(context, "重新生成中...", Toast.LENGTH_SHORT).show();
-                            return true;
-                        } else if (itemId == R.id.menu_delete) {
-                            Toast.makeText(context, "删除消息功能待实现", Toast.LENGTH_SHORT).show();
-                            return true;
-                        }
-                        return false;
-                    });
-                    popupMenu.show();
-                    return true;
-                });
-            }
-
-            // 复制到剪贴板
-            private void copyToClipboard(Context context, String text) {
-                ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("聊天消息", text);
-                clipboard.setPrimaryClip(clip);
-                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show();
-            }
-        }
-
-        // 用户消息ViewHolder
-        static class UserViewHolder extends RecyclerView.ViewHolder {
-            TextView tvUserContent;
-
-            public UserViewHolder(@NonNull View itemView) {
-                super(itemView);
-                tvUserContent = itemView.findViewById(R.id.tv_user_content);
-            }
-        }
     }
 }

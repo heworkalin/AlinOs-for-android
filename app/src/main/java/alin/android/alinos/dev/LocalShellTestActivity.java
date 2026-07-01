@@ -77,6 +77,7 @@ import alin.android.alinos.localshell.LocalShellService;
 
 /**
  * 独立终端 Activity — 深度融合 TermuxActivity 的全部终端基础设施。
+ * 基于termux-app的TermuxActivity，提供完整的终端功能.虽然不再使用内置的服务，单独编译的自己的服务。但是源代码来源仍然是TermuxActivity。需自行评估版权风险。
  * 直接绑定 LocalShellService，支持 SSH 直连、环境安装。
  */
 public class LocalShellTestActivity extends AppCompatActivity implements ServiceConnection {

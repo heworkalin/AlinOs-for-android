@@ -6,12 +6,14 @@
     android:id="@+id/drawer_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true">
+    android:fitsSystemWindows="true"
+    android:background="#F5F5F5">
 
     <!-- 主内容区：聊天界面 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="#F5F5F5"
         android:orientation="vertical">
 
         <!-- 状态栏占位 -->
@@ -19,74 +21,83 @@
             android:layout_width="match_parent"
             android:layout_height="15dp" />
 
-        <!-- 标题栏 - 优化图标和添加模型切换 -->
-        <LinearLayout
+        <!-- ======= 蓝色 CardView 标题栏（与 SSH 风格统一） ======= -->
+        <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:background="#65838383"
-            android:gravity="center_vertical">
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="#2D8CF0">
 
-            <!-- 左侧菜单图标 - 增加触摸反馈 -->
-            <ImageView
-                android:id="@+id/iv_menu"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="12dp"
-                android:src="@drawable/ic_menu"
-                android:contentDescription="菜单"
-                android:foreground="?attr/selectableItemBackground"
-                app:tint="#000000"
-                tools:srcCompat="@drawable/ic_menu" />
-
-            <!-- 标题区域 - 可点击切换模型 -->
             <LinearLayout
-                android:id="@+id/ll_title_container"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground">
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-                <TextView
-                    android:id="@+id/tv_session_name"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="AlinOs 聊天"
-                    android:textColor="#000000"
-                    android:textSize="18sp"
-                    android:maxLines="1"
-                    android:ellipsize="end"/>
+                <!-- 左侧菜单图标 -->
+                <ImageView
+                    android:id="@+id/iv_menu"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_menu"
+                    android:contentDescription="菜单"
+                    android:foreground="?attr/selectableItemBackground"
+                    app:tint="#FFFFFF" />
 
-                <TextView
-                    android:id="@+id/tv_model_name"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="GPT-3.5"
-                    android:textColor="#666666"
-                    android:textSize="14sp"
-                    android:maxLines="1"
-                    android:ellipsize="end"/>
+                <!-- 标题区域 - 可点击切换模型 -->
+                <LinearLayout
+                    android:id="@+id/ll_title_container"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <TextView
+                        android:id="@+id/tv_session_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="AlinOs 聊天"
+                        android:textColor="#FFFFFF"
+                        android:textSize="15sp"
+                        android:maxLines="1"
+                        android:ellipsize="end"/>
+
+                    <TextView
+                        android:id="@+id/tv_model_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="GPT-3.5"
+                        android:textColor="#D0E8FF"
+                        android:textSize="12sp"
+                        android:maxLines="1"
+                        android:ellipsize="end"/>
+                </LinearLayout>
+
+                <!-- 右侧新建会话按钮 -->
+                <ImageView
+                    android:id="@+id/iv_menu_add"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_menu_add"
+                    android:contentDescription="新建会话"
+                    android:foreground="?attr/selectableItemBackground"
+                    app:tint="#FFFFFF" />
+
             </LinearLayout>
-
-            <!-- 右侧添加按钮 -->
-            <ImageView
-                android:id="@+id/iv_menu_add"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="12dp"
-                android:src="@drawable/ic_menu_add"
-                android:contentDescription="新建会话"
-                android:foreground="?attr/selectableItemBackground"
-                app:tint="#000000"
-                tools:srcCompat="@drawable/ic_menu_add" />
-        </LinearLayout>
+        </androidx.cardview.widget.CardView>
 
         <!-- 聊天记录列表 -->
         <androidx.recyclerview.widget.RecyclerView
@@ -96,28 +107,26 @@
             android:layout_weight="1"
             android:padding="8dp"/>
 
-        <!-- ===================== 新增：动态按钮容器 ===================== -->
+        <!-- 动态按钮容器 -->
         <LinearLayout
             android:id="@+id/ll_dynamic_buttons"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:padding="8dp"
-            android:background="#ffffff"
+            android:background="#F5F5F5"
             android:gravity="center_vertical"
             android:visibility="gone">
-            <!-- 这里用于代码动态添加按钮，默认隐藏，有按钮时显示 -->
         </LinearLayout>
-        <!-- ============================================================ -->
 
-        <!-- 输入区域 - 修复软键盘弹出问题 -->
+        <!-- 输入区域 -->
         <LinearLayout
             android:id="@+id/input_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:padding="8dp"
-            android:background="#f5f5f5">
+            android:background="#F5F5F5">
 
             <EditText
                 android:id="@+id/et_input"
@@ -136,8 +145,9 @@
                 android:layout_width="wrap_content"
                 android:layout_height="48dp"
                 android:layout_marginStart="8dp"
+                android:layout_marginEnd="4dp"
                 android:text="发送"
-                android:background="#000000"
+                android:background="@drawable/bg_ssh_connect_btn"
                 android:textColor="#ffffff"/>
         </LinearLayout>
     </LinearLayout>
@@ -154,14 +164,35 @@
             android:layout_width="match_parent"
             android:layout_height="30dp" />
 
-        <TextView
+        <!-- 侧边栏头部（蓝色，与 SSH 风格统一） -->
+        <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="#f5f5f5"
-            android:gravity="center"
-            android:text="会话列表"
-            android:textColor="#000000"
-            android:textSize="18sp" />
+            android:layout_height="48dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_ssh_header">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:text="会话列表"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp" />
+
+            <ImageView
+                android:id="@+id/iv_settings"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:padding="8dp"
+                android:src="@drawable/ic_settings"
+                android:contentDescription="设置"
+                android:foreground="?attr/selectableItemBackground"
+                app:tint="#FFFFFF" />
+
+        </RelativeLayout>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rv_session_list"

@@ -174,7 +174,8 @@
             android:exported="false" />
         <activity
             android:name="alin.android.alinos.AgentConfigActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         
         <activity
             android:name="alin.android.alinos.TextToSpeechActivity"
@@ -216,16 +217,6 @@
             android:documentLaunchMode="intoExisting" />
 
         <!-- ========== Termux 提供者/接收器/服务（保留 proot 核心能力） ========== -->
-        <provider
-            android:name="com.termux.filepicker.TermuxDocumentsProvider"
-            android:authorities="${applicationId}.documents"
-            android:exported="true"
-            android:grantUriPermissions="true"
-            android:permission="android.permission.MANAGE_DOCUMENTS">
-            <intent-filter>
-                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
-            </intent-filter>
-        </provider>
 
 <receiver
             android:name="com.termux.app.event.SystemEventReceiver"
