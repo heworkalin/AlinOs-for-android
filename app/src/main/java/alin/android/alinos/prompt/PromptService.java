@@ -14,6 +14,8 @@ import alin.android.alinos.bean.ConfigBean;
 import alin.android.alinos.db.ChatDBHelper;
 import alin.android.alinos.manager.ChatStreamEventBus;
 import alin.android.alinos.net.OpenAIStreamNetHelper;
+import alin.android.alinos.tools.ToolConverter;
+import alin.android.alinos.tools.ToolRegistry;
 import alin.android.alinos.utils.TokenEstimator;
 
 /**
@@ -75,9 +77,26 @@ public class PromptService {
             return;
         }
 
+        // 构建 tools 定义（当前使用测试工具集，后续由 ToolIntentRouter 按需加载）
+        JSONArray tools = buildToolsPayload();
+
         // 直接创建流式助手
         mStreamNetHelper = new OpenAIStreamNetHelper(mContext, config);
-        mStreamNetHelper.sendStreamMessageWithMessages(sessionId, messages, listener);
+        mStreamNetHelper.sendStreamMessageWithMessages(sessionId, messages, tools, listener);
+    }
+
+    /**
+     * 从 ToolRegistry 加载工具并转为 OpenAI tools 格式。
+     * 当前统一加载全部已注册工具（11个localshell + 4个测试），
+     * 后续由 ToolIntentRouter 按意图只注入本轮需要的子集。
+     */
+    private JSONArray buildToolsPayload() {
+        try {
+            return ToolConverter.convertAll(ToolRegistry.getAllTools());
+        } catch (Exception e) {
+            Log.w(TAG, "构建tools载荷失败", e);
+            return null;
+        }
     }
 
     /**

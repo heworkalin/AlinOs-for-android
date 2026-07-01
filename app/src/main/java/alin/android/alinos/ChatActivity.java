@@ -39,7 +39,13 @@ import alin.android.alinos.db.ChatDBHelper;
 import alin.android.alinos.db.ConfigDBHelper;
 import alin.android.alinos.manager.ChatStreamEventBus;
 import alin.android.alinos.prompt.PromptService;
+import alin.android.alinos.tools.ToolCallCoordinator;
 import alin.android.alinos.utils.TokenEstimator;
+import alin.android.alinos.db.ToolCallDbHelper;
+import alin.android.alinos.bean.ToolCallLogBean;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class ChatActivity extends AppCompatActivity {
 
@@ -56,6 +62,7 @@ public class ChatActivity extends AppCompatActivity {
     // 数据库 & 数据相关
     private ChatDBHelper mChatDbHelper;
     private static ConfigDBHelper mConfigDbHelper;
+    private ToolCallDbHelper mToolCallDbHelper;
     private List<ChatSessionBean> mSessionList;
     private SessionAdapter mSessionAdapter;
     private ChatAdapter mChatAdapter;
@@ -71,6 +78,8 @@ public class ChatActivity extends AppCompatActivity {
     private long mStreamRecordId = -1; // 流式消息ID（隔离原有ID）
     private final StringBuilder mStreamContentBuffer = new StringBuilder();
     private int mAiMessagePosition = -1; // AI消息在列表中的位置
+    private int mThinkMessagePosition = -1; // Think 块消息位置
+    private int mToolCallStartPosition = -1; // 工具调用卡片起始位置
     private boolean isStreamLoading = false;
     private boolean isStreamFinished = false;   // 标记流式是否真正完成
     private final Handler mStreamHandler = new Handler(Looper.getMainLooper()); // 用于错误重试
@@ -85,6 +94,7 @@ public class ChatActivity extends AppCompatActivity {
         // 初始化数据库
         mChatDbHelper = new ChatDBHelper(this);
         mConfigDbHelper = new ConfigDBHelper(this);
+        mToolCallDbHelper = new ToolCallDbHelper(this);
         // 初始化提示词服务
         mPromptService = new PromptService(this);
 
@@ -204,13 +214,85 @@ public class ChatActivity extends AppCompatActivity {
     private void loadChatRecords(int sessionId) {
         List<ChatRecordBean> records = getRecordsBySessionIdFromDb(sessionId);
         mMessageList.clear();
+
+        // 预加载工具调用日志（按 record_id 索引，方便查找）
+        java.util.Map<Integer, ToolCallLogBean> toolCallMap = new java.util.HashMap<>();
+        if (mToolCallDbHelper != null) {
+            for (ToolCallLogBean tc : mToolCallDbHelper.getBySessionId(sessionId)) {
+                toolCallMap.put(tc.getId(), tc);
+            }
+        }
+        // 记录 chat_record 中工具标记的插入顺序，用于回填序号
+        java.util.Map<Integer, Integer> markerOrder = new java.util.HashMap<>();
+        int markerSeq = 0;
+
+        // 加载聊天文本记录
         for (ChatRecordBean record : records) {
             if (TextUtils.isEmpty(record.getContent())) continue;
-            int type = record.getMsgType() == 0 ? ChatMessage.TYPE_USER : ChatMessage.TYPE_AI;
-            mMessageList.add(new ChatMessage(record.getContent(), type, false));
+
+            String content = record.getContent();
+            int type;
+
+            // 检测工具调用标记：[tool_call]工具名
+            if (record.getMsgType() == 2 || content.startsWith("[tool_call]")) {
+                String toolName = content.startsWith("[tool_call]")
+                        ? content.substring(11) : "unknown";
+                type = ChatMessage.TYPE_TOOL_CALL;
+
+                // 从 tool_call_log 按顺序获取对应记录
+                ToolCallLogBean tc = null;
+                int seq = markerSeq++;
+                markerOrder.put(record.getId(), seq);
+
+                // 按顺序在 toolCallMap 中找到对应序号的记录
+                int found = 0;
+                for (ToolCallLogBean t : mToolCallDbHelper.getBySessionId(sessionId)) {
+                    if (found == seq) { tc = t; break; }
+                    found++;
+                }
+
+                if (tc != null) {
+                    try {
+                        JSONObject card = new JSONObject();
+                        card.put("toolName", tc.getToolName() != null ? tc.getToolName() : toolName);
+                        card.put("args", tc.getArguments() != null ? tc.getArguments() : "");
+                        card.put("request", "tool_call_id: " + (tc.getToolCallId() != null ? tc.getToolCallId() : "")
+                                + "\narguments: " + (tc.getArguments() != null ? tc.getArguments() : ""));
+                        card.put("response", "status: " + (tc.getStatus() != null ? tc.getStatus() : "unknown")
+                                + "\n" + (tc.getResult() != null ? tc.getResult() : ""));
+                        card.put("log", "耗时: " + tc.getDurationMs() + "ms"
+                                + (tc.getErrorMessage() != null ? "\n错误: " + tc.getErrorMessage() : "")
+                                + "\nDB ID: #" + tc.getId());
+                        card.put("status", "success".equals(tc.getStatus()) ? "✅"
+                                : "error".equals(tc.getStatus()) ? "❌" : "⏳");
+                        card.put("duration", tc.getDurationMs() > 0 ? (tc.getDurationMs() / 1000.0) + "s" : "");
+                        mMessageList.add(new ChatMessage(card.toString(), ChatMessage.TYPE_TOOL_CALL, false));
+                        continue;
+                    } catch (Exception e) {
+                        Log.w(TAG, "构建工具卡片失败", e);
+                    }
+                }
+
+                // 没有详细数据时，显示简版标记
+                JSONObject simpleCard = new JSONObject();
+                try {
+                    simpleCard.put("toolName", toolName);
+                    simpleCard.put("args", "");
+                    simpleCard.put("request", "");
+                    simpleCard.put("response", "");
+                    simpleCard.put("log", "无详细日志");
+                    simpleCard.put("status", "✅");
+                    simpleCard.put("duration", "");
+                } catch (Exception ignored) {}
+                mMessageList.add(new ChatMessage(simpleCard.toString(), ChatMessage.TYPE_TOOL_CALL, false));
+                continue;
+            }
+
+            type = record.getMsgType() == 0 ? ChatMessage.TYPE_USER : ChatMessage.TYPE_AI;
+            mMessageList.add(new ChatMessage(content, type, false));
         }
+
         mChatAdapter.notifyDataSetChanged();
-        // 滚动到最新消息
         if (mChatAdapter.getItemCount() > 0) {
             rvChat.scrollToPosition(mChatAdapter.getItemCount() - 1);
         }
@@ -281,11 +363,10 @@ public class ChatActivity extends AppCompatActivity {
 
     // 流式事件处理方法
     private void handleStreamEvent(ChatStreamEventBus.StreamEventData data) {
-        // 异常处理
+        // ========== 异常处理 ==========
         if (data.isError()) {
             Log.e(TAG, "流式错误：" + data.getErrorMsg());
 
-            // 处理503错误和超时错误的重试逻辑
             if ((data.getErrorMsg().contains("503") || data.getErrorMsg().contains("[超时重试]")) && retryCount < 3) {
                 retryCount++;
                 Log.d(TAG, "503服务不可用，第" + retryCount + "次重试...");
@@ -298,43 +379,139 @@ public class ChatActivity extends AppCompatActivity {
             }
 
             String errorContent = "[流式异常] " + data.getErrorMsg();
-            writeStreamRecordToDb(errorContent); // 复用方法
+            writeStreamRecordToDb(errorContent);
             handleStreamFinish();
             if (mAiMessagePosition != -1) {
                 mChatAdapter.updateAiMessage(mAiMessagePosition, errorContent, false);
             }
             Toast.makeText(this, data.getErrorMsg(), Toast.LENGTH_SHORT).show();
-            retryCount = 0; // 重置重试计数
+            retryCount = 0;
             return;
         }
 
-        // 增量缓存，不立即更库
-        if (!data.isFinish() && !TextUtils.isEmpty(data.getChunkContent())) {
-            Log.d(TAG, "收到分片事件，长度=" + data.getChunkContent().length() +
-                  ", 累计缓存=" + mStreamContentBuffer.length());
-            long currentReceiveTime = System.currentTimeMillis();
-
-            // 超时管理已迁移到OpenAIStreamNetHelper
-
-            // 正常接收分片：缓存+更新UI
-            mStreamContentBuffer.append(data.getChunkContent());
-            Log.d(TAG, "流式缓存长度：" + mStreamContentBuffer.length());
-            mChatAdapter.updateAiMessage(mAiMessagePosition, mStreamContentBuffer.toString(), true);
-            rvChat.scrollToPosition(mAiMessagePosition);
-
-
-
+        // ========== Think 块事件 ==========
+        if (data.getFullContent() != null && data.isFinish()
+                && data.getToolCallsJson() == null
+                && !TextUtils.isEmpty(data.getFullContent())
+                && mThinkMessagePosition >= 0) {
+            // Think 块结束 → 自动折叠
+            mChatAdapter.updateThinkMessage(mThinkMessagePosition, data.getFullContent(), true);
+            return;
         }
 
-        // 流式结束：先更新数据库，再处理UI（核心修复）
-        if (data.isFinish()) {
+        // ========== 工具调用事件 ==========
+        if (data.getToolCallsJson() != null && !data.getToolCallsJson().isEmpty()) {
+            Log.d(TAG, "🛠️ 收到工具调用事件，启动协调器");
+
+            try {
+                JSONArray toolCalls = new JSONArray(data.getToolCallsJson());
+
+                // 先保存起始位置（必须在 handleStreamFinish 之前，因为它会重置）
+                final int toolCallStartPos = mMessageList.size();
+
+                // 结束流式状态，重置相关位置（但 mToolCallStartPosition 不在这里用了）
+                handleStreamFinish();
+
+                // 为每个工具添加 TYPE_TOOL_CALL 占位消息 + 写入位置标记
+                for (int i = 0; i < toolCalls.length(); i++) {
+                    String toolName = toolCalls.getJSONObject(i)
+                            .getJSONObject("function").optString("name", "unknown");
+                    JSONObject placeholder = new JSONObject();
+                    placeholder.put("toolName", toolName);
+                    placeholder.put("status", "⏳");
+                    placeholder.put("duration", "");
+                    placeholder.put("args", "");
+                    placeholder.put("request", "");
+                    placeholder.put("response", "");
+                    placeholder.put("log", "执行中...");
+
+                    mMessageList.add(new ChatMessage(
+                            placeholder.toString(), ChatMessage.TYPE_TOOL_CALL, true));
+                    mChatAdapter.notifyItemInserted(mMessageList.size() - 1);
+
+                    // 写入位置标记到聊天记录（用于恢复时定位）
+                    ChatRecordBean marker = new ChatRecordBean(
+                            mCurrentSessionId, 2, "tool", "[tool_call]" + toolName, System.currentTimeMillis());
+                    addRecordToDb(marker);
+                }
+                rvChat.scrollToPosition(mMessageList.size() - 1);
+
+                // 用局部变量捕获起始位置，回调不再依赖成员变量
+                final int capturedStartPos = toolCallStartPos;
+
+                // 启动工具调用协调器（带卡片更新回调）
+                ToolCallCoordinator coordinator = new ToolCallCoordinator(
+                        this, mCurrentConfig, mCurrentSessionId,
+                        buildCurrentMessages(), (eventType, eventData) -> {
+                    runOnUiThread(() -> handleStreamEvent(eventData));
+                }, (messageIndex, cardJson, isExecuting) -> {
+                    // 工具卡片 UI 更新回调 — 必须在主线程执行
+                    runOnUiThread(() -> {
+                        int pos = capturedStartPos + messageIndex;
+                        if (pos >= 0 && pos < mMessageList.size()) {
+                            mChatAdapter.updateToolCallMessage(pos, cardJson, isExecuting);
+                        }
+                    });
+                });
+                coordinator.execute(toolCalls);
+
+            } catch (Exception e) {
+                Log.e(TAG, "解析工具调用失败", e);
+            }
+            return;
+        }
+
+        // ========== Think 块增量 ==========
+        if (!data.isFinish() && !TextUtils.isEmpty(data.getChunkContent())) {
+            // 检测是否包含 Think 起始标记
+            String chunk = data.getChunkContent();
+            if (chunk.contains("<think>") && mThinkMessagePosition == -1) {
+                // 创建 Think 块消息
+                mThinkMessagePosition = mMessageList.size();
+                mMessageList.add(new ChatMessage("", ChatMessage.TYPE_THINK, false));
+                mChatAdapter.notifyItemInserted(mThinkMessagePosition);
+                rvChat.scrollToPosition(mThinkMessagePosition);
+            }
+
+            if (mThinkMessagePosition >= 0) {
+                // 正在 Think 阶段，积累到 Think 内容
+                // AI 文本内容不显示（等待 Think 结束后显示）
+                return;
+            }
+        }
+
+        // ========== 普通文本增量 ==========
+        if (!data.isFinish() && !TextUtils.isEmpty(data.getChunkContent())) {
+            // 工具调用循环后重新生成时，创建新的 AI 消息位置
+            if (mAiMessagePosition == -1 && mThinkMessagePosition == -1) {
+                mAiMessagePosition = mMessageList.size();
+                mMessageList.add(new ChatMessage("", ChatMessage.TYPE_AI, true));
+                mChatAdapter.notifyItemInserted(mAiMessagePosition);
+                rvChat.scrollToPosition(mAiMessagePosition);
+            }
+
+            mStreamContentBuffer.append(data.getChunkContent());
+            if (mStreamContentBuffer.length() % 100 < 10) {
+                Log.d(TAG, "流式缓存长度：" + mStreamContentBuffer.length());
+            }
+            mChatAdapter.updateAiMessage(mAiMessagePosition, mStreamContentBuffer.toString(), true);
+            rvChat.scrollToPosition(mAiMessagePosition);
+            return;
+        }
+
+        // ========== 流式结束（普通文本） ==========
+        if (data.isFinish() && data.getToolCallsJson() == null) {
             Log.d(TAG, "流式完成，总长度：" + mStreamContentBuffer.length());
-            String finalContent = data.getFullContent() != null ? data.getFullContent().trim() : mStreamContentBuffer.toString().trim();
+            String finalContent = data.getFullContent() != null
+                    ? data.getFullContent().trim()
+                    : mStreamContentBuffer.toString().trim();
+
             if (TextUtils.isEmpty(finalContent)) {
                 finalContent = "[空回复] 服务端未返回有效内容";
-                Log.w(TAG, "流式完成但内容为空，使用mStreamContentBuffer: " + mStreamContentBuffer.length());
+                Log.w(TAG, "流式完成但内容为空");
             }
-            writeStreamRecordToDb(finalContent); // 复用方法
+
+            writeStreamRecordToDb(finalContent);
             handleStreamFinish();
             if (mAiMessagePosition != -1) {
                 mChatAdapter.updateAiMessage(mAiMessagePosition, finalContent, false);
@@ -343,9 +520,40 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    /** 构建当前完整消息历史（用于工具调用回注）。 */
+    private JSONArray buildCurrentMessages() {
+        try {
+            JSONArray arr = new JSONArray();
+            arr.put(new JSONObject()
+                    .put("role", "system")
+                    .put("content", "你是一个AI助手，回答简洁专业。"));
+            // 添加最后几轮对话历史
+            List<ChatRecordBean> history = mPromptService != null
+                    ? mPromptService.getChatHistory(mCurrentSessionId)
+                    : new ArrayList<>();
+            int start = Math.max(0, history.size() - 10);
+            for (int i = start; i < history.size(); i++) {
+                ChatRecordBean r = history.get(i);
+                String role = r.getMsgType() == 0 ? "user" : "assistant";
+                arr.put(new JSONObject()
+                        .put("role", role)
+                        .put("content", r.getContent()));
+            }
+            arr.put(new JSONObject()
+                    .put("role", "user")
+                    .put("content", etInput.getText().toString().trim()));
+            return arr;
+        } catch (Exception e) {
+            Log.e(TAG, "构建消息历史失败", e);
+            return new JSONArray();
+        }
+    }
+
     // 流式完成的处理方法
     private void handleStreamFinish() {
         isStreamFinished = true;
+        mThinkMessagePosition = -1; // 重置 Think 块位置
+        mToolCallStartPosition = -1; // 重置工具卡片起始位置
         // 超时检测任务已由OpenAIStreamNetHelper管理
 
         // 核心修复：直接调用适配器，强制隐藏转圈

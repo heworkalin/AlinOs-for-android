@@ -67,6 +67,7 @@ public class ChatStreamEventBus {
         private int promptTokens;
         private int completionTokens;
         private int totalTokens;
+        private String toolCallsJson; // 工具调用数据（JSON数组）
 
         // 快速构建增量消息
         public static StreamEventData buildChunk(int sessionId, String chunkContent) {
@@ -109,6 +110,36 @@ public class ChatStreamEventBus {
             return data;
         }
 
+        // 快速构建工具调用消息（流式结束，触发执行循环）
+        public static StreamEventData buildToolCalls(int sessionId, String toolCallsJson) {
+            StreamEventData data = new StreamEventData();
+            data.sessionId = sessionId;
+            data.toolCallsJson = toolCallsJson;
+            data.isFinish = true;
+            data.isError = false;
+            return data;
+        }
+
+        // 快速构建Think块消息
+        public static StreamEventData buildThinkChunk(int sessionId, String thinkContent) {
+            StreamEventData data = new StreamEventData();
+            data.sessionId = sessionId;
+            data.chunkContent = thinkContent;
+            data.isFinish = false;
+            data.isError = false;
+            return data;
+        }
+
+        // 快速构建Think块结束消息
+        public static StreamEventData buildThinkFinish(int sessionId, String fullThinkContent) {
+            StreamEventData data = new StreamEventData();
+            data.sessionId = sessionId;
+            data.fullContent = fullThinkContent;
+            data.isFinish = true;
+            data.isError = false;
+            return data;
+        }
+
         // Getter方法（补全缺失的getter）
         public int getSessionId() { return sessionId; }
         public String getChunkContent() { return chunkContent; }
@@ -119,5 +150,6 @@ public class ChatStreamEventBus {
         public int getPromptTokens() { return promptTokens; }
         public int getCompletionTokens() { return completionTokens; }
         public int getTotalTokens() { return totalTokens; }
+        public String getToolCallsJson() { return toolCallsJson; }
     }
 }

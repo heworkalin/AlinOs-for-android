@@ -68,6 +68,7 @@ public class OpenAIStreamNetHelper {
     private boolean mReceivedUsageFromServer = false;
     private JSONArray mCurrentMessages = null;
     private String mCurrentUserMessage = null;
+    private JSONArray mCurrentTools = null; // 当前请求的工具定义
 
     public OpenAIStreamNetHelper(Context context, ConfigBean config) {
         this.mContext = context;
@@ -193,10 +194,19 @@ public class OpenAIStreamNetHelper {
     // ========== 核心公共方法：解析流式响应 ==========
     // 原来两个方法的 onResponse 里有完全相同的解析逻辑，现在统一在这里维护。
 
+    // 工具调用累积状态（流式解析用）
+    private JSONArray mAccumulatedToolCalls = null;
+    private boolean mIsToolCallsResponse = false;
+
     private void parseStreamResponse(ResponseBody responseBody, int sessionId,
                                      ChatStreamEventBus.StreamEventListener listener) throws IOException {
         BufferedSource source = responseBody.source();
         String line;
+
+        // 重置工具调用累积状态
+        mAccumulatedToolCalls = new JSONArray();
+        mIsToolCallsResponse = false;
+        boolean hasToolCallsFinish = false;
 
         int chunkCount = 0;
         while ((line = source.readUtf8Line()) != null && mIsStreamRunning) {
@@ -210,97 +220,126 @@ public class OpenAIStreamNetHelper {
             if ("[DONE]".equals(dataStr)) break;
 
             chunkCount++;
-            Log.d(TAG, "🔷 分片#" + chunkCount + "，长度=" + dataStr.length() + ", 预览: " +
-                    (dataStr.length() > 200 ? dataStr.substring(0, 200) : dataStr));
+            if (chunkCount <= 3 || chunkCount % 50 == 0) {
+                Log.d(TAG, "🔷 分片#" + chunkCount + "，长度=" + dataStr.length());
+            }
 
             try {
                 JSONObject chunkJson = new JSONObject(dataStr);
-                Log.d(TAG, "chunkJson keys: " + chunkJson.keys());
 
-                // ✅ 修复：只有 usage 字段非 null 且有内容时才当作 usage 帧处理
-                // NVIDIA API 每帧都携带 "usage": null，旧写法 has("usage") 会把所有内容帧都跳过
-                
-                // ========== 修复：正确判断 usage 帧，兼容 NVIDIA / minimax ==========
+                // ========== usage 帧判断 ==========
                 boolean isUsageFrame = false;
                 boolean hasContent = false;
+                boolean hasToolCalls = false;
 
-                // 先检查是否有有效content
                 if (chunkJson.has("choices") && chunkJson.getJSONArray("choices").length() > 0) {
-                    JSONObject delta = chunkJson.getJSONArray("choices").getJSONObject(0).optJSONObject("delta");
-                    if (delta != null && (delta.has("content") || delta.has("text") || delta.has("message") || delta.has("response"))) {
-                        String testContent = delta.optString("content",
-                                          delta.optString("text",
-                                          delta.optString("message",
-                                          delta.optString("response", ""))));
-                        if (!TextUtils.isEmpty(testContent)) {
+                    JSONObject choice = chunkJson.getJSONArray("choices").getJSONObject(0);
+                    JSONObject delta = choice.optJSONObject("delta");
+                    if (delta != null) {
+                        // 检测 content
+                        if (delta.has("content") && !delta.isNull("content")
+                                && !TextUtils.isEmpty(delta.optString("content", ""))) {
                             hasContent = true;
+                        }
+                        // 检测 tool_calls
+                        if (delta.has("tool_calls")) {
+                            hasToolCalls = true;
+                        }
+                    }
+                    // 检测 finish_reason
+                    if (choice.has("finish_reason") && !choice.isNull("finish_reason")) {
+                        String fr = choice.optString("finish_reason", "");
+                        if ("tool_calls".equals(fr)) {
+                            hasToolCallsFinish = true;
+                            Log.d(TAG, "🛠️ 检测到 finish_reason=tool_calls");
                         }
                     }
                 }
 
-                // 判断是否为有效usage帧
+                // usage 帧处理
                 if (chunkJson.has("usage")) {
                     Object usageObj = chunkJson.get("usage");
-                    // 只有 usage 不为 null && 不是JSONObject.NULL && 是对象 && 不为空 才是 usage 帧
-                    if (usageObj != null && usageObj != JSONObject.NULL &&
-                        usageObj instanceof JSONObject && ((JSONObject) usageObj).length() > 0) {
+                    if (usageObj != null && usageObj != JSONObject.NULL
+                            && usageObj instanceof JSONObject && ((JSONObject) usageObj).length() > 0) {
                         isUsageFrame = true;
-                        Log.d(TAG, "检测到有效usage帧，usage字段长度：" + ((JSONObject) usageObj).length());
+                        JSONObject usage = chunkJson.getJSONObject("usage");
+                        int promptTokens = usage.optInt("prompt_tokens", 0);
+                        int completionTokens = usage.optInt("completion_tokens", 0);
+                        int totalTokens = usage.optInt("total_tokens", 0);
+                        listener.onStreamEvent("stream_chat",
+                                ChatStreamEventBus.StreamEventData.buildUsage(sessionId, promptTokens, completionTokens, totalTokens));
+                        mReceivedUsageFromServer = true;
                     }
                 }
-
-                // 处理usage信息（如果有）
-                if (isUsageFrame) {
-                    Log.d(TAG, "处理usage帧Token信息");
-                    JSONObject usage = chunkJson.getJSONObject("usage");
-                    int promptTokens = usage.optInt("prompt_tokens", 0);
-                    int completionTokens = usage.optInt("completion_tokens", 0);
-                    int totalTokens = usage.optInt("total_tokens", 0);
-                    listener.onStreamEvent("stream_chat",
-                            ChatStreamEventBus.StreamEventData.buildUsage(sessionId, promptTokens, completionTokens, totalTokens));
-                    mReceivedUsageFromServer = true;
-                }
-
-                // 只有纯usage帧（无有效content）时才跳过内容处理
-                if (isUsageFrame && !hasContent) {
-                    Log.d(TAG, "纯usage帧，跳过内容处理");
+                if (isUsageFrame && !hasContent && !hasToolCalls) {
                     continue;
                 }
 
-                // 正常内容分片
-                Log.d(TAG, "🔵 开始处理内容分片，hasContent=" + hasContent + ", isUsageFrame=" + isUsageFrame);
-                JSONArray choices = chunkJson.getJSONArray("choices");
-                Log.d(TAG, "choices长度: " + choices.length());
-                if (choices.length() == 0) {
-                    Log.d(TAG, "空choices帧，跳过");
+                // ========== tool_calls 分片累积 ==========
+                if (hasToolCalls) {
+                    JSONArray choices = chunkJson.getJSONArray("choices");
+                    JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
+                    JSONArray toolCallsDelta = delta.getJSONArray("tool_calls");
+                    mIsToolCallsResponse = true;
+
+                    for (int i = 0; i < toolCallsDelta.length(); i++) {
+                        JSONObject tc = toolCallsDelta.getJSONObject(i);
+                        int idx = tc.getInt("index");
+
+                        // 找到或创建该 index 的 tool_call 条目
+                        JSONObject target = null;
+                        for (int j = 0; j < mAccumulatedToolCalls.length(); j++) {
+                            if (mAccumulatedToolCalls.getJSONObject(j).optInt("index", -1) == idx) {
+                                target = mAccumulatedToolCalls.getJSONObject(j);
+                                break;
+                            }
+                        }
+                        if (target == null) {
+                            target = new JSONObject();
+                            target.put("index", idx);
+                            target.put("id", "");
+                            target.put("type", "function");
+                            JSONObject func = new JSONObject();
+                            func.put("name", "");
+                            func.put("arguments", "");
+                            target.put("function", func);
+                            mAccumulatedToolCalls.put(target);
+                        }
+
+                        // 增量填充
+                        if (tc.has("id") && !tc.isNull("id")) {
+                            target.put("id", tc.getString("id"));
+                        }
+                        if (tc.has("type") && !tc.isNull("type")) {
+                            target.put("type", tc.getString("type"));
+                        }
+                        if (tc.has("function")) {
+                            JSONObject funcDelta = tc.getJSONObject("function");
+                            JSONObject func = target.getJSONObject("function");
+                            if (funcDelta.has("name") && !funcDelta.isNull("name")) {
+                                func.put("name", funcDelta.getString("name"));
+                            }
+                            if (funcDelta.has("arguments") && !funcDelta.isNull("arguments")) {
+                                String curr = func.optString("arguments", "");
+                                curr += funcDelta.getString("arguments");
+                                func.put("arguments", curr);
+                            }
+                        }
+                    }
+                    continue; // tool_calls 内容不由常规文本通道处理
+                }
+
+                // ========== 正常文本分片 ==========
+                if (!hasContent) {
                     continue;
                 }
 
-                JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
-                Log.d(TAG, "delta has content: " + delta.has("content") +
-                        ", isNull: " + delta.isNull("content"));
-
-                // 提取内容，支持多种字段名
-                String chunkContent = "";
-                if (delta.has("content") && !delta.isNull("content")) {
-                    chunkContent = delta.getString("content");
-                } else if (delta.has("text") && !delta.isNull("text")) {
-                    chunkContent = delta.getString("text");
-                } else if (delta.has("message") && !delta.isNull("message")) {
-                    chunkContent = delta.getString("message");
-                } else if (delta.has("response") && !delta.isNull("response")) {
-                    chunkContent = delta.getString("response");
-                }
-
-                Log.d(TAG, "提取内容长度: " + chunkContent.length());
+                JSONObject delta = chunkJson.getJSONArray("choices").getJSONObject(0).getJSONObject("delta");
+                String chunkContent = delta.optString("content", "");
 
                 if (TextUtils.isEmpty(chunkContent)) {
-                    Log.d(TAG, "chunkContent为空，跳过该分片");
                     continue;
                 }
-
-                Log.d(TAG, "成功提取chunkContent: '" +
-                        (chunkContent.length() > 30 ? chunkContent.substring(0, 30) : chunkContent) + "'");
 
                 long currentTime = System.currentTimeMillis();
                 mLastChunkReceiveTime = currentTime;
@@ -310,20 +349,20 @@ public class OpenAIStreamNetHelper {
                 }
                 resetIntervalTimeout();
 
-                // 聚合推送（包含累积操作）
+                // Think 块剥离
+                if (chunkContent.contains("<think>") || chunkContent.contains("</think>")
+                        || mStreamCache.toString().contains("<think>")) {
+                    // 流式过程中累积 think 内容，统一在结束后分离
+                }
+
+                // 累积到缓存
                 synchronized (mChunkBuffer) {
-                    // 累积到缓存
                     mChunkBuffer.append(chunkContent);
                     mStreamCache.append(chunkContent);
-                    Log.d(TAG, "✅ 成功追加内容，chunk长度=" + chunkContent.length() +
-                          ", mChunkBuffer长度=" + mChunkBuffer.length() +
-                          ", mStreamCache长度=" + mStreamCache.length());
 
-                    // 检查是否需要发送（阈值=1，每次都会发送）
                     if (mChunkBuffer.length() >= AGGREGATE_THRESHOLD ||
                             (currentTime - mLastPushTime) >= PUSH_TIMEOUT) {
                         String aggregated = mChunkBuffer.toString();
-                        Log.d(TAG, "🚀 发送聚合chunk事件，长度=" + aggregated.length());
                         listener.onStreamEvent("stream_chat",
                                 ChatStreamEventBus.StreamEventData.buildChunk(sessionId, aggregated));
                         mChunkBuffer.setLength(0);
@@ -332,45 +371,78 @@ public class OpenAIStreamNetHelper {
                 }
 
             } catch (Exception e) {
-                Log.e(TAG, "解析分片失败: " + (dataStr.length() > 100 ? dataStr.substring(0, 100) : dataStr), e);
+                if (chunkCount <= 5) {
+                    Log.e(TAG, "解析分片失败: " + (dataStr.length() > 100 ? dataStr.substring(0, 100) : dataStr), e);
+                }
             }
         }
 
         // 推送剩余分片
         synchronized (mChunkBuffer) {
             if (mChunkBuffer.length() > 0) {
-                String remaining = mChunkBuffer.toString();
-                Log.d(TAG, "发送剩余chunk，长度=" + remaining.length());
                 listener.onStreamEvent("stream_chat",
-                        ChatStreamEventBus.StreamEventData.buildChunk(sessionId, remaining));
+                        ChatStreamEventBus.StreamEventData.buildChunk(sessionId, mChunkBuffer.toString()));
                 mChunkBuffer.setLength(0);
             }
         }
 
-        // 通知结束
+        // ========== 完成处理 ==========
         String finalContent;
         synchronized (mStreamCache) {
             finalContent = mStreamCache.toString();
-            Log.d(TAG, "📊 流式结束统计：mStreamCache长度=" + finalContent.length());
-            if (finalContent.isEmpty()) {
-                Log.w(TAG, "⚠️ 警告：mStreamCache为空，检查分片处理逻辑");
-                // 打印最近处理的分片信息用于调试
-                Log.d(TAG, "最近分片处理状态：mIsStreamRunning=" + mIsStreamRunning +
-                      ", mIsFirstChunkReceived=" + mIsFirstChunkReceived +
-                      ", mReceivedUsageFromServer=" + mReceivedUsageFromServer);
-            } else {
-                Log.d(TAG, "流式内容预览：" + (finalContent.length() > 100 ? finalContent.substring(0, 100) + "..." : finalContent));
-            }
         }
 
-        // 过滤 <think>...</think> 思考块，不显示给用户
-        //String beforeFilter = finalContent;
-       // finalContent = finalContent.replaceAll("(?s)<think>.*?</think>", "").trim();
-       // Log.d(TAG, "🔧 过滤思考块：过滤前长度=" + beforeFilter.length() + "，过滤后长度=" + finalContent.length());
+        // 分离 Think 块内容
+        String thinkContent = "";
+        String cleanContent = finalContent;
+        if (finalContent.contains("<think>") && finalContent.contains("</think>")) {
+            int start = finalContent.indexOf("<think>") + 7;
+            int end = finalContent.indexOf("</think>");
+            if (start < end) {
+                thinkContent = finalContent.substring(start, end).trim();
+                cleanContent = (finalContent.substring(0, start - 7)
+                        + finalContent.substring(end + 8)).trim();
+            }
+        }
+        if (!thinkContent.isEmpty()) {
+            Log.d(TAG, "🧠 检测到 Think 块，长度=" + thinkContent.length());
+            listener.onStreamEvent("stream_chat",
+                    ChatStreamEventBus.StreamEventData.buildThinkFinish(sessionId, thinkContent));
+        }
 
-        listener.onStreamEvent("stream_chat",
-                ChatStreamEventBus.StreamEventData.buildFinish(sessionId, finalContent));
-        Log.d(TAG, "📤 发送流式结束事件，sessionId=" + sessionId + "，最终内容长度=" + finalContent.length());
+        // 如果是 tool_calls 响应，发送工具调用事件
+        if (hasToolCallsFinish && mAccumulatedToolCalls.length() > 0) {
+            try {
+                JSONArray cleanedCalls = new JSONArray();
+                for (int i = 0; i < mAccumulatedToolCalls.length(); i++) {
+                    JSONObject tc = mAccumulatedToolCalls.getJSONObject(i);
+                    JSONObject cleaned = new JSONObject();
+                    cleaned.put("id", tc.optString("id", "call_" + i));
+                    cleaned.put("type", "function");
+                    JSONObject func = new JSONObject();
+                    JSONObject fn = tc.optJSONObject("function");
+                    String fnName = fn != null ? fn.optString("name", "") : "";
+                    String fnArgs = fn != null ? fn.optString("arguments", "{}") : "{}";
+                    func.put("name", fnName);
+                    func.put("arguments", fnArgs);
+                    cleaned.put("function", func);
+                    cleanedCalls.put(cleaned);
+                }
+
+                Log.d(TAG, "🛠️ 发送工具调用事件，共 " + cleanedCalls.length() + " 个工具");
+                listener.onStreamEvent("stream_chat",
+                        ChatStreamEventBus.StreamEventData.buildToolCalls(sessionId, cleanedCalls.toString()));
+            } catch (Exception e) {
+                Log.e(TAG, "构建 tool_calls 事件失败", e);
+                listener.onStreamEvent("stream_chat",
+                        ChatStreamEventBus.StreamEventData.buildError("工具调用解析失败"));
+            }
+        } else {
+            // 正常文本结束
+            listener.onStreamEvent("stream_chat",
+                    ChatStreamEventBus.StreamEventData.buildFinish(sessionId, cleanContent));
+            Log.d(TAG, "📤 流式完成，最终内容长度=" + cleanContent.length());
+        }
     }
 
     // ========== 公共请求逻辑 ==========
@@ -464,6 +536,12 @@ public class OpenAIStreamNetHelper {
 
     public void sendStreamMessageWithMessages(int sessionId, JSONArray messages,
                                               ChatStreamEventBus.StreamEventListener listener) {
+        sendStreamMessageWithMessages(sessionId, messages, null, listener);
+    }
+
+    public void sendStreamMessageWithMessages(int sessionId, JSONArray messages,
+                                              JSONArray tools,
+                                              ChatStreamEventBus.StreamEventListener listener) {
         if (!validateConfig()) {
             listener.onStreamEvent("stream_chat", ChatStreamEventBus.StreamEventData.buildError("配置不完整"));
             return;
@@ -479,6 +557,7 @@ public class OpenAIStreamNetHelper {
         mReceivedUsageFromServer = false;
         mCurrentMessages = messages;
         mCurrentUserMessage = null;
+        mCurrentTools = tools;
 
         synchronized (mStreamCache) { synchronized (mChunkBuffer) {
             mStreamCache.setLength(0); mChunkBuffer.setLength(0);
@@ -546,6 +625,11 @@ public class OpenAIStreamNetHelper {
             jsonBody.put("max_tokens", mConfig.getMaxResponseTokens());
             jsonBody.put("stream", true);
             jsonBody.put("messages", messages);
+            if (mCurrentTools != null && mCurrentTools.length() > 0) {
+                jsonBody.put("tools", mCurrentTools);
+                jsonBody.put("tool_choice", "auto");
+                Log.d(TAG, "注入 " + mCurrentTools.length() + " 个工具定义");
+            }
             if (mServerSupportsStreamOptions) {
                 jsonBody.put("stream_options", new JSONObject().put("include_usage", true));
             }
