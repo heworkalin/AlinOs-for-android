@@ -76,6 +76,27 @@
     <!-- TermuxApp DayNight NoActionBar theme. -->
     <style name="Theme.TermuxApp.DayNight.NoActionBar" parent="Theme.BaseActivity.DayNight.NoActionBar"/>
 
+    <!-- ChatActivity 主题：AppCompat NoActionBar 基 + 蓝色调 Material 对话框 -->
+    <style name="ChatActivityTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="alertDialogTheme">@style/ChatDialogOverlay</item>
+    </style>
+
+    <!-- ChatActivity 对话框蓝色调 + 圆角 -->
+    <style name="ChatDialogOverlay" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorPrimary">#1976D2</item>
+        <item name="colorPrimaryVariant">#1565C0</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#1976D2</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        <item name="dialogCornerRadius">12dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColorPrimary">#333333</item>
+    </style>
+    <!-- ChatActivity PopupMenu 圆角 -->
+    <style name="ChatPopupOverlay">
+        <item name="android:popupBackground">@drawable/card_background</item>
+    </style>
+
     <!-- TermuxActivity DayNight NoActionBar theme. -->
     <style name="Theme.TermuxActivity.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.NoActionBar">
         <item name="colorPrimary">@color/black</item>
