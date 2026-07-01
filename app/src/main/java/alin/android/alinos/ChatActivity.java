@@ -1,5 +1,6 @@
 package alin.android.alinos;
 
+import android.content.Intent;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
@@ -145,6 +146,7 @@ public class ChatActivity extends AppCompatActivity {
         etInput = findViewById(R.id.et_input);
         ImageView ivMenu = findViewById(R.id.iv_menu);
         ImageView ivMenuAdd = findViewById(R.id.iv_menu_add);
+        ImageView ivSettings = findViewById(R.id.iv_settings);
         Button btnSend = findViewById(R.id.btn_send);
         LinearLayout inputLayout = findViewById(R.id.input_layout);
 
@@ -160,8 +162,15 @@ public class ChatActivity extends AppCompatActivity {
         // 新建会话按钮
         ivMenuAdd.setOnClickListener(v -> createNewSession());
 
-        // 标题栏点击事件 - 切换模型
-        llTitleContainer.setOnClickListener(v -> showModelSwitchDialog());
+        // 设置按钮（侧边栏右上角）
+        ivSettings.setOnClickListener(v ->
+                startActivity(new Intent(ChatActivity.this, SettingsActivity.class)));
+
+        // 标题栏点击事件 - 切换模型（侧边栏打开时不触发，防止触摸穿透）
+        llTitleContainer.setOnClickListener(v -> {
+            if (drawerLayout.isDrawerOpen(GravityCompat.START)) return;
+            showModelSwitchDialog();
+        });
 
         // 发送按钮点击事件
         btnSend.setOnClickListener(v -> sendMessage());
@@ -765,7 +774,7 @@ public class ChatActivity extends AppCompatActivity {
             itemView = rvSessionList;
         }
 
-        PopupMenu popupMenu = new PopupMenu(this, itemView);
+        PopupMenu popupMenu = new PopupMenu(this, itemView, 0, 0, R.style.ChatPopupOverlay);
         popupMenu.getMenuInflater().inflate(R.menu.session_long_click_menu, popupMenu.getMenu());
 
         popupMenu.setOnMenuItemClickListener(item -> {
@@ -775,9 +784,6 @@ public class ChatActivity extends AppCompatActivity {
                 return true;
             } else if (itemId == R.id.menu_delete) {
                 deleteSession(session);
-                return true;
-            } else if (itemId == R.id.menu_switch_model) {
-                showModelSwitchDialog();
                 return true;
             }
             return false;

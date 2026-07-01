@@ -159,7 +159,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         holder.tvUserContent.setText(message.content);
 
         holder.itemView.setOnLongClickListener(v -> {
-            PopupMenu popupMenu = new PopupMenu(mContext, v);
+            PopupMenu popupMenu = new PopupMenu(mContext, v, 0, 0, R.style.ChatPopupOverlay);
             popupMenu.getMenuInflater().inflate(R.menu.user_message_menu, popupMenu.getMenu());
             popupMenu.setOnMenuItemClickListener(item -> {
                 int itemId = item.getItemId();
@@ -281,7 +281,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
             itemView.setOnLongClickListener(v -> {
                 Context context = itemView.getContext();
-                PopupMenu popupMenu = new PopupMenu(context, v);
+                PopupMenu popupMenu = new PopupMenu(context, v, 0, 0, R.style.ChatPopupOverlay);
                 popupMenu.getMenuInflater().inflate(R.menu.ai_message_menu, popupMenu.getMenu());
                 popupMenu.setOnMenuItemClickListener(item -> {
                     int itemId = item.getItemId();

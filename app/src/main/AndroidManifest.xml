@@ -176,7 +176,11 @@
             android:name="alin.android.alinos.AgentConfigActivity"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-        
+
+        <activity
+            android:name="alin.android.alinos.SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         <activity
             android:name="alin.android.alinos.TextToSpeechActivity"
             android:exported="true"/>
@@ -189,7 +193,7 @@
             android:launchMode="singleTask"
             android:exported="false"
             android:windowSoftInputMode="adjustResize|stateHidden"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+            android:theme="@style/ChatActivityTheme" />
 
         <activity
             android:name="alin.android.alinos.dev.LocalShellTestActivity"

@@ -6,7 +6,4 @@
     <item
         android:id="@+id/menu_delete"
         android:title="删除"/>
-    <item
-        android:id="@+id/menu_switch_model"
-        android:title="切换模型"/>
 </menu>

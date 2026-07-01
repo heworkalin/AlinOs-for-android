@@ -1,6 +1,6 @@
 # AlinOs AI Agent 能力规划与现状分析
 
-> 生成日期：2026-07-01（更新于 2026-07-01）  
+> 生成日期：2026-07-01（更新于 2026-07-01 第2版）  
 > 目的：明确 AI Agent 应具备的核心能力，对照 AlinOs 当前完成度，确定下一步开发方向
 
 ---
@@ -580,24 +580,28 @@ Tool Loop: ✅ 完成 | 共调用 2 个工具 | 总耗时: 4.2s
 |----------|------|:------:|:----:|
 | **感知层** | ChatActivity 输入/流式渲染 | ✅ 90% | 已投产 |
 | **感知层** | 多模态输入（图片/文件） | ⬜ 0% | 未开始 |
-| **规划层** | 工具选择 | 🔶 20% | ToolRegistry 已注册但未接入对话流 |
-| **规划层** | 按需加载 | ⬜ 0% | 未开始 |
+| **规划层** | 工具选择 | 🔶 60% | ToolCallCoordinator 已接入循环 |
+| **规划层** | 按需加载（ToolIntentRouter） | ⬜ 0% | 未开始 |
 | **规划层** | 错误重试（503 重试） | ✅ 80% | 已实现 |
 | **工具层** | 工具定义模型（ToolMeta） | ✅ 90% | 已实现 |
-| **工具层** | 工具注册表（ToolRegistry） | ✅ 90% | 已注册 11 个工具 |
-| **工具层** | **Function Calling 标准对接** | 🔶 **10%** | **核心缺口** |
-| **工具层** | 流式 tool_calls 解析 | ⬜ 0% | 未开始 |
-| **工具层** | 多工具并行执行 | ⬜ 0% | 未开始 |
-| **工具层** | 搜索工具注册 | ⬜ 0% | 待注册 |
-| **UI 层** | Think 卡片 | ⬜ 0% | 未开始 |
-| **UI 层** | 工具调用卡片 | ⬜ 0% | 未开始 |
+| **工具层** | 工具注册表（ToolRegistry） | ✅ 90% | 16 个工具已注册 |
+| **工具层** | **Tool Calling 循环** | ✅ **85%** | **已跑通：解析→执行→回注→递归** |
+| **工具层** | ToolMeta → OpenAI JSON Schema 转换 | ✅ 90% | ToolConverter 已完成 |
+| **工具层** | 流式 tool_calls 解析 | ✅ 85% | delta.tool_calls 累积 + finish_reason 检测 |
+| **工具层** | Think 块分离 | ✅ 80% | <think> 标签剥离独立事件 |
+| **工具层** | 测试工具集 | ✅ 100% | get_weather/get_time/calculate/search_tools |
+| **工具层** | 多工具并行执行 | ✅ 80% | 循环内支持多 tool_calls |
+| **工具层** | 搜索工具（元工具） | ✅ 100% | search_tools 注册完成 |
+| **工具层** | meta-tool（技能搜索） | ✅ 100% | search_tools 可查询已注册工具 |
+| **UI 层** | Think 卡片 | ✅ 80% | 可折叠，流式展开→结束折叠 |
+| **UI 层** | 工具调用卡片 | ✅ 80% | 摘要+展开详情，耗时/状态显示 |
+| **UI 层** | 历史工具加载 | ✅ 80% | chat_record 标记定位+tool_call_log 详情 |
 | **记忆层** | 短期记忆（上下文窗口） | ✅ 80% | PromptService 已实现 |
 | **记忆层** | 会话持久化（SQLite） | ✅ 90% | ChatDBHelper |
 | **记忆层** | Token 估算与窗口控制 | ✅ 80% | TokenEstimator |
-| **记忆层** | 工具调用日志库 | ⬜ 0% | 未开始 |
+| **记忆层** | 工具调用日志库 | ✅ 90% | ToolCallDbHelper + ToolCallLogBean |
 | **反馈层** | 错误处理 | ✅ 60% | 超时重试、流式异常处理 |
-| **反馈层** | 人工确认 | ✅ 50% | Shizuku 授权流程 |
-| **安全层** | Shizuku 提权控制 | ✅ 70% | ShizukuManager |
+| **安全层** | Shizuku 提权控制 | ❌ 已删除 | 无 Shizuku 服务，不必保留 |
 
 ### 8.2 当前已走通 vs 待走通
 
@@ -613,21 +617,31 @@ Tool Loop: ✅ 完成 | 共调用 2 个工具 | 总耗时: 4.2s
 
 ## 九、路线图：按优先级排序
 
-### 🔴 P0 — 必须优先实现（核心缺口）
+### 🔴 P0 — 已完成 ✅
 
-| # | 任务 | 涉及 | 工作量 |
-|:-:|:----|:-----|:------:|
-| 1 | **测试工具集注册** | 新增 4 个固定假工具（get_weather/get_time/search_web/calculate） | 1 文件，~60 行 |
-| 2 | **ToolMeta → OpenAI JSON Schema 转换** | 将 ToolMeta 参数定义自动转为 `tools` 数组 | 1 文件，~100 行 |
-| 3 | **PromptService 注入 tools 参数** | 请求时携带 tools + tool_choice | 修改 2 文件 |
-| 4 | **流式 tool_calls 解析** | parseStreamResponse 识别 finish_reason + 按 index 归并增量 | 修改 1 文件，~150 行 |
-| 5 | **Think 块剥离 + 事件回调** | 流式解析中识别 `<think>` 标签，拆分为独立事件 | 修改 1 文件，~50 行 |
-| 6 | **Tool Calling 循环引擎** | 收到 tool_calls → 并发执行 → 回注 → 重新调用 → 循环直到结束 | 新增 ToolCallCoordinator.java，~250 行 |
-| 7 | **UI: Think 卡片** | 可折叠 Think 气泡（流式展开→结束后自动折叠） | 修改 ChatActivity + ChatAdapter |
-| 8 | **UI: 工具调用卡片** | 摘要模式 + 点击展开完整内容 | 修改 ChatActivity + ChatAdapter |
-| 9 | **工具调用日志 DB** | 新建 tool_call_log 表记录完整入参/出参/耗时/状态 | 新增 ToolCallDbHelper.java |
-| 10 | **调试日志** | 每次循环打印完整 API 响应 + 执行过程到 Logcat | 少 |
-| 11 | **搜索工具注册** | 注册 search_web 到 ToolRegistry | 少 |
+| # | 任务 | 状态 | 说明 |
+|:-:|:----|:----:|:-----|
+| 1 | 测试工具集注册 | ✅ | get_weather/get_time/calculate + search_tools 元工具 |
+| 2 | ToolMeta → OpenAI JSON Schema 转换 | ✅ | ToolConverter |
+| 3 | PromptService 注入 tools 参数 | ✅ | sendStreamMessage 自动构建 tools 载荷 |
+| 4 | 流式 tool_calls 解析 | ✅ | parseStreamResponse 累积 + finish_reason 检测 |
+| 5 | Think 块剥离 + 事件回调 | ✅ | `<think>` 标签分离为独立事件 |
+| 6 | Tool Calling 循环引擎 | ✅ | ToolCallCoordinator: 执行→回注→递归(上限10轮) |
+| 7 | UI: Think 卡片 | ✅ | 可折叠（流式展开→结束折叠） |
+| 8 | UI: 工具调用卡片 | ✅ | 摘要+展开详情（耗时/状态/完整请求响应） |
+| 9 | 工具调用日志 DB | ✅ | ToolCallDbHelper + ToolCallLogBean |
+| 10 | 调试日志 | ✅ | 每轮循环打印完整执行过程 |
+| 11 | 搜索工具（元工具） | ✅ | search_tools: 查询已注册工具列表 |
+
+### 🟠 P1 — 下一步（按优先级）
+
+| # | 任务 | 说明 | 前置 |
+|:-:|:----|:-----|:----:|
+| 1 | **真实工具接入** | 挂载 LocalShellExecutor 的 11 个工具 | P0 已完成 |
+| 2 | **ToolIntentRouter（按需加载）** | 根据意图只注入本轮需要的工具子集 | P1-#1 前置 |
+| 3 | **Prompt Caching** | 工具定义前置 + 多轮复用缓存 | P1-#1 前置 |
+| 4 | Anthropic Tool Use 适配 | 兼容 Claude 格式 | 多 API 对接 |
+| 5 | 工具调用历史 UI 回溯优化 | 展开卡片时从 DB 读取完整记录 | 已有基础 |
 
 ### 🟠 P1 — 重要的增强
 
@@ -744,30 +758,35 @@ Tool Loop: 第 N 轮 | 总耗时 ${total}ms
 ### 当前状态
 
 ```
-真实工具注册 ✅    测试工具待注册 ❌    Tool Calling 循环 ❌    Think/工具UI ❌
-ToolRegistry        get_weather/...      链路全部断开            无对应 UI
-```
-
-### 第 1 阶段目标（P0）
-
-**把 Tool Calling 循环从 0 到 1 跑通，同时 UI 支持 Think 和工具调用的展示**
-
-```
-测试工具 → PromptService(含tools) → LLM 返回 tool_calls
-  → ToolCallCoordinator → 并发执行 → 结果回注
-  → LLM 最终回复 → UI 展示(Think折叠 + 工具卡片 + 文本)
+测试工具 ✅      Tool Calling 循环 ✅     Think/工具UI ✅     真实工具 ⏳
+TestToolSet     解析→执行→回注→递归       可折叠卡片+详情     待接入LocalShellExecutor
 ```
 
 ### 第 2 阶段目标（P1）
 
 ```
-按需加载 → Prompt Caching → 真实工具接入 → Anthropic 适配
+真实工具接入 → 按需加载 → Prompt Caching → 持续优化
+```
+
+### 已完成的能力链路
+
+```
+用户 → ChatActivity → PromptService(含tools)
+   → OpenAIStreamNetHelper → LLM 流式响应
+   ├── 文本分片 → 实时渲染 AI 气泡
+   ├── Think 块 → 可折叠思考卡片
+   └── tool_calls → ToolCallCoordinator
+        ├── 并发执行工具
+        ├── 写入 ToolCallDbHelper
+        ├── 更新 UI 工具卡片
+        ├── 构造 tool_result 回注
+        └── 递归调用 LLM → 直到返回文本
 ```
 
 ### 不做的事（当前阶段）
 
 - ❌ 不搭 MCP Server
-- ❌ 不实现 Anthropic/Vertex AI 适配（先跑通 DeepSeek）
+- ❌ 不实现 Anthropic/Vertex AI 适配
 - ❌ 不实现多模态
 - ❌ 不实现长期记忆
 - ❌ 不重构 UI 风格
