@@ -189,12 +189,21 @@ public class ToolRegistry {
                 p.optBoolean("showStyles", true),
                 p.optBoolean("showCursor", true))
         );
+        // 注册测试工具集（Tool Calling 调试阶段使用）
+        TestToolSet.register();
     }
 
-    private static void registerTool(String displayName, String description,
-                                     ToolMeta.Param[] params, ToolMeta.Executor executor) {
+    /** 公开注册方法，供 TestToolSet 或动态工具注册使用。 */
+    public static void register(String displayName, String description,
+                                 ToolMeta.Param[] params, ToolMeta.Executor executor) {
         tools.put(displayName, new ToolMeta(displayName, description,
             displayName.replace("localshell_", ""), params, executor));
+    }
+
+    /** 内部注册（保留原名，Private 供 localshell 工具使用）。 */
+    private static void registerTool(String displayName, String description,
+                                      ToolMeta.Param[] params, ToolMeta.Executor executor) {
+        register(displayName, description, params, executor);
     }
 
     /** 获取完整工具列表。 */
@@ -205,6 +214,17 @@ public class ToolRegistry {
     /** 按 displayName 查找。 */
     public static ToolMeta findTool(String displayName) {
         return tools.get(displayName);
+    }
+
+    /** 按 functionName 查找（用于 tool_calls 路由）。 */
+    public static ToolMeta findToolByFunctionName(String functionName) {
+        if (functionName == null) return null;
+        for (ToolMeta t : tools.values()) {
+            if (functionName.equals(t.functionName)) {
+                return t;
+            }
+        }
+        return null;
     }
 
     /** 搜索匹配的工具。 */
