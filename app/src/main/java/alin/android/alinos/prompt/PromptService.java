@@ -191,6 +191,9 @@ public class PromptService {
             return "user";
         } else if (msgType == 1) {
             return "assistant";
+        } else if (msgType == 2) {
+            // 工具调用占位标记，不需要映射为 OpenAI 角色
+            return null;
         }
         Log.w(TAG, "无法映射的消息类型: msgType=" + msgType + ", sender=" + sender);
         return null;

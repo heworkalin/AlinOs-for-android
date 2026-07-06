@@ -81,15 +81,21 @@ public class ToolRegistry {
             p -> exec.rename_session(p.getString("sessionId"), p.getString("newName"))
         );
         registerTool("localshell_shell_exec",
-            "向会话发送一条 Shell 命令并等待输出",
+            "在会话中执行 Shell 命令并等待输出。\n\n"
+            + "📌 使用策略：\n"
+            + "- 短命令(ls/cat/echo)用 waitMs=200\n"
+            + "- 下载/安装(apt/curl/pip)用 waitMs=1200\n"
+            + "- 执行后 ALWAYS 用 shell_read 读取输出，不要盲猜结果\n"
+            + "- 如果返回 {status:'session_died'}，用 create_session 重新创建会话\n"
+            + "- 不支持交互式输入（需要输入时才用 shell_write + shell_send_key）",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
                 param("command", "string", true, "", "要执行的命令，如 ls -la"),
-                param("waitMs", "long", false, "200", "等待毫秒数，默认 200，范围 [200, 1200]"),
+                param("waitMs", "int", false, "500", "等待命令输出的毫秒数(长命令如apt install用1200)"),
                 param("returnMode", "enum", false, "last_20", "返回模式",
                     new String[]{"last_20", "last_n"}),
                 param("lines", "int", false, "20", "返回行数 (last_n 模式)"),
-                param("colorEscape", "boolean", false, "false", "颜色转义：false=原始内容, true=中文标签")
+                param("colorEscape", "boolean", false, "true", "颜色转中文标签。菜单/列表场景必开true，否则无法识别高亮行(反色)")
             ),
             p -> exec.shell_exec(
                 p.getString("sessionId"),
@@ -97,7 +103,7 @@ public class ToolRegistry {
                 p.optLong("waitMs", 200),
                 p.optString("returnMode", "last_20"),
                 p.optInt("lines", 20),
-                p.optBoolean("colorEscape", false))
+                p.optBoolean("colorEscape", true))
         );
         registerTool("localshell_shell_write",
             "向会话写入文本（不追加回车），用于交互应答",
@@ -107,57 +113,60 @@ public class ToolRegistry {
                 param("returnMode", "enum", false, "last_20", "返回模式",
                     new String[]{"last_20", "last_n", "all"}),
                 param("lines", "int", false, "20", "返回行数 (last_n 模式)"),
-                param("colorEscape", "boolean", false, "false", "颜色转义：false=原始内容, true=中文标签"),
-                param("cursorMode", "boolean", false, "false", "光标位置：false=无标记, true=标记")
+                param("colorEscape", "boolean", false, "true", "颜色转中文标签。菜单/列表场景必开true，否则无法识别高亮行(反色)"),
+                param("cursorMode", "boolean", false, "false", "行首加行号标记(如[0][1][42])。菜单导航一般不需要，调试或定位光标时用")
             ),
             p -> exec.shell_write(
                 p.getString("sessionId"),
                 p.getString("text"),
                 p.optString("returnMode", "last_20"),
                 p.optInt("lines", 20),
-                p.optBoolean("colorEscape", false),
+                p.optBoolean("colorEscape", true),
                 p.optBoolean("cursorMode", false))
         );
         registerTool("localshell_shell_send_key",
-            "向会话发送控制键 / 方向键",
+            "向会话发送控制键/方向键/功能键。\n"
+            + "批量发送多个按键时用 '|' 分隔，如 'Down|Down|Enter' 一次发送三次按键。\n"
+            + "常用组合: 'Down|Down|Enter'(导航到第3项并确认), 'Tab|Enter'(跳到按钮区按确定), 'Ctrl+C'(中断)。",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
-                param("key", "enum", true, "", "按键名称，支持 Ctrl+C 或 CTRL_C 等格式",
-                    new String[]{"Ctrl+C","Ctrl+D","Ctrl+Z","Enter","Tab","Escape",
-                                 "Backspace","Delete",
-                                 "Up","Down","Left","Right",
-                                 "PageUp","PageDown","Home","End",
-                                 "F1","F2","F3","F4","F5","F6",
-                                 "F7","F8","F9","F10","F11","F12"}),
+                param("key", "string", true, "", "按键名称，多个用|分隔(如Down|Down|Enter)。支持: Ctrl+C,Ctrl+D,Ctrl+Z,Enter,Tab,Escape,Backspace,Delete,Up,Down,Left,Right,PageUp,PageDown,Home,End,F1~F12"),
                 param("returnMode", "enum", false, "last_20", "返回模式",
                     new String[]{"last_20", "last_n", "all"}),
                 param("lines", "int", false, "20", "返回行数 (last_n 模式)"),
-                param("colorEscape", "boolean", false, "false", "颜色转义：false=原始内容, true=中文标签"),
-                param("cursorMode", "boolean", false, "false", "光标位置：false=无标记, true=标记")
+                param("colorEscape", "boolean", false, "true", "颜色转中文标签。菜单/列表场景必开true，否则无法识别高亮行(反色)"),
+                param("cursorMode", "boolean", false, "false", "行首加行号标记(如[0][1][42])。菜单导航一般不需要，调试或定位光标时用")
             ),
-            p -> exec.shell_send_key(
+            p -> exec.shell_send_keys(
                 p.getString("sessionId"),
                 p.getString("key"),
                 p.optString("returnMode", "last_20"),
                 p.optInt("lines", 20),
-                p.optBoolean("colorEscape", false),
+                p.optBoolean("colorEscape", true),
                 p.optBoolean("cursorMode", false))
         );
         registerTool("localshell_shell_read",
-            "读取终端当前画布内容",
+            "读取终端当前画面内容。\n\n"
+            + "⭐ 遇到 whiptail/dialog 菜单时必须 colorEscape=true：\n"
+            + "1. 不用 colorEscape 纯文本看不出谁高亮；开了后高亮行有[反色]或[白色]标记\n"
+            + "2. 找[反色]/[白色]行 = 当前光标位 → 数它在选项列表中是第几个\n"
+            + "3. 目标选项号 - 当前高亮号 = 需要按几次 Down/Up\n"
+            + "4. shell_send_key 发送对应次数方向键(可用|一次发多键)，最后 Enter\n"
+            + "5. [Ok/Cancel] 按钮菜单：先 Tab 跳到按钮区再 Enter\n\n"
+            + "⚠ 不开 colorEscape 等于蒙眼走迷宫。两次读屏返回相同内容说明卡住，换策略不要重复。",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
                 param("returnMode", "enum", false, "last_20", "返回模式",
                     new String[]{"last_20", "last_n", "all"}),
                 param("lines", "int", false, "20", "返回行数 (last_n 模式，最大 5000)"),
-                param("colorEscape", "boolean", false, "false", "颜色转义：false=原始内容, true=中文标签"),
-                param("cursorMode", "boolean", false, "false", "光标位置：false=无标记, true=标记")
+                param("colorEscape", "boolean", false, "true", "颜色转中文标签。菜单/列表场景必开true，否则无法识别高亮行(反色)"),
+                param("cursorMode", "boolean", false, "false", "行首加行号标记(如[0][1][42])。菜单导航一般不需要，调试或定位光标时用")
             ),
             p -> exec.shell_read(
                 p.getString("sessionId"),
                 p.optString("returnMode", "last_20"),
                 p.optInt("lines", 20),
-                p.optBoolean("colorEscape", false),
+                p.optBoolean("colorEscape", true),
                 p.optBoolean("cursorMode", false))
         );
         registerTool("localshell_read_history_canvas",
@@ -167,13 +176,13 @@ public class ToolRegistry {
                 param("returnMode", "enum", false, "last_20", "返回模式",
                     new String[]{"last_20", "last_n", "all"}),
                 param("lines", "int", false, "20", "返回行数 (last_n 模式，默认 20，最大 5000)"),
-                param("colorEscape", "boolean", false, "false", "颜色转义：false=原始内容, true=中文标签")
+                param("colorEscape", "boolean", false, "true", "颜色转中文标签。菜单/列表场景必开true，否则无法识别高亮行(反色)")
             ),
             p -> exec.read_history_canvas(
                 p.getString("sessionId"),
                 p.optString("returnMode", "last_20"),
                 p.optInt("lines", 20),
-                p.optBoolean("colorEscape", false))
+                p.optBoolean("colorEscape", true))
         );
         registerTool("localshell_shell_get_debug_view",
             "获取终端的样式调试视图（行号/颜色/光标）",

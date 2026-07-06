@@ -1039,6 +1039,38 @@ public class LocalShellExecutor {
             !stripAnsi, false);
     }
 
+    // ── shell_send_keys (批量按键) ──
+
+    /** 批量发送按键，用 '|' 分隔，如 "Down|Down|Enter" */
+    public JSONObject shell_send_keys(String sessionId, String keys,
+                                       String returnMode, int lines,
+                                       boolean colorEscape, boolean cursorMark) {
+        if (keys == null || keys.isEmpty()) {
+            return shell_send_key(sessionId, "Enter", returnMode, lines, colorEscape, cursorMark);
+        }
+        if (!keys.contains("|")) {
+            return shell_send_key(sessionId, keys, returnMode, lines, colorEscape, cursorMark);
+        }
+
+        String[] keyArray = keys.split("\\|");
+        JSONObject lastResult = null;
+        for (int i = 0; i < keyArray.length; i++) {
+            String k = keyArray[i].trim();
+            if (k.isEmpty()) continue;
+            boolean isLast = (i == keyArray.length - 1);
+            lastResult = shell_send_key(sessionId, k,
+                isLast ? returnMode : "last_20",
+                isLast ? lines : 20,
+                isLast ? colorEscape : true,
+                isLast ? cursorMark : false);
+            // 非最后按键时增加间隔
+            if (!isLast) {
+                try { Thread.sleep(60); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+        }
+        return lastResult != null ? lastResult : errorJson("INVALID_KEY", "No valid keys in: " + keys);
+    }
+
     // ================================================================
     //  输出读取 — Agent API
     // ================================================================
