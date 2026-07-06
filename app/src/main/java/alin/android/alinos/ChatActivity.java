@@ -29,6 +29,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import alin.android.alinos.adapter.ChatAdapter;
 import alin.android.alinos.adapter.SessionAdapter;
@@ -40,6 +41,7 @@ import alin.android.alinos.db.ChatDBHelper;
 import alin.android.alinos.db.ConfigDBHelper;
 import alin.android.alinos.manager.ChatStreamEventBus;
 import alin.android.alinos.prompt.PromptService;
+import alin.android.alinos.tools.ToolCallCardCallback;
 import alin.android.alinos.tools.ToolCallCoordinator;
 import alin.android.alinos.utils.TokenEstimator;
 import alin.android.alinos.db.ToolCallDbHelper;
@@ -224,16 +226,15 @@ public class ChatActivity extends AppCompatActivity {
         List<ChatRecordBean> records = getRecordsBySessionIdFromDb(sessionId);
         mMessageList.clear();
 
-        // 预加载工具调用日志（按 record_id 索引，方便查找）
-        java.util.Map<Integer, ToolCallLogBean> toolCallMap = new java.util.HashMap<>();
+        // 预加载工具调用日志（按 UUID 索引，精确匹配）
+        java.util.Map<String, ToolCallLogBean> toolCallMap = new java.util.HashMap<>();
         if (mToolCallDbHelper != null) {
             for (ToolCallLogBean tc : mToolCallDbHelper.getBySessionId(sessionId)) {
-                toolCallMap.put(tc.getId(), tc);
+                if (tc.getUuid() != null) {
+                    toolCallMap.put(tc.getUuid(), tc);
+                }
             }
         }
-        // 记录 chat_record 中工具标记的插入顺序，用于回填序号
-        java.util.Map<Integer, Integer> markerOrder = new java.util.HashMap<>();
-        int markerSeq = 0;
 
         // 加载聊天文本记录
         for (ChatRecordBean record : records) {
@@ -242,22 +243,34 @@ public class ChatActivity extends AppCompatActivity {
             String content = record.getContent();
             int type;
 
-            // 检测工具调用标记：[tool_call]工具名
-            if (record.getMsgType() == 2 || content.startsWith("[tool_call]")) {
-                String toolName = content.startsWith("[tool_call]")
-                        ? content.substring(11) : "unknown";
+            // 跳过垃圾消息（空回复、流式异常、重复内容）
+            if (content.startsWith("[空回复]") || content.startsWith("[流式异常]")) continue;
+
+            // 检测工具调用标记：[tool_call:UUID]工具名 或兼容旧格式 [tool_call]工具名
+            boolean isToolMarker = record.getMsgType() == 2
+                    || content.startsWith("[tool_call]")
+                    || content.startsWith("[tool_call:");
+            if (isToolMarker) {
+                // 解析 UUID 和工具名
+                String extractedUuid = null;
+                String toolName = "unknown";
+                if (content.startsWith("[tool_call:")) {
+                    // 新格式：[tool_call:UUID]toolName
+                    int colonEnd = content.indexOf(']');
+                    if (colonEnd > 11) {
+                        extractedUuid = content.substring(11, colonEnd);
+                    }
+                    toolName = colonEnd >= 0 && colonEnd + 1 < content.length()
+                            ? content.substring(colonEnd + 1) : "unknown";
+                } else if (content.startsWith("[tool_call]")) {
+                    toolName = content.substring(11);
+                }
                 type = ChatMessage.TYPE_TOOL_CALL;
 
-                // 从 tool_call_log 按顺序获取对应记录
+                // 通过 UUID 精确匹配 tool_call_log
                 ToolCallLogBean tc = null;
-                int seq = markerSeq++;
-                markerOrder.put(record.getId(), seq);
-
-                // 按顺序在 toolCallMap 中找到对应序号的记录
-                int found = 0;
-                for (ToolCallLogBean t : mToolCallDbHelper.getBySessionId(sessionId)) {
-                    if (found == seq) { tc = t; break; }
-                    found++;
+                if (extractedUuid != null) {
+                    tc = toolCallMap.get(extractedUuid);
                 }
 
                 if (tc != null) {
@@ -271,7 +284,7 @@ public class ChatActivity extends AppCompatActivity {
                                 + "\n" + (tc.getResult() != null ? tc.getResult() : ""));
                         card.put("log", "耗时: " + tc.getDurationMs() + "ms"
                                 + (tc.getErrorMessage() != null ? "\n错误: " + tc.getErrorMessage() : "")
-                                + "\nDB ID: #" + tc.getId());
+                                + "\nUUID: " + (tc.getUuid() != null ? tc.getUuid().substring(0, 8) : "?"));
                         card.put("status", "success".equals(tc.getStatus()) ? "✅"
                                 : "error".equals(tc.getStatus()) ? "❌" : "⏳");
                         card.put("duration", tc.getDurationMs() > 0 ? (tc.getDurationMs() / 1000.0) + "s" : "");
@@ -387,7 +400,13 @@ public class ChatActivity extends AppCompatActivity {
                 return;
             }
 
-            String errorContent = "[流式异常] " + data.getErrorMsg();
+            // 保存累积的流式文本 + 错误信息（避免 reasoning_content 丢失）
+            String accumulatedText = mStreamContentBuffer.length() > 0
+                    ? mStreamContentBuffer.toString()
+                    : "";
+            String errorContent = accumulatedText.isEmpty()
+                    ? "[流式异常] " + data.getErrorMsg()
+                    : accumulatedText + "\n\n[异常终止] " + data.getErrorMsg();
             writeStreamRecordToDb(errorContent);
             handleStreamFinish();
             if (mAiMessagePosition != -1) {
@@ -418,13 +437,16 @@ public class ChatActivity extends AppCompatActivity {
                 // 先保存起始位置（必须在 handleStreamFinish 之前，因为它会重置）
                 final int toolCallStartPos = mMessageList.size();
 
-                // 结束流式状态，重置相关位置（但 mToolCallStartPosition 不在这里用了）
+                // 结束流式状态，重置相关位置
                 handleStreamFinish();
 
-                // 为每个工具添加 TYPE_TOOL_CALL 占位消息 + 写入位置标记
+                // 为每个工具生成 UUID，添加 TYPE_TOOL_CALL 占位消息 + 写入 chat_record 标记
+                String[] uuids = new String[toolCalls.length()];
                 for (int i = 0; i < toolCalls.length(); i++) {
                     String toolName = toolCalls.getJSONObject(i)
                             .getJSONObject("function").optString("name", "unknown");
+                    uuids[i] = UUID.randomUUID().toString();
+
                     JSONObject placeholder = new JSONObject();
                     placeholder.put("toolName", toolName);
                     placeholder.put("status", "⏳");
@@ -438,9 +460,10 @@ public class ChatActivity extends AppCompatActivity {
                             placeholder.toString(), ChatMessage.TYPE_TOOL_CALL, true));
                     mChatAdapter.notifyItemInserted(mMessageList.size() - 1);
 
-                    // 写入位置标记到聊天记录（用于恢复时定位）
+                    // 写入位置标记到聊天记录（UUID 关联：恢复时精确匹配 tool_call_log）
                     ChatRecordBean marker = new ChatRecordBean(
-                            mCurrentSessionId, 2, "tool", "[tool_call]" + toolName, System.currentTimeMillis());
+                            mCurrentSessionId, 2, "tool",
+                            "[tool_call:" + uuids[i] + "]" + toolName, System.currentTimeMillis());
                     addRecordToDb(marker);
                 }
                 rvChat.scrollToPosition(mMessageList.size() - 1);
@@ -448,21 +471,57 @@ public class ChatActivity extends AppCompatActivity {
                 // 用局部变量捕获起始位置，回调不再依赖成员变量
                 final int capturedStartPos = toolCallStartPos;
 
-                // 启动工具调用协调器（带卡片更新回调）
+                // 启动工具调用协调器（带卡片更新回调 + UUID）
                 ToolCallCoordinator coordinator = new ToolCallCoordinator(
                         this, mCurrentConfig, mCurrentSessionId,
                         buildCurrentMessages(), (eventType, eventData) -> {
                     runOnUiThread(() -> handleStreamEvent(eventData));
-                }, (messageIndex, cardJson, isExecuting) -> {
-                    // 工具卡片 UI 更新回调 — 必须在主线程执行
-                    runOnUiThread(() -> {
-                        int pos = capturedStartPos + messageIndex;
-                        if (pos >= 0 && pos < mMessageList.size()) {
-                            mChatAdapter.updateToolCallMessage(pos, cardJson, isExecuting);
-                        }
-                    });
+                }, new ToolCallCardCallback() {
+                    @Override
+                    public void onToolCallResult(int messageIndex, String cardJson, boolean isExecuting) {
+                        // 工具卡片 UI 更新回调（含递归调用）— 必须在主线程执行
+                        runOnUiThread(() -> {
+                            int pos = capturedStartPos + messageIndex;
+                            if (pos >= 0 && pos < mMessageList.size()) {
+                                mChatAdapter.updateToolCallMessage(pos, cardJson, isExecuting);
+                                // 滚动到更新的卡片位置
+                                rvChat.scrollToPosition(pos);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public int onNewPlaceholder(String toolName, String uuid) {
+                        // 递归工具调用时创建新占位消息（在 UI 线程上被 Coordinator 同步调用）
+                        JSONObject placeholder = new JSONObject();
+                        try {
+                            placeholder.put("toolName", toolName);
+                            placeholder.put("status", "⏳");
+                            placeholder.put("duration", "");
+                            placeholder.put("args", "");
+                            placeholder.put("request", "");
+                            placeholder.put("response", "");
+                            placeholder.put("log", "执行中...");
+                        } catch (Exception ignored) {}
+
+                        mMessageList.add(new ChatMessage(
+                                placeholder.toString(), ChatMessage.TYPE_TOOL_CALL, true));
+                        int newPos = mMessageList.size() - 1;
+                        mChatAdapter.notifyItemInserted(newPos);
+                        // 滚动到新卡片位置，确保 UI 可见
+                        rvChat.scrollToPosition(newPos);
+
+                        // 写入 chat_record 标记（UUID 关联）
+                        ChatRecordBean marker = new ChatRecordBean(
+                                mCurrentSessionId, 2, "tool",
+                                "[tool_call:" + uuid + "]" + toolName, System.currentTimeMillis());
+                        addRecordToDb(marker);
+
+                        // 返回相对于 capturedStartPos 的索引
+                        return mMessageList.size() - 1 - capturedStartPos;
+                    }
                 });
-                coordinator.execute(toolCalls);
+                coordinator.execute(toolCalls, uuids);
 
             } catch (Exception e) {
                 Log.e(TAG, "解析工具调用失败", e);
@@ -543,6 +602,10 @@ public class ChatActivity extends AppCompatActivity {
             int start = Math.max(0, history.size() - 10);
             for (int i = start; i < history.size(); i++) {
                 ChatRecordBean r = history.get(i);
+                // 跳过工具调用占位标记和错误消息，不要发给 LLM
+                if (r.getMsgType() == 2
+                        || r.getContent().startsWith("[tool_call")
+                        || r.getContent().startsWith("[流式异常]")) continue;
                 String role = r.getMsgType() == 0 ? "user" : "assistant";
                 arr.put(new JSONObject()
                         .put("role", role)

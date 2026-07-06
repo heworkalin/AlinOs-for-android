@@ -5,11 +5,11 @@ package alin.android.alinos.bean;
  * 每次 AI 发起工具调用的完整记录，供 UI 回溯和调试审计使用。
  */
 public class ToolCallLogBean {
-    private int id;
+    private String uuid;         // 业务主键 UUID（与 chat_record 中的标记关联）
     private int sessionId;
-    private int recordId;        // 关联的聊天记录ID（可选）
+    private int recordId;        // 关联的聊天记录ID（可选，保留兼容）
     private String toolName;
-    private String toolCallId;   // LLM 返回的唯一 ID
+    private String toolCallId;   // LLM 返回的唯一 ID（如 call_xxx）
     private String arguments;    // 入参 JSON
     private String result;       // 出参 JSON
     private String status;       // success / error / timeout
@@ -19,8 +19,9 @@ public class ToolCallLogBean {
 
     public ToolCallLogBean() {}
 
-    public ToolCallLogBean(int sessionId, String toolName, String toolCallId,
+    public ToolCallLogBean(String uuid, int sessionId, String toolName, String toolCallId,
                            String arguments, long createdAt) {
+        this.uuid = uuid;
         this.sessionId = sessionId;
         this.toolName = toolName;
         this.toolCallId = toolCallId;
@@ -29,8 +30,8 @@ public class ToolCallLogBean {
         this.status = "pending";
     }
 
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
+    public String getUuid() { return uuid; }
+    public void setUuid(String uuid) { this.uuid = uuid; }
 
     public int getSessionId() { return sessionId; }
     public void setSessionId(int sessionId) { this.sessionId = sessionId; }

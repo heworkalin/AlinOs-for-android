@@ -68,6 +68,7 @@ public class ChatStreamEventBus {
         private int completionTokens;
         private int totalTokens;
         private String toolCallsJson; // 工具调用数据（JSON数组）
+        private boolean thinkFinish; // 标记仅为 think 完成事件（后续可能还有 tool_calls）
 
         // 快速构建增量消息
         public static StreamEventData buildChunk(int sessionId, String chunkContent) {
@@ -130,13 +131,14 @@ public class ChatStreamEventBus {
             return data;
         }
 
-        // 快速构建Think块结束消息
+        // 快速构建Think块结束消息（注意：thinkFinish=true 标记这不是最终事件，后续可能还有 tool_calls）
         public static StreamEventData buildThinkFinish(int sessionId, String fullThinkContent) {
             StreamEventData data = new StreamEventData();
             data.sessionId = sessionId;
             data.fullContent = fullThinkContent;
             data.isFinish = true;
             data.isError = false;
+            data.thinkFinish = true;
             return data;
         }
 
@@ -151,5 +153,6 @@ public class ChatStreamEventBus {
         public int getCompletionTokens() { return completionTokens; }
         public int getTotalTokens() { return totalTokens; }
         public String getToolCallsJson() { return toolCallsJson; }
+        public boolean isThinkFinish() { return thinkFinish; }
     }
 }
