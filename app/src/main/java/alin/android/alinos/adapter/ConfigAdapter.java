@@ -45,9 +45,12 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ConfigView
         // 1. 基础数据渲染（Ollama 密钥特殊处理）
         holder.tvType.setText("类型：" + config.getType());
         holder.tvServer.setText("地址：" + config.getServerUrl());
-        // Ollama 显示「无需配置」，OpenAI 显示密钥（避免空指针）
+        // 密钥显示：Ollama 无需密钥，DeepSeek/OpenAI 显示密钥
         if (config.getType().equals("Ollama")) {
             holder.tvKey.setText("密钥：无需配置");
+        } else if (config.getType().equals("DeepSeek")) {
+            holder.tvKey.setText("密钥：" + (config.getApiKey() != null && !config.getApiKey().isEmpty() ? config.getApiKey() : "未设置"));
+            holder.tvServer.setText("地址：https://api.deepseek.com");
         } else {
             holder.tvKey.setText("密钥：" + (config.getApiKey() != null ? config.getApiKey() : "未设置"));
         }

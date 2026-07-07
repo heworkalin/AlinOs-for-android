@@ -113,6 +113,24 @@ public class PromptService {
     //  消息构建
     // ================================================================
 
+    /** 获取默认 system prompt（ChatActivity.buildCurrentMessages 复用此方法，避免硬编码分散）。 */
+    public static String getDefaultSystemPrompt() {
+        return "你是运行在 Android 手机本地 PTY 终端中的 AI 助手。\n\n"
+            + "## 环境说明\n"
+            + "- 这不是 Linux 发行版——这是一个 busybox/coreutils + curl + OpenSSH 的本地终端环境\n"
+            + "- 可用命令: bash, curl, ssh, scp, sftp, ssh-keygen, ls, cat, cp, mv, rm, mkdir, grep, find, tar, gzip, ps, kill, ping, top, mount, date, echo 等标准 coreutils\n"
+            + "- 没有: apt/dpkg/yum(无包管理器), git, python, vim, tmux, screen\n"
+            + "- SSH(ssh/scp/sftp)可连接远程 Linux 服务器进行操作\n"
+            + "- curl 可用于下载文件/调用 API\n\n"
+            + "## 工具使用策略\n"
+            + "- 所有终端操作通过 localshell_* 系列工具完成\n"
+            + "- 先 list_sessions 查有哪些可用会话\n"
+            + "- create_session 创建新 PTY 会话（会话之间独立，cd/export 不共享）\n"
+            + "- 遇 whiptail/dialog 菜单: shell_read 必须开 colorEscape=true 才能看到高亮行[反色]标记\n"
+            + "- 菜单导航: 找[反色]行→计算需几次方向键→shell_send_key 批量发送\n\n"
+            + "回复简洁专业，中文优先。";
+    }
+
     /**
      * 构建符合 OpenAI 标准的 messages 数组。
      * 格式：system + 最近10条历史 + 当前用户消息
@@ -120,7 +138,7 @@ public class PromptService {
     public JSONArray buildOpenAIMessages(int sessionId, String currentUserMessage, String systemPrompt) {
         JSONArray messages = new JSONArray();
 
-        String systemContent = systemPrompt != null ? systemPrompt : "你是一个AI助手，回答简洁专业。";
+        String systemContent = systemPrompt != null ? systemPrompt : getDefaultSystemPrompt();
         try {
             JSONObject systemMsg = new JSONObject();
             systemMsg.put("role", "system");
@@ -174,16 +192,10 @@ public class PromptService {
     }
 
     private List<ChatRecordBean> getRecentHistory(int sessionId) {
+        // 使用 ContextCache 替代简单的"最后10条"截断
         List<ChatRecordBean> history = getChatHistory(sessionId);
-        List<ChatRecordBean> filtered = new ArrayList<>();
-        for (ChatRecordBean record : history) {
-            String role = mapToOpenAIRole(record.getMsgType(), record.getSender());
-            if (role != null) {
-                filtered.add(record);
-            }
-        }
-        int startIndex = Math.max(0, filtered.size() - 10);
-        return new ArrayList<>(filtered.subList(startIndex, filtered.size()));
+        ContextCache cache = new ContextCache(history);
+        return cache.buildRecordList();
     }
 
     private String mapToOpenAIRole(int msgType, String sender) {
@@ -222,7 +234,7 @@ public class PromptService {
     }
 
     private int calculateTotalTokens(int sessionId, String currentUserMessage, String systemPrompt) {
-        String systemContent = systemPrompt != null ? systemPrompt : "你是一个AI助手，回答简洁专业。";
+        String systemContent = systemPrompt != null ? systemPrompt : getDefaultSystemPrompt();
         int systemTokens = TokenEstimator.estimateTokens(systemContent);
         int totalTokens = systemTokens;
 

@@ -1079,6 +1079,11 @@ public class LocalShellExecutor {
 
     public JSONObject shell_read(String sessionId, String returnMode, int lines,
                                   boolean colorEscape, boolean cursorMark) {
+        return shell_read(sessionId, returnMode, lines, colorEscape, cursorMark, 0);
+    }
+
+    public JSONObject shell_read(String sessionId, String returnMode, int lines,
+                                  boolean colorEscape, boolean cursorMark, long waitMs) {
         JSONObject err = checkInit();
         if (err != null) return err;
 
@@ -1088,6 +1093,12 @@ public class LocalShellExecutor {
         if (returnMode == null) returnMode = "last_20";
         if (lines <= 0) lines = DEFAULT_RETURN_LINES;
         if (lines > SHELL_READ_MAX_LINES) lines = SHELL_READ_MAX_LINES;
+
+        // 延迟等待（用于 apt/curl 等长时间任务，让进度多跑一会儿再读）
+        if (waitMs > 0) {
+            try { Thread.sleep(Math.min(waitMs, 5000)); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
 
         try {
             String rendered;

@@ -3,10 +3,13 @@ package alin.android.alinos;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -65,10 +68,11 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
         rvConfigList.setAdapter(mAdapter);
     }
 
-    // 合并：添加/编辑配置弹窗（包含模型输入+Ollama下载逻辑）
+    // 合并：添加/编辑配置弹窗（支持 DeepSeek / OpenAI / Ollama 三种类型）
     private void showConfigDialog(ConfigBean config) {
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_add_config, null);
         RadioGroup rgType = dialogView.findViewById(R.id.rg_type);
+        RadioButton rbDeepseek = dialogView.findViewById(R.id.rb_deepseek);
         RadioButton rbOpenai = dialogView.findViewById(R.id.rb_openai);
         RadioButton rbOllama = dialogView.findViewById(R.id.rb_ollama);
         EditText etServer = dialogView.findViewById(R.id.et_server);
@@ -79,34 +83,87 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
         EditText etModelContextWindow = dialogView.findViewById(R.id.et_model_context_window);
         Button btnDownloadModel = dialogView.findViewById(R.id.btn_download_model);
         TextView tvKeyTitle = dialogView.findViewById(R.id.tv_key_label);
+        View llDeepseekModel = dialogView.findViewById(R.id.ll_deepseek_model);
+        Spinner spDeepseekModel = dialogView.findViewById(R.id.sp_deepseek_model);
+
+        // DeepSeek 模型选项
+        final String[] DEEPSEEK_MODELS = {"deepseek-v4-flash", "deepseek-v4-pro"};
+        final String DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
+        ArrayAdapter<String> dsAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, DEEPSEEK_MODELS);
+        dsAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spDeepseekModel.setAdapter(dsAdapter);
 
         boolean isEdit = config.getId() != 0;
 
-        // 类型切换逻辑（保持不变）
+        // 类型切换逻辑
         rgType.setOnCheckedChangeListener((group, checkedId) -> {
-            tvKeyTitle.setVisibility(checkedId == R.id.rb_ollama ? View.GONE : View.VISIBLE);
-            etKey.setVisibility(checkedId == R.id.rb_ollama ? View.GONE : View.VISIBLE);
-            btnDownloadModel.setVisibility(checkedId == R.id.rb_ollama ? View.VISIBLE : View.GONE);
-            if (checkedId == R.id.rb_openai) {
+            if (checkedId == R.id.rb_deepseek) {
+                // DeepSeek：只填密钥 + 模型选择（Spinner），URL 自动填充
+                tvKeyTitle.setVisibility(View.VISIBLE);
+                etKey.setVisibility(View.VISIBLE);
+                etServer.setVisibility(View.GONE);
+                etModel.setVisibility(View.GONE);
+                llDeepseekModel.setVisibility(View.VISIBLE);
+                btnDownloadModel.setVisibility(View.GONE);
+                etServer.setText("https://api.deepseek.com");
+                etKey.setHint("DeepSeek API Key（sk-...）");
+            } else if (checkedId == R.id.rb_openai) {
+                tvKeyTitle.setVisibility(View.VISIBLE);
+                etKey.setVisibility(View.VISIBLE);
+                etServer.setVisibility(View.VISIBLE);
+                etModel.setVisibility(View.VISIBLE);
+                llDeepseekModel.setVisibility(View.GONE);
+                btnDownloadModel.setVisibility(View.GONE);
                 etModel.setHint("如gpt-3.5-turbo/gpt-4");
                 etServer.setHint("OpenAI服务器地址（如https://api.openai.com）");
+                etKey.setHint("API密钥（Ollama可留空）");
             } else {
+                // Ollama
+                tvKeyTitle.setVisibility(View.GONE);
+                etKey.setVisibility(View.GONE);
+                etServer.setVisibility(View.VISIBLE);
+                etModel.setVisibility(View.VISIBLE);
+                llDeepseekModel.setVisibility(View.GONE);
+                btnDownloadModel.setVisibility(View.VISIBLE);
                 etModel.setHint("如llama3/mistral/phi3");
                 etServer.setHint("Ollama服务器地址（如http://localhost:11434）");
             }
         });
 
-        // 编辑模式回显数据（保持不变）
+        // 编辑模式回显数据
         if (isEdit) {
-            if (config.getType().equals("OpenAI")) {
+            String configType = config.getType();
+            if ("DeepSeek".equals(configType)) {
+                rbDeepseek.setChecked(true);
+                tvKeyTitle.setVisibility(View.VISIBLE);
+                etKey.setVisibility(View.VISIBLE);
+                etServer.setVisibility(View.GONE);
+                etModel.setVisibility(View.GONE);
+                llDeepseekModel.setVisibility(View.VISIBLE);
+                btnDownloadModel.setVisibility(View.GONE);
+                // 回显模型选择
+                String savedModel = config.getModel();
+                int selIdx = 0;
+                for (int i = 0; i < DEEPSEEK_MODELS.length; i++) {
+                    if (DEEPSEEK_MODELS[i].equals(savedModel)) { selIdx = i; break; }
+                }
+                spDeepseekModel.setSelection(selIdx);
+            } else if ("OpenAI".equals(configType)) {
                 rbOpenai.setChecked(true);
                 tvKeyTitle.setVisibility(View.VISIBLE);
                 etKey.setVisibility(View.VISIBLE);
+                etServer.setVisibility(View.VISIBLE);
+                etModel.setVisibility(View.VISIBLE);
+                llDeepseekModel.setVisibility(View.GONE);
                 btnDownloadModel.setVisibility(View.GONE);
             } else {
                 rbOllama.setChecked(true);
                 tvKeyTitle.setVisibility(View.GONE);
                 etKey.setVisibility(View.GONE);
+                etServer.setVisibility(View.VISIBLE);
+                etModel.setVisibility(View.VISIBLE);
+                llDeepseekModel.setVisibility(View.GONE);
                 btnDownloadModel.setVisibility(View.VISIBLE);
             }
             etServer.setText(config.getServerUrl());
@@ -116,55 +173,77 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
             etUserInputCharLimit.setText(String.valueOf(config.getUserInputCharLimit()));
             etModelContextWindow.setText(String.valueOf(config.getModelContextWindow()));
         } else {
-            rbOpenai.setChecked(true);
+            // 新增模式：默认选中 DeepSeek，模型默认 flash
+            rbDeepseek.setChecked(true);
             tvKeyTitle.setVisibility(View.VISIBLE);
-            etModel.setHint("gpt-3.5-turbo");
+            etKey.setVisibility(View.VISIBLE);
+            etServer.setVisibility(View.GONE);
+            etModel.setVisibility(View.GONE);
+            llDeepseekModel.setVisibility(View.VISIBLE);
             btnDownloadModel.setVisibility(View.GONE);
+            etServer.setText("https://api.deepseek.com");
+            spDeepseekModel.setSelection(0); // flash 默认
+            etKey.setHint("DeepSeek API Key（sk-...）");
         }
 
-        // 模型下载功能已移除（仅保留流式对话）
-
-        // -------------------- 修改重点：构建并显示对话框，自定义确定按钮点击 --------------------
+        // -------------------- 构建并显示对话框 --------------------
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(isEdit ? "编辑AI服务配置" : "添加AI服务配置")
                 .setView(dialogView)
-                .setNegativeButton("取消", null);  // 取消按钮使用默认行为（关闭）
+                .setNegativeButton("取消", null);
 
-        // 先设置确定按钮文本，监听器留空（后续覆盖）
         builder.setPositiveButton("保存", null);
         AlertDialog dialog = builder.create();
 
-        // 对话框显示后，获取确定按钮并设置自定义点击监听
         dialog.setOnShowListener(dialogInterface -> {
             Button positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
             positiveButton.setOnClickListener(v -> {
-                // 获取输入内容
-                String type = rgType.getCheckedRadioButtonId() == R.id.rb_openai ? "OpenAI" : "Ollama";
-                String serverUrl = etServer.getText().toString().trim();
+                // 获取类型
+                String type;
+                int checkedId = rgType.getCheckedRadioButtonId();
+                if (checkedId == R.id.rb_deepseek) {
+                    type = "DeepSeek";
+                } else if (checkedId == R.id.rb_openai) {
+                    type = "OpenAI";
+                } else {
+                    type = "Ollama";
+                }
+
+                // DeepSeek 自动补全 URL，模型从 Spinner 获取
+                String serverUrl;
+                String model;
+                if ("DeepSeek".equals(type)) {
+                    serverUrl = "https://api.deepseek.com";
+                    model = spDeepseekModel.getSelectedItem().toString();
+                } else {
+                    serverUrl = etServer.getText().toString().trim();
+                    model = etModel.getText().toString().trim();
+                }
+
                 String apiKey = etKey.getText().toString().trim();
-                String model = etModel.getText().toString().trim();
-                // 解析三个整数字段
                 int maxResponseTokens = parseIntegerWithDefault(etMaxResponseTokens.getText().toString().trim(), 1024);
                 int userInputCharLimit = parseIntegerWithDefault(etUserInputCharLimit.getText().toString().trim(), 2000);
                 int modelContextWindow = parseIntegerWithDefault(etModelContextWindow.getText().toString().trim(), 4096);
 
-                // 输入校验（失败时只弹Toast，不关闭对话框）
-                if (model.isEmpty()) {
-                    Toast.makeText(AiConfigActivity.this, "模型名称不能为空", Toast.LENGTH_SHORT).show();
-                    return;
+                // 输入校验
+                if (!"DeepSeek".equals(type)) {
+                    if (model.isEmpty()) {
+                        Toast.makeText(AiConfigActivity.this, "模型名称不能为空", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (serverUrl.isEmpty()) {
+                        Toast.makeText(AiConfigActivity.this, "服务器地址不能为空", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
                 }
-                if (serverUrl.isEmpty()) {
-                    Toast.makeText(AiConfigActivity.this, "服务器地址不能为空", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                
-                if (type.equals("OpenAI") && apiKey.isEmpty()) {
-                    Toast.makeText(AiConfigActivity.this, "OpenAI密钥不能为空", Toast.LENGTH_SHORT).show();
+
+                // DeepSeek 和 OpenAI 需要密钥
+                if ((type.equals("DeepSeek") || type.equals("OpenAI")) && apiKey.isEmpty()) {
+                    Toast.makeText(AiConfigActivity.this, type + "密钥不能为空", Toast.LENGTH_SHORT).show();
                     return;
                 }
 
                 // 验证三个参数之间的逻辑关系
-                // 1. 最大回复消息不能超过模型上下文窗口
                 if (maxResponseTokens > modelContextWindow) {
                     Toast.makeText(AiConfigActivity.this,
                         "最大回复消息(" + maxResponseTokens + ")不能超过模型上下文窗口(" + modelContextWindow + ")",
@@ -172,11 +251,7 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
                     return;
                 }
 
-                // 2. 估算用户输入字符限制对应的token数（假设1个token≈4个字符）
-                // 用户输入字符限制转换为token估算：userInputCharLimit / 4
                 int estimatedInputTokens = (int) Math.ceil(userInputCharLimit / 4.0);
-
-                // 3. 验证：估算的用户输入token + 最大回复token ≤ 模型上下文窗口
                 if (estimatedInputTokens + maxResponseTokens > modelContextWindow) {
                     Toast.makeText(AiConfigActivity.this,
                         "配置不合理：用户输入限制(约" + estimatedInputTokens + "token) + 最大回复(" + maxResponseTokens +
@@ -186,7 +261,7 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
                     return;
                 }
 
-                // 校验通过，执行保存操作
+                // 保存
                 if (isEdit) {
                     config.setType(type);
                     config.setServerUrl(serverUrl);
@@ -205,10 +280,7 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
                     Toast.makeText(AiConfigActivity.this, "配置添加成功", Toast.LENGTH_SHORT).show();
                 }
 
-                // 刷新列表
                 refreshConfigList();
-
-                // 保存成功后关闭对话框
                 dialog.dismiss();
             });
         });
