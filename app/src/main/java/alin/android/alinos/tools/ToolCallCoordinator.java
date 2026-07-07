@@ -43,6 +43,7 @@ public class ToolCallCoordinator {
     private final ToolCallCardCallback mCardCallback;
     private JSONArray mMessages; // 完整消息历史（含 system + user + assistant + tool）
     private int mLoopCount = 0;
+    private volatile boolean mStopped = false; // 用户触发停止
     private String[] mToolUuids; // 当前批次工具对应的 UUID 数组
     private int mNextIndex = 0;  // 累加的消息索引（跨递归调用递增）
     private int[] mCurrentIndices; // 当前批次每个工具在 UI 中的索引（相对于 capturedStartPos）
@@ -72,7 +73,14 @@ public class ToolCallCoordinator {
      */
     public void execute(JSONArray toolCallsJson, String[] uuids) {
         mToolUuids = uuids;
+        mStopped = false;
         new Thread(() -> runLoop(toolCallsJson)).start();
+    }
+
+    /** 停止正在执行的工具调用循环 */
+    public void stop() {
+        mStopped = true;
+        Log.d(TAG, "收到停止信号");
     }
 
     private void runLoop(JSONArray toolCallsJson) {
@@ -132,6 +140,7 @@ public class ToolCallCoordinator {
         // ========== 1. 并发执行所有工具 ==========
         JSONArray toolResults = new JSONArray();
         for (int i = 0; i < toolCallsJson.length(); i++) {
+            if (mStopped) { emitError("用户停止了执行"); return; }
             try {
                 JSONObject tc = toolCallsJson.getJSONObject(i);
                 String toolCallId = tc.optString("id", "call_" + i);

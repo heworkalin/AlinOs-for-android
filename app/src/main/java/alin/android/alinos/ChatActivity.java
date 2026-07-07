@@ -40,6 +40,7 @@ import alin.android.alinos.bean.ConfigBean;
 import alin.android.alinos.db.ChatDBHelper;
 import alin.android.alinos.db.ConfigDBHelper;
 import alin.android.alinos.manager.ChatStreamEventBus;
+import alin.android.alinos.prompt.ContextCache;
 import alin.android.alinos.prompt.PromptService;
 import alin.android.alinos.tools.ToolCallCardCallback;
 import alin.android.alinos.tools.ToolCallCoordinator;
@@ -85,6 +86,8 @@ public class ChatActivity extends AppCompatActivity {
     private int mToolCallStartPosition = -1; // 工具调用卡片起始位置
     private boolean isStreamLoading = false;
     private boolean isStreamFinished = false;   // 标记流式是否真正完成
+    private ToolCallCoordinator mCoordinator;    // 当前活跃的协调器，用于停止
+    private Button mBtnSend;                     // 发送/停止按钮
     private final Handler mStreamHandler = new Handler(Looper.getMainLooper()); // 用于错误重试
     private int retryCount = 0; // 503错误重试计数器
     private PromptService mPromptService; // 统一的提示词服务
@@ -149,7 +152,7 @@ public class ChatActivity extends AppCompatActivity {
         ImageView ivMenu = findViewById(R.id.iv_menu);
         ImageView ivMenuAdd = findViewById(R.id.iv_menu_add);
         ImageView ivSettings = findViewById(R.id.iv_settings);
-        Button btnSend = findViewById(R.id.btn_send);
+        mBtnSend = findViewById(R.id.btn_send);
         LinearLayout inputLayout = findViewById(R.id.input_layout);
 
         // 侧边栏开关事件
@@ -174,13 +177,13 @@ public class ChatActivity extends AppCompatActivity {
             showModelSwitchDialog();
         });
 
-        // 发送按钮点击事件
-        btnSend.setOnClickListener(v -> sendMessage());
-
-        // 新增：长按发送按钮触发流式（不用改布局，测试用）
-        btnSend.setOnLongClickListener(v -> {
-            sendStreamMessage();
-            return true;
+        // 发送 / 停止 按钮（流式期间变红色"停止"）
+        mBtnSend.setOnClickListener(v -> {
+            if (isStreamLoading) {
+                stopExecution();
+            } else {
+                sendMessage();
+            }
         });
     }
 
@@ -376,6 +379,7 @@ public class ChatActivity extends AppCompatActivity {
 
         // 标记流式加载中
         isStreamLoading = true;
+        setSendButtonState(true);
 
         // 使用提示词服务发起流式请求
         mPromptService.sendStreamMessage(mCurrentConfig, mCurrentSessionId, content, (eventType, data) -> {
@@ -521,6 +525,7 @@ public class ChatActivity extends AppCompatActivity {
                         return mMessageList.size() - 1 - capturedStartPos;
                     }
                 });
+                mCoordinator = coordinator;
                 coordinator.execute(toolCalls, uuids);
 
             } catch (Exception e) {
@@ -594,22 +599,15 @@ public class ChatActivity extends AppCompatActivity {
             JSONArray arr = new JSONArray();
             arr.put(new JSONObject()
                     .put("role", "system")
-                    .put("content", "你是一个AI助手，回答简洁专业。"));
-            // 添加最后几轮对话历史
-            List<ChatRecordBean> history = mPromptService != null
+                    .put("content", PromptService.getDefaultSystemPrompt()));
+            // 使用 ContextCache 构建上下文（保留用户/AI消息，工具结果压缩为摘要）
+            ContextCache cache = new ContextCache(
+                mPromptService != null
                     ? mPromptService.getChatHistory(mCurrentSessionId)
-                    : new ArrayList<>();
-            int start = Math.max(0, history.size() - 10);
-            for (int i = start; i < history.size(); i++) {
-                ChatRecordBean r = history.get(i);
-                // 跳过工具调用占位标记和错误消息，不要发给 LLM
-                if (r.getMsgType() == 2
-                        || r.getContent().startsWith("[tool_call")
-                        || r.getContent().startsWith("[流式异常]")) continue;
-                String role = r.getMsgType() == 0 ? "user" : "assistant";
-                arr.put(new JSONObject()
-                        .put("role", role)
-                        .put("content", r.getContent()));
+                    : new ArrayList<>());
+            JSONArray historyMsgs = cache.buildMessages();
+            for (int i = 0; i < historyMsgs.length(); i++) {
+                arr.put(historyMsgs.getJSONObject(i));
             }
             arr.put(new JSONObject()
                     .put("role", "user")
@@ -621,9 +619,40 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    // 切换发送按钮状态（发送 ↔ 红色停止）
+    private void setSendButtonState(boolean loading) {
+        if (mBtnSend == null) return;
+        if (loading) {
+            mBtnSend.setText("停止");
+            mBtnSend.setTextColor(0xFFFFFFFF);
+            mBtnSend.setBackgroundColor(0xFFE53935);
+        } else {
+            mBtnSend.setText("发送");
+            mBtnSend.setTextColor(0xFFFFFFFF);
+            mBtnSend.setBackgroundColor(0xFF1976D2);
+        }
+    }
+
+    /** 停止当前 AI 执行 */
+    private void stopExecution() {
+        Log.d(TAG, "用户触发停止");
+        isStreamLoading = false;
+        if (mCoordinator != null) {
+            mCoordinator.stop();
+            mCoordinator = null;
+        }
+        if (mPromptService != null) {
+            mPromptService.cancelStream();
+        }
+        handleStreamFinish();
+        setSendButtonState(false);
+        Toast.makeText(this, "已停止", Toast.LENGTH_SHORT).show();
+    }
+
     // 流式完成的处理方法
     private void handleStreamFinish() {
         isStreamFinished = true;
+        setSendButtonState(false);
         mThinkMessagePosition = -1; // 重置 Think 块位置
         mToolCallStartPosition = -1; // 重置工具卡片起始位置
         // 超时检测任务已由OpenAIStreamNetHelper管理

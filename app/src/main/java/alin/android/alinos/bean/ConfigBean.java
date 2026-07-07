@@ -2,7 +2,7 @@ package alin.android.alinos.bean;
 
 public class ConfigBean {
     private int id;
-    private String type; // OpenAI/Ollama/MCP
+    private String type; // DeepSeek / OpenAI / Ollama
     private String serverUrl; // 服务器地址
     private String apiKey; // API密钥（Ollama可空）
     private String model; // 新增：智慧体型号（如gpt-3.5-turbo/llama3）

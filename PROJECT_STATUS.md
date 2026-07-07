@@ -118,7 +118,12 @@
 | 07-06 | ANSI 码浪费 token | buildToolResultMessage 正则剥离 |
 | 07-06 | loadChatRecords UUID 匹配不可用 | 逐条解析 UUID 从 toolCallMap 精确匹配 |
 | 07-06 | PromptService msgType=2 警告刷屏 | mapToOpenAIRole 对 msgType==2 静默返回 null |
-| 07-06 | 数据库空回复/异常消息显示 | loadChatRecords 跳过 `[空回复]` / `[流式异常]` 开头的记录 |
+| 07-06 | 上下文缓存 (ContextCache) | 替代"取最后10条"：用户/AI消息全文保留，工具标记跳过，token超限分层丢弃 |
+| 07-06 | 停止按钮 | 发送按钮变红色"停止"，ToolCallCoordinator 加 volatile mStopped |
+| 07-06 | System prompt 环境认知 | 明确 busybox+OpenSSH 环境，非 Termux |
+| 07-06 | shell_read 加 waitMs | 下载/安装任务设 2000~3000ms 延迟读取 |
+| 07-06 | shell_exec 描述重写 | 禁止用 sleep/echo 等时，前台进程用 shell_read 轮询 |
+| 07-06 | 环境科普 | rootfs 分析：416 二进制(bash/curl/ssh/scp)，无 apt/git/python |
 
 ### 5.2 数据库 Schema 变更
 
@@ -276,22 +281,23 @@ runLoop() ───────────────────────�
 
 ### 近期（本次迭代）
 
-| # | 操作 | 优先级 |
-|:-:|:--|:--:|
-| 1 | 停止按钮（发送按钮变红色"停止"） | P0 |
-| 2 | ToolCallCoordinator 中断机制 | P0 |
-| 3 | 权限模式配置 + 摘要审批 | P1 |
-| 4 | 将 ChatActivity 内部类抽到独立文件 | 中 |
-| 5 | 统一 MainActivity/AiConfigActivity UI 风格 | 中 |
+| # | 操作 | 优先级 | 状态 |
+|:-:|:--|:--:|:--:|
+| 1 | 停止按钮（发送按钮变红色"停止"） | P0 | ✅ |
+| 2 | ToolCallCoordinator 中断机制 | P0 | ✅ |
+| 3 | 上下文缓存 (ContextCache) | P0 | ✅ |
+| 4 | shell_read 加 waitMs + shell_exec 重写 | P0 | ✅ |
+| 5 | System prompt 环境认知 | P0 | ✅ |
+| 6 | 权限模式配置 + 摘要审批 | P1 | ⏳ |
+| 7 | 将 ChatActivity 内部类抽到独立文件 | 中 | ⏳ |
 
 ### 下一阶段
 
 | # | 操作 | 优先级 |
 |:-:|:--|:--:|
-| 1 | System prompt 动态构建（ToolRegistry 驱动） | P2 |
+| 1 | 打通 OpenAIClient 多 API 路由 | P1 |
 | 2 | ToolSearch 延迟加载（工具超 20 个时） | P3 |
-| 3 | 对话上下文自动压缩 | P3 |
-| 4 | 打通 OpenAIClient 多 API 路由 | P1 |
+| 3 | 对话上下文自动压缩（当前已用 ContextCache 替代简单截断） | P3 |
 
 ---
 

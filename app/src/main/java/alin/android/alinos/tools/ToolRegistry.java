@@ -82,12 +82,14 @@ public class ToolRegistry {
         );
         registerTool("localshell_shell_exec",
             "在会话中执行 Shell 命令并等待输出。\n\n"
-            + "📌 使用策略：\n"
-            + "- 短命令(ls/cat/echo)用 waitMs=200\n"
-            + "- 下载/安装(apt/curl/pip)用 waitMs=1200\n"
-            + "- 执行后 ALWAYS 用 shell_read 读取输出，不要盲猜结果\n"
-            + "- 如果返回 {status:'session_died'}，用 create_session 重新创建会话\n"
-            + "- 不支持交互式输入（需要输入时才用 shell_write + shell_send_key）",
+            + "⚠ 这是交互式 PTY 环境，不是标准 bash：\n"
+            + "- shell_exec 会往 shell 里塞一条新命令。如果前台有进程在跑(apt/curl下载中)，\n"
+            + "  新命令会排队或干扰前台——绝对不能用 sleep/echo 来等时！\n"
+            + "- 命令执行后前台还在跑(有进度条/百分比) → 用 shell_read(waitMs) 轮询进度\n"
+            + "- 命令已结束(看到提示符#或$) → 可以执行下一个 shell_exec\n\n"
+            + "📌 waitMs 参考：短命令(ls/cat)用200；安装下载(apt/curl)首次用1200，\n"
+            + "后续进度检查改用 shell_read(waitMs=2000~3000) 而非重复 exec。\n"
+            + "返回 {status:'session_died'} 用 create_session 重建会话。",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
                 param("command", "string", true, "", "要执行的命令，如 ls -la"),
@@ -146,16 +148,18 @@ public class ToolRegistry {
                 p.optBoolean("cursorMode", false))
         );
         registerTool("localshell_shell_read",
-            "读取终端当前画面内容。\n\n"
-            + "⭐ 遇到 whiptail/dialog 菜单时必须 colorEscape=true：\n"
-            + "1. 不用 colorEscape 纯文本看不出谁高亮；开了后高亮行有[反色]或[白色]标记\n"
-            + "2. 找[反色]/[白色]行 = 当前光标位 → 数它在选项列表中是第几个\n"
-            + "3. 目标选项号 - 当前高亮号 = 需要按几次 Down/Up\n"
-            + "4. shell_send_key 发送对应次数方向键(可用|一次发多键)，最后 Enter\n"
-            + "5. [Ok/Cancel] 按钮菜单：先 Tab 跳到按钮区再 Enter\n\n"
-            + "⚠ 不开 colorEscape 等于蒙眼走迷宫。两次读屏返回相同内容说明卡住，换策略不要重复。",
+            "仅读取终端画面快照，不执行任何命令，不会干扰前台进程。\n\n"
+            + "⭐ 交互式 PTY 环境须知：\n"
+            + "- 这是交互式伪终端，不是标准 bash。命令在前台持续运行时（apt/git/curl 下载安装中），\n"
+            + "  用 shell_read 轮询进度——绝对不要用 shell_exec 执行 sleep/echo 等命令来等时。\n"
+            + "- 识别到下载/安装/编译任务(进度条/百分比/速度)时，设 waitMs=2000~3000 延迟读取，\n"
+            + "  让任务多跑一会儿再返回画面，减少无效调用次数。\n"
+            + "- 两次 shell_read 返回相同内容 → 进程卡住或已完成，再做判断。\n\n"
+            + "⭐ whiptail/dialog 菜单：必须 colorEscape=true，高亮行有[反色]标记，\n"
+            + "  找[反色]行→数它第几个→计算按几次方向键→shell_send_key(批量)|Enter。",
             params(
                 param("sessionId", "string", true, "default", "终端会话 ID"),
+                param("waitMs", "int", false, "0", "延迟等待毫秒数。下载/安装任务设2000~3000让进度多跑再读(最大5000)"),
                 param("returnMode", "enum", false, "last_20", "返回模式",
                     new String[]{"last_20", "last_n", "all"}),
                 param("lines", "int", false, "20", "返回行数 (last_n 模式，最大 5000)"),
@@ -167,7 +171,8 @@ public class ToolRegistry {
                 p.optString("returnMode", "last_20"),
                 p.optInt("lines", 20),
                 p.optBoolean("colorEscape", true),
-                p.optBoolean("cursorMode", false))
+                p.optBoolean("cursorMode", false),
+                p.optLong("waitMs", 0))
         );
         registerTool("localshell_read_history_canvas",
             "读取终端完整历史输出（含滚动区），生成归档文件",

@@ -50,6 +50,7 @@ public class OpenAIStreamNetHelper {
     private boolean mIsStreamRunning;
     private StringBuffer mStreamCache;
     private StringBuffer mChunkBuffer;
+    private StringBuffer mReasoningCache; // DeepSeek 思考内容缓存
     private long mLastPushTime;
     private OkHttpClient mOkHttpClient;
     private Call mCurrentCall;
@@ -76,6 +77,7 @@ public class OpenAIStreamNetHelper {
         this.mIsStreamRunning = false;
         this.mStreamCache = new StringBuffer();
         this.mChunkBuffer = new StringBuffer();
+        this.mReasoningCache = new StringBuffer();
         this.mLastPushTime = System.currentTimeMillis();
 
         this.mOkHttpClient = new OkHttpClient.Builder()
@@ -107,6 +109,13 @@ public class OpenAIStreamNetHelper {
 
     public boolean validateConfig() {
         if (mConfig == null) { showToast("配置为空"); return false; }
+        // DeepSeek：URL/模型自动填充，只校验密钥
+        if ("DeepSeek".equals(mConfig.getType())) {
+            if (TextUtils.isEmpty(mConfig.getApiKey())) {
+                showToast("DeepSeek密钥不能为空"); return false;
+            }
+            return true;
+        }
         if (TextUtils.isEmpty(mConfig.getServerUrl()) || TextUtils.isEmpty(mConfig.getModel())) {
             showToast("服务器地址/模型不能为空"); return false;
         }
@@ -236,6 +245,10 @@ public class OpenAIStreamNetHelper {
                     JSONObject choice = chunkJson.getJSONArray("choices").getJSONObject(0);
                     JSONObject delta = choice.optJSONObject("delta");
                     if (delta != null) {
+                        // 检测 reasoning_content（DeepSeek 思考模式）
+                        boolean hasReasoning = delta.has("reasoning_content")
+                                && !delta.isNull("reasoning_content")
+                                && !TextUtils.isEmpty(delta.optString("reasoning_content", ""));
                         // 检测 content
                         if (delta.has("content") && !delta.isNull("content")
                                 && !TextUtils.isEmpty(delta.optString("content", ""))) {
@@ -329,12 +342,34 @@ public class OpenAIStreamNetHelper {
                     continue; // tool_calls 内容不由常规文本通道处理
                 }
 
+                // ========== reasoning_content 处理（DeepSeek 思考模式） ==========
+                JSONObject delta = chunkJson.getJSONArray("choices").getJSONObject(0).getJSONObject("delta");
+                boolean hasReasoning = delta.has("reasoning_content")
+                        && !delta.isNull("reasoning_content")
+                        && !TextUtils.isEmpty(delta.optString("reasoning_content", ""));
+
+                if (hasReasoning) {
+                    String reasoningChunk = delta.optString("reasoning_content", "");
+                    mReasoningCache.append(reasoningChunk);
+
+                    long rt = System.currentTimeMillis();
+                    mLastChunkReceiveTime = rt;
+                    if (!mIsFirstChunkReceived) {
+                        mIsFirstChunkReceived = true;
+                        cancelTimeoutTips();
+                    }
+                    resetIntervalTimeout();
+
+                    // reasoning 直接推到 UI，不走 mChunkBuffer（避免和 content 混在一起）
+                    listener.onStreamEvent("stream_chat",
+                            ChatStreamEventBus.StreamEventData.buildThinkChunk(sessionId, reasoningChunk));
+                }
+
                 // ========== 正常文本分片 ==========
                 if (!hasContent) {
                     continue;
                 }
 
-                JSONObject delta = chunkJson.getJSONArray("choices").getJSONObject(0).getJSONObject("delta");
                 String chunkContent = delta.optString("content", "");
 
                 if (TextUtils.isEmpty(chunkContent)) {
@@ -387,6 +422,17 @@ public class OpenAIStreamNetHelper {
         }
 
         // ========== 完成处理 ==========
+        // 提取 reasoning 内容（DeepSeek 思考模式）
+        String reasoningContent;
+        synchronized (mReasoningCache) {
+            reasoningContent = mReasoningCache.toString();
+        }
+        if (!TextUtils.isEmpty(reasoningContent)) {
+            Log.d(TAG, "🧠 检测到 reasoning_content，长度=" + reasoningContent.length());
+            listener.onStreamEvent("stream_chat",
+                    ChatStreamEventBus.StreamEventData.buildThinkFinish(mSessionId, reasoningContent));
+        }
+
         String finalContent;
         synchronized (mStreamCache) {
             finalContent = mStreamCache.toString();
@@ -514,9 +560,9 @@ public class OpenAIStreamNetHelper {
         mReceivedUsageFromServer = false;
         mCurrentMessages = null;
 
-        synchronized (mStreamCache) { synchronized (mChunkBuffer) {
-            mStreamCache.setLength(0); mChunkBuffer.setLength(0);
-        }}
+        synchronized (mStreamCache) { synchronized (mChunkBuffer) { synchronized (mReasoningCache) {
+            mStreamCache.setLength(0); mChunkBuffer.setLength(0); mReasoningCache.setLength(0);
+        }}}
         mLastPushTime = System.currentTimeMillis();
         startTimeoutDetection();
 
@@ -559,9 +605,9 @@ public class OpenAIStreamNetHelper {
         mCurrentUserMessage = null;
         mCurrentTools = tools;
 
-        synchronized (mStreamCache) { synchronized (mChunkBuffer) {
-            mStreamCache.setLength(0); mChunkBuffer.setLength(0);
-        }}
+        synchronized (mStreamCache) { synchronized (mChunkBuffer) { synchronized (mReasoningCache) {
+            mStreamCache.setLength(0); mChunkBuffer.setLength(0); mReasoningCache.setLength(0);
+        }}}
         mLastPushTime = System.currentTimeMillis();
         startTimeoutDetection();
 
@@ -598,7 +644,7 @@ public class OpenAIStreamNetHelper {
     private String buildRequestBody(String userMessage) {
         try {
             JSONObject jsonBody = new JSONObject();
-            jsonBody.put("model", mConfig.getModel());
+            jsonBody.put("model", getEffectiveModel());
             jsonBody.put("temperature", 0.7);
             jsonBody.put("max_tokens", mConfig.getMaxResponseTokens());
             jsonBody.put("stream", true);
@@ -620,7 +666,7 @@ public class OpenAIStreamNetHelper {
     private String buildRequestBodyWithMessages(JSONArray messages) {
         try {
             JSONObject jsonBody = new JSONObject();
-            jsonBody.put("model", mConfig.getModel());
+            jsonBody.put("model", getEffectiveModel());
             jsonBody.put("temperature", 0.7);
             jsonBody.put("max_tokens", mConfig.getMaxResponseTokens());
             jsonBody.put("stream", true);
@@ -641,6 +687,10 @@ public class OpenAIStreamNetHelper {
     }
 
     private String buildRequestUrl() {
+        // DeepSeek 硬编码 URL
+        if ("DeepSeek".equals(mConfig.getType())) {
+            return "https://api.deepseek.com/v1/chat/completions";
+        }
         String baseUrl = mConfig.getServerUrl().trim();
         if (!baseUrl.startsWith("http")) baseUrl = "http://" + baseUrl;
         if (!baseUrl.endsWith("/v1/chat/completions")) {
@@ -651,6 +701,11 @@ public class OpenAIStreamNetHelper {
         return baseUrl;
     }
 
+    /** 获取请求用的模型名 */
+    private String getEffectiveModel() {
+        return mConfig.getModel();
+    }
+
     public void cancelStream() {
         Log.d(TAG, "取消流式请求，当前运行状态: " + mIsStreamRunning);
         if (!mIsStreamRunning) return;
@@ -658,7 +713,7 @@ public class OpenAIStreamNetHelper {
         mIsStreamRunning = false;
         if (mCurrentCall != null && !mCurrentCall.isCanceled()) mCurrentCall.cancel();
         synchronized (mStreamCache) { synchronized (mChunkBuffer) {
-            mChunkBuffer.setLength(0); mStreamCache.setLength(0);
+            mChunkBuffer.setLength(0); mStreamCache.setLength(0); mReasoningCache.setLength(0);
         }}
         Log.d(TAG, "缓冲区已清空");
     }
