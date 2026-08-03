@@ -159,41 +159,36 @@
 
         <!-- ========== AlinOs 核心页面（设为唯一启动页） ========== -->
         <activity
-            android:name="alin.android.alinos.MainActivity"
-            android:label="@string/app_name"
-            android:exported="true">
+            android:name="alin.android.alinos.ChatActivity"
+            android:launchMode="singleTask"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:theme="@style/ChatActivityTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+
         <!-- AlinOs 其他页面（均设为非导出） -->
         <activity
             android:name="alin.android.alinos.AiConfigActivity"
             android:exported="false" />
         <activity
-            android:name="alin.android.alinos.AgentConfigActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-
-        <activity
             android:name="alin.android.alinos.SettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity
+            android:name="alin.android.alinos.McpServerActivity"
+            android:exported="false" />
         <activity
             android:name="alin.android.alinos.TextToSpeechActivity"
             android:exported="true"/>
         <activity
             android:name="alin.android.alinos.dev.DevToolsActivity"
-            android:exported="false"
+            android:exported="true"
             android:windowSoftInputMode="adjustResize|stateHidden" />
-        <activity
-            android:name="alin.android.alinos.ChatActivity"
-            android:launchMode="singleTask"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize|stateHidden"
-            android:theme="@style/ChatActivityTheme" />
 
         <activity
             android:name="alin.android.alinos.dev.LocalShellTestActivity"
@@ -208,7 +203,7 @@
 
         <activity
             android:name="alin.android.alinos.dev.SshTestActivity"
-            android:exported="false"
+            android:exported="true"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"
             android:windowSoftInputMode="adjustResize|stateHidden" />
 
@@ -220,7 +215,7 @@
             android:theme="@style/Theme.MarkdownViewActivity.DayNight"
             android:documentLaunchMode="intoExisting" />
 
-        <!-- ========== Termux 提供者/接收器/服务（保留 proot 核心能力） ========== -->
+        <!-- ========== Termux 提供者/接收器/服务 ========== -->
 
 <receiver
             android:name="com.termux.app.event.SystemEventReceiver"
@@ -234,7 +229,7 @@
             android:name="com.termux.shared.activities.ReportActivity$ReportActivityBroadcastReceiver"
             android:exported="false" />
 
-        <!-- Termux 核心服务（proot运行依赖） -->
+        <!-- Termux 核心服务  用于提供localhost shell他的 pty终端能力-->
         <service
             android:name="com.termux.app.TermuxService"
             android:foregroundServiceType="specialUse"
@@ -254,6 +249,16 @@
             android:exported="false">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="LocalShell provides persistent PTY terminal sessions for shell command execution." />
+        </service>
+
+        <!-- ========== MCP 工具服务（前台服务，常驻通知保活） ========== -->
+        <service
+            android:name="alin.android.alinos.McpServerService"
+            android:foregroundServiceType="specialUse"
+            android:exported="true">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="MCP server bridges local device tools to MCP clients over HTTP, requiring persistent foreground operation." />
         </service>
 
         <service

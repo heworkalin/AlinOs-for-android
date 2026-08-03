@@ -230,8 +230,16 @@ public class LocalShellExecutor {
         return null;
     }
 
-    /** 确保 LocalShellService 已启动并绑定，每次调用创建新的 CountDownLatch 等待。 */
-    private void ensureServiceBound() {
+    /**
+     * 确保 LocalShellService 已启动并绑定。
+     * synchronized：防止 MCP 工具线程与 UI 线程并发首次调用时互相覆盖
+     * {@code mServiceBindLatch}（旧 latch 永远不会 countDown → 对方 await 超时报错）。
+     */
+    private synchronized void ensureServiceBound() {
+        // 已绑定：直接返回，避免每次 create_session 都重复启动+绑定
+        if (localShellService != null) {
+            return;
+        }
         Log.d(TAG, "ensureServiceBound: binding, thread=" + Thread.currentThread().getName());
         mServiceBindLatch = new CountDownLatch(1);
         try {
@@ -670,6 +678,9 @@ public class LocalShellExecutor {
         }
         lastReadLineCount.remove(sessionId);
         saveSessionMeta();
+
+
+
 
         JSONObject result = new JSONObject();
         try {

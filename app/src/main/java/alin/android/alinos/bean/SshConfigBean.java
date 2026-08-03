@@ -5,6 +5,7 @@ package alin.android.alinos.bean;
  */
 public class SshConfigBean {
     private int id;
+    private String uuid;         // AI 可见的业务标识（隐藏敏感信息）
     private String name;
     private String host;
     private int port;
@@ -37,6 +38,9 @@ public class SshConfigBean {
 
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
+
+    public String getUuid() { return uuid; }
+    public void setUuid(String uuid) { this.uuid = uuid; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

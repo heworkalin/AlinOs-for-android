@@ -8,6 +8,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
@@ -68,6 +69,8 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_ssh_test);
 
+
+
         mDbHelper = new SshDbHelper(this);
         rvSshList = findViewById(R.id.rv_ssh_list);
         fabAdd = findViewById(R.id.fab_add);
@@ -76,6 +79,7 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
         probeLocalEnv();
 
         fabAdd.setOnClickListener(v -> showAddDialog());
+        LocalShellExecutor.provideContext(this);
     }
 
     private void initList() {
@@ -656,14 +660,12 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
             });
             return;
         }
-
         // 4. 验证成功 → 销毁临时验证会话，重建干净的 SSH 连接会话
         // 目的：清除验证过程中的 "yes/no"、密码提示等残留输出，给用户一个干净的终端
         // （LocalShellService 已修复：removeTermuxSession 不再 stopSelf，服务不会崩溃）
         updateConnectingMessage("验证成功，正在建立终端会话...");
         exec.destroy_session(sid);
         exec.create_session(sid, "SSH连接");
-
         // 5. 重建后执行 clear && exec ssh + 自动密码，建立正式 SSH 连接
         updateConnectingMessage("正在初始化 SSH 连接...");
         exec.shell_write(sid, "clear && exec " + sshCmd + "\r");

@@ -203,18 +203,14 @@ public class OpenAIStreamNetHelper {
     // ========== 核心公共方法：解析流式响应 ==========
     // 原来两个方法的 onResponse 里有完全相同的解析逻辑，现在统一在这里维护。
 
-    // 工具调用累积状态（流式解析用）
-    private JSONArray mAccumulatedToolCalls = null;
-    private boolean mIsToolCallsResponse = false;
-
     private void parseStreamResponse(ResponseBody responseBody, int sessionId,
                                      ChatStreamEventBus.StreamEventListener listener) throws IOException {
         BufferedSource source = responseBody.source();
         String line;
 
         // 重置工具调用累积状态
-        mAccumulatedToolCalls = new JSONArray();
-        mIsToolCallsResponse = false;
+        // 工具调用累积状态（流式解析用）
+        JSONArray mAccumulatedToolCalls = new JSONArray();
         boolean hasToolCallsFinish = false;
 
         int chunkCount = 0;
@@ -293,7 +289,6 @@ public class OpenAIStreamNetHelper {
                     JSONArray choices = chunkJson.getJSONArray("choices");
                     JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
                     JSONArray toolCallsDelta = delta.getJSONArray("tool_calls");
-                    mIsToolCallsResponse = true;
 
                     for (int i = 0; i < toolCallsDelta.length(); i++) {
                         JSONObject tc = toolCallsDelta.getJSONObject(i);

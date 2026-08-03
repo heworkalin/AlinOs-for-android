@@ -44,6 +44,7 @@ import alin.android.alinos.prompt.ContextCache;
 import alin.android.alinos.prompt.PromptService;
 import alin.android.alinos.tools.ToolCallCardCallback;
 import alin.android.alinos.tools.ToolCallCoordinator;
+import alin.android.alinos.tools.ToolRegistry;
 import alin.android.alinos.utils.TokenEstimator;
 import alin.android.alinos.db.ToolCallDbHelper;
 import alin.android.alinos.bean.ToolCallLogBean;
@@ -96,6 +97,7 @@ public class ChatActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
+        ToolRegistry.init(this); // 注册 SSH 工具集
         AiConfigActivity.ActivityStateManager.getInstance().setChatActivityVisible(true);
         // 初始化数据库
         mChatDbHelper = new ChatDBHelper(this);
@@ -441,8 +443,9 @@ public class ChatActivity extends AppCompatActivity {
                 // 先保存起始位置（必须在 handleStreamFinish 之前，因为它会重置）
                 final int toolCallStartPos = mMessageList.size();
 
-                // 结束流式状态，重置相关位置
+                // 结束流式状态，重置相关位置于这是工具调用为了避免出现错误的变成红色手动处理
                 handleStreamFinish();
+                // 手动清理 UI（仅隐藏 loading，不重置按钮）
 
                 // 为每个工具生成 UUID，添加 TYPE_TOOL_CALL 占位消息 + 写入 chat_record 标记
                 String[] uuids = new String[toolCalls.length()];

@@ -13,7 +13,8 @@ import alin.android.alinos.bean.SshConfigBean;
 
 public class SshDbHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "ssh_config.db";
-    private static final int DB_VERSION = 3;
+    private static final int DB_VERSION = 4;
+    public static final String COL_UUID = "uuid";
     private static final String TABLE_NAME = "ssh_config";
 
     public static final String COL_ID = "id";
@@ -35,6 +36,7 @@ public class SshDbHelper extends SQLiteOpenHelper {
     public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE " + TABLE_NAME + " (" +
                 COL_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                COL_UUID + " TEXT, " +
                 COL_NAME + " TEXT, " +
                 COL_HOST + " TEXT NOT NULL, " +
                 COL_PORT + " INTEGER DEFAULT 8022, " +
@@ -54,11 +56,25 @@ public class SshDbHelper extends SQLiteOpenHelper {
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + COL_CONFIG_TYPE + " TEXT DEFAULT 'remote'");
         }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + COL_UUID + " TEXT");
+            // 为现有记录生成 UUID
+            android.database.Cursor c = db.rawQuery("SELECT " + COL_ID + " FROM " + TABLE_NAME + " WHERE " + COL_UUID + " IS NULL", null);
+            while (c.moveToNext()) {
+                int id = c.getInt(0);
+                String uuid = java.util.UUID.randomUUID().toString();
+                db.execSQL("UPDATE " + TABLE_NAME + " SET " + COL_UUID + "=? WHERE " + COL_ID + "=?",
+                    new String[]{uuid, String.valueOf(id)});
+            }
+            c.close();
+        }
     }
 
     public long addConfig(SshConfigBean config) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues values = new ContentValues();
+        if (config.getUuid() == null) config.setUuid(java.util.UUID.randomUUID().toString());
+        values.put(COL_UUID, config.getUuid());
         values.put(COL_NAME, config.getName());
         values.put(COL_HOST, config.getHost());
         values.put(COL_PORT, config.getPort());
@@ -123,6 +139,19 @@ public class SshDbHelper extends SQLiteOpenHelper {
         return config;
     }
 
+    /** 按 UUID 查询（AI 通过 UUID 连接，不暴露密码等敏感信息）。 */
+    public SshConfigBean getConfigByUuid(String uuid) {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor cursor = db.query(TABLE_NAME, null, COL_UUID + "=?", new String[]{uuid}, null, null, null);
+        SshConfigBean config = null;
+        if (cursor.moveToFirst()) {
+            config = cursorToBean(cursor);
+        }
+        cursor.close();
+        db.close();
+        return config;
+    }
+
     public SshConfigBean getConfigById(int id) {
         SQLiteDatabase db = getReadableDatabase();
         Cursor cursor = db.query(TABLE_NAME, null, COL_ID + "=?", new String[]{String.valueOf(id)}, null, null, null);
@@ -138,6 +167,7 @@ public class SshDbHelper extends SQLiteOpenHelper {
     private SshConfigBean cursorToBean(Cursor cursor) {
         SshConfigBean config = new SshConfigBean();
         config.setId(cursor.getInt(cursor.getColumnIndexOrThrow(COL_ID)));
+        config.setUuid(cursor.getString(cursor.getColumnIndexOrThrow(COL_UUID)));
         config.setName(cursor.getString(cursor.getColumnIndexOrThrow(COL_NAME)));
         config.setHost(cursor.getString(cursor.getColumnIndexOrThrow(COL_HOST)));
         config.setPort(cursor.getInt(cursor.getColumnIndexOrThrow(COL_PORT)));

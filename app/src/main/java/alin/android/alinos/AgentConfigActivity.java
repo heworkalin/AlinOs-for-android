@@ -9,7 +9,6 @@ import androidx.cardview.widget.CardView;
 import alin.android.alinos.dev.LocalShellTestActivity;
 import alin.android.alinos.dev.SshTestActivity;
 
-//AlinOs\app\src\main\java\alin\android\alinos\AgentConfigActivity.java
 public class AgentConfigActivity extends AppCompatActivity {
 
     @Override
