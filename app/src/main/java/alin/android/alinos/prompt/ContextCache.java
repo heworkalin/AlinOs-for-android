@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import alin.android.alinos.bean.ChatRecordBean;
-import alin.android.alinos.utils.TokenEstimator;
 
 /**
  * 对话上下文缓存 —— 替代简单的"取最后10条"策略。
@@ -28,18 +27,11 @@ import alin.android.alinos.utils.TokenEstimator;
 public class ContextCache {
 
     private static final String TAG = "ContextCache";
-    private static final int DEFAULT_MAX_TOKENS = 8000; // 为其他内容留出空间
 
     private final List<ChatRecordBean> mSource;
-    private final int mMaxTokens;
 
     public ContextCache(List<ChatRecordBean> chatHistory) {
-        this(chatHistory, DEFAULT_MAX_TOKENS);
-    }
-
-    public ContextCache(List<ChatRecordBean> chatHistory, int maxTokens) {
         this.mSource = chatHistory;
-        this.mMaxTokens = maxTokens;
     }
 
     /**
@@ -62,13 +54,12 @@ public class ContextCache {
     }
 
     /**
-     * 压缩结果：保留用户消息和 AI 回复原文，工具结果替换为单行摘要。
+     * 压缩结果：保留用户消息和 AI 回复原文，工具标记跳过。
+     * 不做本地 token 估算截断——token 溢出由服务器报错判定，本地估算仅给用户参考。
      */
     private List<CompressedEntry> compress() {
         List<CompressedEntry> entries = new ArrayList<>();
-        int totalTokens = 0;
 
-        // 从旧到新遍历
         for (ChatRecordBean r : mSource) {
             if (isEmpty(r.getContent())) continue;
 
@@ -76,76 +67,21 @@ public class ContextCache {
             String content;
 
             if (r.getMsgType() == 0) {
-                // 用户消息：全文保留
                 role = "user";
                 content = r.getContent();
             } else if (r.getMsgType() == 2 || r.getContent().startsWith("[tool_call")) {
-                // 工具标记：跳过（这些只是占位符，没有实际信息量）
+                // 工具标记跳过（只有 UUID+工具名，没信息量）
                 continue;
-            } else if (r.getContent().startsWith("[工具摘要]")) {
-                // 已经是摘要格式，直接保留
-                role = "user"; // 摘要作为 user 消息注入
-                content = r.getContent();
             } else {
-                // AI 回复或其他：保留原文
                 role = "assistant";
                 content = r.getContent();
             }
 
-            int tokens = TokenEstimator.estimateTokens(content);
-            entries.add(new CompressedEntry(role, content, tokens));
-            totalTokens += tokens;
+            entries.add(new CompressedEntry(role, content));
         }
 
-        // Token 超限时从最旧的非用户/非 AI 消息开始丢弃
-        if (totalTokens > mMaxTokens) {
-            entries = trimToBudget(entries, totalTokens);
-        }
-
-        Log.d(TAG, "上下文压缩: " + mSource.size() + "条原始 → "
-                + entries.size() + "条, 估算 " + totalTokens + " tokens");
+        Log.d(TAG, "上下文: " + mSource.size() + "条原始 → " + entries.size() + "条");
         return entries;
-    }
-
-    /**
-     * 从旧到新丢弃，优先丢工具摘要，最后才丢 AI 回复和用户消息。
-     */
-    private List<CompressedEntry> trimToBudget(List<CompressedEntry> entries, int currentTokens) {
-        List<CompressedEntry> result = new ArrayList<>(entries);
-
-        // 第一轮：从旧到新丢弃 tool 摘要
-        for (int i = 0; i < result.size() && currentTokens > mMaxTokens; i++) {
-            CompressedEntry e = result.get(i);
-            if (e.content.startsWith("[工具摘要]")) {
-                currentTokens -= e.tokens;
-                result.set(i, null);
-            }
-        }
-
-        // 第二轮：从旧到新丢弃 AI 回复（长文本优先）
-        for (int i = 0; i < result.size() && currentTokens > mMaxTokens; i++) {
-            CompressedEntry e = result.get(i);
-            if (e != null && "assistant".equals(e.role)) {
-                currentTokens -= e.tokens;
-                result.set(i, null);
-            }
-        }
-
-        // 第三轮：从旧到新丢弃用户消息（尽量不丢）
-        for (int i = 0; i < result.size() && currentTokens > mMaxTokens; i++) {
-            CompressedEntry e = result.get(i);
-            if (e != null && "user".equals(e.role) && !e.content.startsWith("[工具摘要]")) {
-                currentTokens -= e.tokens;
-                result.set(i, null);
-            }
-        }
-
-        // 清理 null 条目
-        List<CompressedEntry> cleaned = new ArrayList<>();
-        for (CompressedEntry e : result) {
-            if (e != null) cleaned.add(e);
-        }
-        return cleaned;
     }
 
     // ─── 工具结果 → 摘要转换（外部调用，写入 chat_record） ───
@@ -199,12 +135,10 @@ public class ContextCache {
     static class CompressedEntry {
         final String role;
         final String content;
-        final int tokens;
 
-        CompressedEntry(String role, String content, int tokens) {
+        CompressedEntry(String role, String content) {
             this.role = role;
             this.content = content;
-            this.tokens = tokens;
         }
     }
 }

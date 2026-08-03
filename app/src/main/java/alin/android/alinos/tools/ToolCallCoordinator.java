@@ -33,6 +33,8 @@ public class ToolCallCoordinator {
 
     private static final String TAG = "ToolCallCoordinator";
     private static final int MAX_LOOP = -1; // -1 = 不做限制（测试用）
+    private static final int MAX_MESSAGES = 30; // 历史消息上限（防 OOM）
+    private static final int LOOP_YIELD_MS = 300; // 轮间让出 CPU（防 ANR）
 
     private final Context mContext;
     private final ConfigBean mConfig;
@@ -44,6 +46,7 @@ public class ToolCallCoordinator {
     private JSONArray mMessages; // 完整消息历史（含 system + user + assistant + tool）
     private int mLoopCount = 0;
     private volatile boolean mStopped = false; // 用户触发停止
+    private OpenAIStreamNetHelper mHelper; // 复用 LLM 连接（避免每轮 new OkHttpClient）
     private String[] mToolUuids; // 当前批次工具对应的 UUID 数组
     private int mNextIndex = 0;  // 累加的消息索引（跨递归调用递增）
     private int[] mCurrentIndices; // 当前批次每个工具在 UI 中的索引（相对于 capturedStartPos）
@@ -92,6 +95,14 @@ public class ToolCallCoordinator {
         if (MAX_LOOP <= 0) {
             mLoopCount++;
         }
+
+        // 轮间让出 CPU，避免连续跑满触发 ANR
+        if (mLoopCount > 1) {
+            try { Thread.sleep(LOOP_YIELD_MS); } catch (InterruptedException ignored) {}
+        }
+
+        // 裁剪消息历史，防止 OOM
+        trimMessages();
 
         Log.d(TAG, "═══ Tool Call Loop #" + mLoopCount + " ═══");
         Log.d(TAG, "工具数: " + toolCallsJson.length());
@@ -250,10 +261,10 @@ public class ToolCallCoordinator {
 
         Log.d(TAG, "回注完成，重新请求 LLM...");
 
-        // 重新调用时仍携带工具定义（LLM 可能继续调用工具）
+        // 复用 LLM 连接（不每轮 new，减少 OkHttpClient 堆积）
         JSONArray toolsPayload = buildToolsPayload();
-        OpenAIStreamNetHelper helper = new OpenAIStreamNetHelper(mContext, mConfig);
-        helper.sendStreamMessageWithMessages(mSessionId, finalMessages, toolsPayload, (eventType, data) -> {
+        if (mHelper == null) mHelper = new OpenAIStreamNetHelper(mContext, mConfig);
+        mHelper.sendStreamMessageWithMessages(mSessionId, finalMessages, toolsPayload, (eventType, data) -> {
             if (data.isError()) {
                 emitError(data.getErrorMsg());
                 latch.countDown();
@@ -329,6 +340,25 @@ public class ToolCallCoordinator {
     private static final java.util.regex.Pattern ANSI_PATTERN =
             java.util.regex.Pattern.compile("\\u001B\\[[0-9;]*[a-zA-Z]|\\u001B[@-_]|" +
                     "\\(B|\\(0|\\u0007|\\r\\u001B\\[K");
+
+    /** 裁剪消息历史，保留 system + 最近 N 条消息，防止 OOM。 */
+    private void trimMessages() {
+        if (mMessages == null || mMessages.length() <= MAX_MESSAGES) return;
+        try {
+            JSONArray trimmed = new JSONArray();
+            // 保留第一条（system prompt）
+            trimmed.put(mMessages.getJSONObject(0));
+            // 保留最后 (MAX_MESSAGES - 1) 条
+            int start = mMessages.length() - (MAX_MESSAGES - 1);
+            for (int i = start; i < mMessages.length(); i++) {
+                trimmed.put(mMessages.getJSONObject(i));
+            }
+            mMessages = trimmed;
+            Log.d(TAG, "消息裁剪: " + (mMessages.length() + " → " + trimmed.length()));
+        } catch (Exception e) {
+            Log.w(TAG, "消息裁剪失败", e);
+        }
+    }
 
     private JSONObject buildToolResultMessage(String toolCallId, String toolName, JSONObject result) {
         JSONObject msg = new JSONObject();

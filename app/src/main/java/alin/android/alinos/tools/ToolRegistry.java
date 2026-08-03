@@ -1,6 +1,10 @@
 package alin.android.alinos.tools;
 
+import android.content.Context;
+
 import alin.android.alinos.localshell.LocalShellExecutor;
+import alin.android.alinos.localshell.SshLocalhost;
+
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -203,8 +207,15 @@ public class ToolRegistry {
                 p.optBoolean("showStyles", true),
                 p.optBoolean("showCursor", true))
         );
-        // 注册测试工具集（Tool Calling 调试阶段使用）
+        // 注册测试工具集
         TestToolSet.register();
+        // 注册环境说明工具（MCP 客户端帮助技能）
+        EnvironmentToolSet.register();
+    }
+
+    /** 初始化需要 Context 的工具集（由 ChatActivity.onCreate 调用一次）。 */
+    public static void init(Context context) {
+        SshLocalhost.registerTools(context);
     }
 
     /** 公开注册方法，供 TestToolSet 或动态工具注册使用。 */

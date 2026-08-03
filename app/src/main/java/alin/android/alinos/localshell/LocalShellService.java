@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -43,8 +44,23 @@ public class LocalShellService extends TermuxService {
     public void onCreate() {
         // Skip TermuxService.onCreate() — use our own session list
         setupNotificationChannel();
-        Notification n = buildNotification();
-        if (n != null) startForeground(NOTIFICATION_ID, n);
+        // 先以最小通知立即 startForeground（防 5 秒超时崩溃：后台/冷启动时
+        // buildNotification 可能因资源或主线程繁忙延迟，但 startForeground 必须在
+        // startForegroundService 后 5 秒内调用，否则系统抛
+        // ForegroundServiceDidNotStartInTimeException 杀进程）
+        try {
+            startForeground(NOTIFICATION_ID, buildMinimalNotification());
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "startForeground 失败: " + e.getMessage());
+        }
+        // 再用完整通知刷新内容
+        try {
+            Notification n = buildNotification();
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (n != null && nm != null) nm.notify(NOTIFICATION_ID, n);
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "buildNotification 失败: " + e.getMessage());
+        }
     }
 
     @Override
@@ -217,6 +233,18 @@ public class LocalShellService extends TermuxService {
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) nm.createNotificationChannel(ch);
         }
+    }
+
+    /** 最小通知：仅用于 startForeground 兜底，不依赖会话状态。 */
+    private Notification buildMinimalNotification() {
+        Notification.Builder b = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            ? new Notification.Builder(this, CHANNEL_ID)
+            : new Notification.Builder(this);
+        return b.setContentTitle("LocalShell")
+            .setContentText("PTY 服务运行中")
+            .setSmallIcon(R.drawable.ic_service_notification)
+            .setOngoing(true)
+            .build();
     }
 
     private Notification buildNotification() {
