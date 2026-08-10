@@ -41,8 +41,6 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
-        // 状态栏透明，布局延伸到状态栏
-        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
 
         setContentView(R.layout.activity_ai_config);
 
