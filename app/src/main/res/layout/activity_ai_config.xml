@@ -1,26 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp"
+    android:orientation="vertical"
+    android:background="#F5F5F5"
     android:fitsSystemWindows="true">
 
+    <!-- 顶部留白避开状态栏 -->
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="15dp" />
 
-    <!-- 标题栏 -->
-    <!-- 右下角加号悬浮按钮 -->
+    <!-- 页面标题栏卡片 -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        app:cardBackgroundColor="#2196F3"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="4dp">
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI 服务配置"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 标题与列表之间间距 -->
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="15dp" />
+
+    <!-- 可滚动配置列表区域 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rv_config_list"
-        android:layout_width="395dp"
-        android:layout_height="715dp" />
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="80dp"
+        android:clipToPadding="false" />
 
+    <!-- 右下角加号悬浮按钮 -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_add"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentEnd="true"
-        android:layout_margin="16dp"
-        android:src="@android:drawable/ic_menu_add"/>
+        android:layout_gravity="bottom|end"
+        android:layout_margin="24dp"
+        android:src="@android:drawable/ic_menu_add"
+        app:backgroundTint="#2196F3"
+        app:tint="#FFFFFF"
+        app:elevation="8dp"
+        app:fabSize="normal" />
 
-</RelativeLayout>
+</LinearLayout>
