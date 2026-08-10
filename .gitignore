@@ -21,4 +21,7 @@ termux-shared/build
 TermuxAm/build
 CLAUDE.md
 signing.properties
+总结资料.md
+.idea/*
+docs/*
 .gradle/*
