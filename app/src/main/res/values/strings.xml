@@ -263,6 +263,186 @@
     <string name="ssh_test_title">SSH</string>
     <string name="ssh_test_desc">SSH远程连接与本地连接测试</string>
 
+    <!-- ========== 语音模块设置 ========== -->
+    <!-- 主设置页卡片标题 -->
+    <string name="voice_asr_title">🎤 ASR 语音识别</string>
+    <string name="voice_asr_desc">离线/云端语音转文字引擎配置</string>
+
+    <string name="voice_tts_title">🔊 离线 TTS 引擎</string>
+    <string name="voice_tts_desc">sherpa-onnx 文字转语音参数配置</string>
+
+    <string name="voice_kws_title">🗣️ KWS 唤醒词</string>
+    <string name="voice_kws_desc">自定义唤醒词与声纹验证</string>
+
+    <string name="voice_engine_title">⚙️ 语音模型管理</string>
+    <string name="voice_engine_desc">模型下载与管理</string>
+
+    <!-- ASR 设置页 -->
+    <string name="asr_engine_section">识别引擎选择</string>
+    <string name="asr_engine_offline">离线本地识别（无需网络）</string>
+    <string name="asr_engine_cloud">云端在线识别（需联网）</string>
+    <string name="asr_engine_auto">自动（优先离线，失败切云端）</string>
+
+    <string name="asr_offline_model_section">离线 ASR 模型</string>
+    <string name="asr_model_paraformer">Paraformer-Nano（推荐）</string>
+    <string name="asr_model_paraformer_desc">中文准确率最优 · 70MB · 速度快</string>
+    <string name="asr_model_sensevoice">SenseVoice-Small</string>
+    <string name="asr_model_sensevoice_desc">支持情绪识别 · 200MB · 多语种</string>
+    <string name="asr_model_whisper">Whisper-Tiny</string>
+    <string name="asr_model_whisper_desc">多语言兼容 · 100MB · 中文一般</string>
+
+    <string name="asr_cloud_section">云端 ASR 服务商</string>
+    <string name="asr_cloud_provider">服务商选择</string>
+    <string name="asr_cloud_baidu">百度智能云</string>
+    <string name="asr_cloud_aliyun">阿里云</string>
+    <string name="asr_cloud_tencent">腾讯云</string>
+    <string name="asr_cloud_volcano">火山引擎</string>
+
+    <string name="asr_cloud_app_id">App ID</string>
+    <string name="asr_cloud_api_key">API Key</string>
+    <string name="asr_cloud_secret_key">Secret Key</string>
+
+    <string name="asr_hotword_section">热词配置</string>
+    <string name="asr_hotword_manage">管理热词</string>
+    <string name="asr_hotword_none">暂无热词</string>
+
+    <string name="asr_language_detect">语言检测</string>
+    <string name="asr_language_auto">自动</string>
+    <string name="asr_language_zh">中文</string>
+    <string name="asr_language_en">英文</string>
+
+    <string name="asr_tip">提示：离线识别依赖设备CPU性能，嘈杂环境准确率低于云端。</string>
+
+    <!-- TTS 设置页 -->
+    <string name="tts_engine_status">TTS 引擎状态</string>
+    <string name="tts_ready">sherpa-onnx TTS 就绪</string>
+    <string name="tts_not_ready">TTS 引擎未就绪</string>
+    <string name="tts_model_size">模型大小：待下载</string>
+
+    <string name="tts_voice_section">音色选择</string>
+    <string name="tts_current_voice">当前音色</string>
+
+    <string name="tts_voice_female_xiaoxiao">女声-晓晓（默认）</string>
+    <string name="tts_voice_female_xiaoya">女声-小雅</string>
+    <string name="tts_voice_male_mingxuan">男声-明轩</string>
+
+    <string name="tts_params_section">发音参数</string>
+    <string name="tts_speed">语速</string>
+    <string name="tts_pitch">音调</string>
+    <string name="tts_volume">音量</string>
+    <string name="tts_volume_auto">自动</string>
+    <string name="tts_volume_low">低</string>
+    <string name="tts_volume_medium">中</string>
+    <string name="tts_volume_high">高</string>
+
+    <string name="tts_test_section">发音测试</string>
+    <string name="tts_test_input_hint">输入测试文本…</string>
+    <string name="tts_btn_play">▶ 播放测试</string>
+    <string name="tts_btn_stop">⏹ 停止播放</string>
+
+    <string name="tts_tip">TTS 音色由 sherpa-onnx 内置，不同模型支持音色不同。</string>
+
+    <!-- KWS 唤醒词设置页 -->
+    <string name="kws_keyword_section">唤醒词设置</string>
+    <string name="kws_current_keyword">当前唤醒词</string>
+    <string name="kws_modify">修改</string>
+
+    <string name="kws_keyword_hint">请输入 2~4 个汉字作为唤醒词</string>
+    <string name="kws_keyword_examples">示例：阿林、小布</string>
+    <string name="kws_keyword_valid">✅ 符合规范（2-4个汉字）</string>
+    <string name="kws_keyword_invalid">❌ 请输入 2~4 个汉字</string>
+
+    <string name="kws_voiceprint_section">声纹验证</string>
+    <string name="kws_voiceprint_enabled">声纹验证：已启用</string>
+    <string name="kws_voiceprint_disabled">声纹验证：未启用</string>
+    <string name="kws_voiceprint_records">已录制声纹</string>
+
+    <string name="kws_voiceprint_record">开始录制声纹</string>
+    <string name="kws_voiceprint_record_tip">录制时请保持环境安静，与使用场景一致</string>
+
+    <string name="kws_sensitivity_section">唤醒灵敏度</string>
+    <string name="kws_sensitivity">灵敏度</string>
+    <string name="kws_sensitivity_low">低</string>
+    <string name="kws_sensitivity_medium">中等</string>
+    <string name="kws_sensitivity_high">高</string>
+    <string name="kws_false_alarm">误触发率</string>
+    <string name="kws_miss_alarm">漏触发率</string>
+
+    <string name="kws_test_section">唤醒词测试</string>
+    <string name="kws_btn_test">🔍 测试唤醒检测</string>
+    <string name="kws_test_tip">在安静环境下测试唤醒词识别</string>
+
+    <!-- 引擎管理页 -->
+    <string name="engine_model_section">模型管理</string>
+    <string name="engine_sherpa_core">sherpa-onnx 核心库</string>
+    <string name="engine_installed">已安装</string>
+    <string name="engine_not_installed">未安装</string>
+    <string name="engine_downloading">下载中…</string>
+
+    <string name="engine_version">版本</string>
+    <string name="engine_size">大小</string>
+
+    <string name="engine_kws_model">KWS 唤醒模型</string>
+    <string name="engine_speaker_model">声纹模型 CAM++</string>
+    <string name="engine_asr_model">ASR 离线模型</string>
+    <string name="engine_vad_model">VAD 静音检测模型</string>
+
+    <string name="engine_btn_redownload">重新下载</string>
+    <string name="engine_btn_switch">切换模型</string>
+    <string name="engine_btn_delete">删除模型</string>
+    <string name="engine_btn_download_other">下载其他模型</string>
+
+    <string name="engine_vad_builtin">内置于 sherpa-onnx，不可删除</string>
+
+    <string name="engine_storage_section">存储统计</string>
+    <string name="engine_storage_total">语音模块总占用</string>
+    <string name="engine_storage_clear">清除缓存</string>
+    <string name="engine_storage_release">释放空间 →</string>
+
+    <string name="engine_performance_section">性能优化</string>
+    <string name="engine_cpu_downgrade">CPU 降级模式</string>
+    <string name="engine_cpu_downgrade_desc">低端机型启用，降低 KWS 检测频率</string>
+
+    <string name="engine_auto_download">按需下载引擎模型</string>
+    <string name="engine_auto_download_desc">节省内存，首次使用按需下载</string>
+
+    <string name="engine_update_section">更新</string>
+    <string name="engine_update_latest">已是最新版本</string>
+    <string name="engine_btn_check_update">检查更新</string>
+
+    <!-- 通用 -->
+    <string name="engine_confirm_delete">确认删除此模型？</string>
+    <string name="engine_confirm_delete_detail">删除后将释放 %s 存储空间</string>
+    <string name="engine_download_success">下载成功</string>
+    <string name="engine_download_failed">下载失败</string>
+    <string name="engine_delete_success">模型已删除</string>
+    <string name="engine_record_voice_success">声纹录制完成</string>
+    <string name="engine_record_voice_error">声纹录制失败，请重试</string>
+    <string name="engine_tts_test_success">测试播放完成</string>
+
+    <!-- ASR 引擎类型常量（用于 SharedPreferences） -->
+    <string name="pref_voice_asr_engine_type">voice_asr_engine_type</string>
+    <string name="pref_voice_asr_offline_model">voice_asr_offline_model</string>
+    <string name="pref_voice_asr_cloud_provider">voice_asr_cloud_provider</string>
+    <string name="pref_voice_asr_cloud_app_id">voice_asr_cloud_app_id</string>
+    <string name="pref_voice_asr_cloud_api_key">voice_asr_cloud_api_key</string>
+    <string name="pref_voice_asr_cloud_secret_key">voice_asr_cloud_secret_key</string>
+    <string name="pref_voice_asr_hotword_path">voice_asr_hotword_path</string>
+    <string name="pref_voice_asr_language_detect">voice_asr_language_detect</string>
+
+    <string name="pref_voice_tts_voice">voice_tts_voice</string>
+    <string name="pref_voice_tts_speed">voice_tts_speed</string>
+    <string name="pref_voice_tts_pitch">voice_tts_pitch</string>
+    <string name="pref_voice_tts_volume">voice_tts_volume</string>
+
+    <string name="pref_voice_kws_keyword">voice_kws_keyword</string>
+    <string name="pref_voice_kws_keyword_pinyin">voice_kws_keyword_pinyin</string>
+    <string name="pref_voice_kws_voiceprint_enabled">voice_kws_voiceprint_enabled</string>
+    <string name="pref_voice_kws_sensitivity">voice_kws_sensitivity</string>
+
+    <string name="pref_voice_cpu_downgrade">voice_cpu_downgrade</string>
+    <string name="pref_voice_auto_download">voice_auto_download</string>
+
     <!-- ========== termux-shared strings ========== -->
     <string name="msg_directory_absolute_path">Directory: %s</string>
     <string name="error_app_not_installed_or_disabled_warning">The app %s is either not installed or disabled.</string>
@@ -320,4 +500,21 @@
     <string name="copy_text">Copy</string>
     <string name="paste_text">Paste</string>
     <string name="text_selection_more">More</string>
+
+    <!-- 设置页通用箭头图标内容描述 -->
+    <string name="icon_description_arrow_right">右侧箭头，进入下一级</string>
+
+    <!-- ASR Spinner 选项 -->
+    <string-array name="asr_cloud_provider_options">
+        <item>百度智能云</item>
+        <item>阿里云</item>
+        <item>腾讯云</item>
+        <item>火山引擎</item>
+    </string-array>
+
+    <string-array name="asr_language_options">
+        <item>自动</item>
+        <item>中文</item>
+        <item>英文</item>
+    </string-array>
 </resources>

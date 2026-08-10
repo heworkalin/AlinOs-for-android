@@ -12,7 +12,8 @@ import alin.android.alinos.dev.LocalShellTestActivity;
 import alin.android.alinos.dev.SshTestActivity;
 
 /**
-
+ * AlinOs 设置主页面
+ * 所有设置项以卡片形式展示，点击进入对应子页面
  */
 public class SettingsActivity extends AppCompatActivity implements View.OnClickListener {
 
@@ -25,15 +26,19 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         setContentView(R.layout.activity_settings);//布局文件
 
-
-
         // 初始化控件（匹配你的卡片式布局）
-        CardView cvAiConfig = findViewById(R.id.cv_ai_config);//配置a i服务器的
+        CardView cvAiConfig = findViewById(R.id.cv_ai_config);//配置ai服务器的
         CardView cvMcpServer = findViewById(R.id.cv_mcp_server); // MCP 工具服务
         CardView cvDevTools = findViewById(R.id.cv_dev_tools); //,其实主要都是一个工具
         CardView cvTextToVoiceTest = findViewById(R.id.cv_text_to_voice_test); // 新增：文字转语音测试
         CardView cvLocalShell = findViewById(R.id.cv_local_shell);
         CardView cvSshConfig = findViewById(R.id.cv_ssh_config);
+
+        // 语音模块卡片
+        CardView cvVoiceAsr = findViewById(R.id.cv_voice_asr);        // ASR 语音识别
+        CardView cvVoiceTts = findViewById(R.id.cv_voice_tts);        // 离线 TTS 引擎
+        CardView cvVoiceKws = findViewById(R.id.cv_voice_kws);        // KWS 唤醒词
+        CardView cvVoiceEngine = findViewById(R.id.cv_voice_engine);  // 语音引擎管理
 
         // 设置点击事件
         cvAiConfig.setOnClickListener(this);
@@ -42,9 +47,12 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         cvTextToVoiceTest.setOnClickListener(this);
         cvLocalShell.setOnClickListener(this);
         cvSshConfig.setOnClickListener(this);
-
-
+        cvVoiceAsr.setOnClickListener(this);
+        cvVoiceTts.setOnClickListener(this);
+        cvVoiceKws.setOnClickListener(this);
+        cvVoiceEngine.setOnClickListener(this);
     }
+
     @Override
     public void onClick(View v) {
         int id = v.getId();
@@ -57,17 +65,24 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         } else if (id == R.id.cv_dev_tools) {
             // 跳转到工具测试界面
             startActivity(new Intent(this, alin.android.alinos.dev.DevToolsActivity.class));
-        }else if (id == R.id.cv_text_to_voice_test) {
+        } else if (id == R.id.cv_text_to_voice_test) {
             // 跳转到文字转语音测试页面
             startActivity(new Intent(this, TextToSpeechActivity.class));
-        }else if (id == R.id.cv_local_shell) {
+        } else if (id == R.id.cv_local_shell) {
             // 找到本地 Shell 卡片
             startActivity(new Intent(this,  LocalShellTestActivity.class));
-        }else if (id == R.id.cv_ssh_config) {
+        } else if (id == R.id.cv_ssh_config) {
             // 找到 SSH 卡片
             startActivity(new Intent(this, SshTestActivity.class));
+        } else if (id == R.id.cv_voice_asr) {
+            startActivity(new Intent(this, AsrTestActivity.class));
+        } else if (id == R.id.cv_voice_tts) {
+            startActivity(new Intent(this, TtsTestActivity.class));
+        } else if (id == R.id.cv_voice_kws) {
+            startActivity(new Intent(this, KwsTestActivity.class));
+        } else if (id == R.id.cv_voice_engine) {
+            startActivity(new Intent(this, AudioModelManagerActivity.class));
         }
-
     }
 
 }

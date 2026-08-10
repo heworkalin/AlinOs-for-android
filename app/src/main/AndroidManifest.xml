@@ -207,6 +207,24 @@
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"
             android:windowSoftInputMode="adjustResize|stateHidden" />
 
+        <!-- ========== 语音测试页 ========== -->
+        <activity
+            android:name="alin.android.alinos.AsrTestActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity
+            android:name="alin.android.alinos.TtsTestActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity
+            android:name="alin.android.alinos.KwsTestActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity
+            android:name="alin.android.alinos.AudioModelManagerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
         <!-- TermuxActivity 已裁剪为 LocalShellTestActivity 的基类，不再作为独立入口 -->
         <!-- shortcuts.xml 已随 TermuxActivity 一并移除 -->
 
