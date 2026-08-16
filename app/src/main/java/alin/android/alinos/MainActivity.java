@@ -126,8 +126,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             // 跳转到Agent配置页面
             startActivity(new Intent(this, AgentConfigActivity.class));
         }else if (id == R.id.cv_text_to_voice_test) {
-            // 跳转到文字转语音测试页面
-            startActivity(new Intent(this, TextToSpeechActivity.class));
+            // 跳转到文字转语音测试页面（新版 TTS 测试）
+            startActivity(new Intent(this, TtsTestActivity.class));
         }
 
     }

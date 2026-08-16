@@ -66,8 +66,8 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
             // 跳转到工具测试界面
             startActivity(new Intent(this, alin.android.alinos.dev.DevToolsActivity.class));
         } else if (id == R.id.cv_text_to_voice_test) {
-            // 跳转到文字转语音测试页面
-            startActivity(new Intent(this, TextToSpeechActivity.class));
+            // 跳转到文字转语音测试页面（新版 TTS 测试）
+            startActivity(new Intent(this, TtsTestActivity.class));
         } else if (id == R.id.cv_local_shell) {
             // 找到本地 Shell 卡片
             startActivity(new Intent(this,  LocalShellTestActivity.class));

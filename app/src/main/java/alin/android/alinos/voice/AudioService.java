@@ -13,6 +13,7 @@ import alin.android.alinos.voice.engine.sherpa.SherpaKwsEngine;
 import alin.android.alinos.voice.engine.sherpa.SherpaTtsEngine;
 import alin.android.alinos.voice.engine.system.SystemTtsEngine;
 import alin.android.alinos.voice.engine.vosk.VoskAsrEngine;
+import alin.android.alinos.voice.core.ModelResolver;
 
 /**
  * 音频服务统一入口（单例）。
@@ -24,6 +25,9 @@ public class AudioService {
     private static AudioService instance;
 
     private final Context appContext;
+
+    // 配置/模型注册库
+    private AppConfigStore mConfigStore;
 
     // 引擎实例（懒加载）
     private IAsrEngine mAsrEngine;
@@ -38,6 +42,15 @@ public class AudioService {
         Log.d(TAG, "AudioService 初始化");
         // VAD 模型复制到后台执行
         new Thread(this::copyVadModelIfNeeded).start();
+        // 扫描已下载模型 → 自动建立模型注册库（幂等）
+        mConfigStore = AppConfigStore.getInstance(appContext);
+        new Thread(() -> mConfigStore.scanAndBuild(getModelDir())).start();
+    }
+
+    /** 全局配置 + 模型注册库 */
+    public AppConfigStore getConfigStore() {
+        if (mConfigStore == null) mConfigStore = AppConfigStore.getInstance(appContext);
+        return mConfigStore;
     }
 
     public static synchronized AudioService getInstance(Context ctx) {
@@ -64,8 +77,86 @@ public class AudioService {
 
     /** 获取 KWS 引擎 */
     public IKwsEngine getKwsEngine() {
-        if (mKwsEngine == null) mKwsEngine = new SherpaKwsEngine();
+        if (mKwsEngine == null) mKwsEngine = new SherpaKwsEngine(appContext);
         return mKwsEngine;
+    }
+
+    // ==================== 统一对外接口（自动读配置 → 加载 → 执行） ====================
+
+    /**
+     * ASR 统一接口：自动读取 configs 中保存的引擎/模型配置，自动加载引擎后识别 PCM。
+     * 服务层可直接调用，无需关心模型路径与引擎初始化。
+     */
+    public void asrRecognizePcm(byte[] pcm, IAsrEngine.Callback cb) {
+        String engine = getConfigStore().getConfig("asr_engine", "sherpa");
+        IAsrEngine eng = getAsrEngine(engine);
+        if (eng.isReady()) {
+            eng.recognize(pcm, cb);
+            return;
+        }
+        File dir = ModelResolver.resolveAsr(appContext, null);
+        if (!dir.exists() || !dir.isDirectory()) {
+            cb.onError("ASR 模型未配置，请到音频管理界面下载/导入");
+            return;
+        }
+        eng.init(dir, new IAsrEngine.Callback() {
+            @Override public void onResult(String s) {
+                if (eng.isReady()) eng.recognize(pcm, cb);
+                else cb.onError("ASR 加载未就绪");
+            }
+            @Override public void onError(String e) { cb.onError(e); }
+        });
+    }
+
+    /**
+     * TTS 统一接口：自动读取 configs 中保存的引擎/模型/语速配置，自动加载后合成语音。
+     */
+    public void ttsSynthesize(String text, float speed, ITtsEngine.Callback cb) {
+        String engine = getConfigStore().getConfig("tts_engine", "system");
+        ITtsEngine eng = "system".equals(engine) ? new SystemTtsEngine(appContext) : getTtsEngine();
+        if (eng.isReady()) {
+            eng.synthesize(text, speed, cb);
+            return;
+        }
+        File dir = ModelResolver.resolveTts(appContext, null);
+        eng.init(dir, new ITtsEngine.Callback() {
+            @Override public void onAudio(byte[] wav) {
+                if (eng.isReady()) eng.synthesize(text, speed, cb);
+                else cb.onError("TTS 加载未就绪");
+            }
+            @Override public void onError(String e) { cb.onError(e); }
+        });
+    }
+
+    /**
+     * KWS 统一接口：自动读取 configs 中保存的唤醒词/阈值/模型配置，自动加载后检测唤醒词。
+     */
+    public void kwsDetectPcm(byte[] pcm, IKwsEngine.Callback cb) {
+        String keyword = getConfigStore().getConfig("kws_keyword", "");
+        float threshold = 0.25f;
+        try {
+            threshold = Float.parseFloat(getConfigStore().getConfig("kws_threshold", "0.25"));
+        } catch (NumberFormatException ignored) {}
+
+        IKwsEngine eng = getKwsEngine();
+        if (eng.isReady()) {
+            eng.detectPcm(pcm, cb);
+            return;
+        }
+        if (keyword.isEmpty()) {
+            cb.onError("KWS 未配置唤醒词，请先在 KWS 测试界面保存唤醒词");
+            return;
+        }
+        File dir = ModelResolver.resolveKws(appContext);
+        if (!dir.exists() || !dir.isDirectory()) {
+            cb.onError("KWS 模型未配置，请到音频管理界面下载/导入");
+            return;
+        }
+        eng.init(dir, keyword, threshold, new IKwsEngine.Callback() {
+            @Override public void onDetected(String kw, float conf) { cb.onDetected(kw, conf); }
+            @Override public void onListening() { eng.detectPcm(pcm, cb); }
+            @Override public void onError(String e) { cb.onError(e); }
+        });
     }
 
     // ==================== 模型路径 ====================

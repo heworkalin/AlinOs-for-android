@@ -18,7 +18,13 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 import alin.android.alinos.voice.AudioService;
+import alin.android.alinos.voice.AppConfigStore;
 import alin.android.alinos.voice.engine.ITtsEngine;
 import alin.android.alinos.voice.engine.system.SystemTtsEngine;
 
@@ -32,11 +38,14 @@ public class TtsTestActivity extends AppCompatActivity {
     private EditText etText;
     private SeekBar sbSpeed;
     private TextView tvSpeed;
-    private Button btnSpeak, btnStop;
+    private Button btnSpeak, btnStop, btnTtsSettings, btnSaveConfig;
     private TextView tvStatus;
 
     private ITtsEngine mEngine;
     private Handler mHandler = new Handler(Looper.getMainLooper());
+
+    private AppConfigStore mStore;
+    private List<AppConfigStore.Model> mCustomTtsModels = new ArrayList<>();
 
     private static final String[] ENGINE_KEYS = {"system", "sherpa"};
     private static final String[] ENGINE_NAMES = {"Android 系统 TTS", "sherpa-onnx TTS"};
@@ -77,9 +86,24 @@ public class TtsTestActivity extends AppCompatActivity {
         root.addView(spEngine);
         root.addView(space(4 * dp));
 
-        // TTS 模型选择（sherpa 时显示）
+        // 系统 TTS 设置入口（仅系统引擎时显示，可让用户自行配置系统 TTS 服务）
+        btnTtsSettings = btn("⚙️ 系统 TTS 设置（更换引擎/下载语音包/调语速）", 0xFF607D8B);
+        btnTtsSettings.setMinHeight(48 * dp);
+        root.addView(btnTtsSettings);
+        root.addView(space(4 * dp));
+        btnTtsSettings.setOnClickListener(v ->
+                SystemTtsEngine.openTtsSettings(TtsTestActivity.this));
+
+        // TTS 模型选择（sherpa 时显示）：内置 + 自定义
+        mStore = AudioService.getInstance(this).getConfigStore();
         spTtsModel = new Spinner(this);
-        spTtsModel.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, TTS_MODEL_NAMES));
+        mCustomTtsModels.clear();
+        for (AppConfigStore.Model m : mStore.getModels("tts")) {
+            if (!m.builtin) mCustomTtsModels.add(m);
+        }
+        List<String> ttsModelNames = new ArrayList<>(Arrays.asList(TTS_MODEL_NAMES));
+        for (AppConfigStore.Model m : mCustomTtsModels) ttsModelNames.add("自定义: " + m.name);
+        spTtsModel.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, ttsModelNames));
         spTtsModel.setVisibility(android.view.View.GONE);
         root.addView(spTtsModel);
         root.addView(space(12 * dp));
@@ -114,9 +138,19 @@ public class TtsTestActivity extends AppCompatActivity {
             @Override public void onStartTrackingTouch(SeekBar sb) {}
             @Override public void onStopTrackingTouch(SeekBar sb) {}
         });
+        // 打开时加载上次保存的语速
+        try {
+            float savedSpeed = Float.parseFloat(mStore.getConfig("tts_speed", "1.0"));
+            sbSpeed.setProgress((int) ((savedSpeed - 0.5f) / 1.5f * 100f));
+        } catch (NumberFormatException ignored) {}
         root.addView(space(12 * dp));
 
         // 按钮
+        btnSaveConfig = btn("💾 保存配置", 0xFF009688);
+        btnSaveConfig.setMinHeight(48 * dp);
+        root.addView(btnSaveConfig);
+        root.addView(space(6 * dp));
+
         android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
         btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         btnSpeak = btn("▶ 合成播放", 0xFF4CAF50);
@@ -141,9 +175,30 @@ public class TtsTestActivity extends AppCompatActivity {
         spEngine.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> p, android.view.View v, int pos, long id) {
                 spTtsModel.setVisibility(pos == 1 ? android.view.View.VISIBLE : android.view.View.GONE);
+                // 系统 TTS 才显示设置入口
+                btnTtsSettings.setVisibility(pos == 0 ? android.view.View.VISIBLE : android.view.View.GONE);
             }
             @Override public void onNothingSelected(android.widget.AdapterView<?> p) {}
         });
+        spTtsModel.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> p, android.view.View v, int pos, long id) {}
+            @Override public void onNothingSelected(android.widget.AdapterView<?> p) {}
+        });
+
+        // 打开时加载上次配置（引擎/模型）
+        String savedEngine = mStore.getConfig("tts_engine", "system");
+        for (int i = 0; i < ENGINE_KEYS.length; i++) {
+            if (ENGINE_KEYS[i].equals(savedEngine)) { spEngine.setSelection(i); break; }
+        }
+        String savedTtsModel = mStore.getConfig("tts_model", "melo");
+        for (int i = 0; i < ttsModelNames.size(); i++) {
+            if (i < TTS_MODEL_KEYS.length) {
+                if (TTS_MODEL_KEYS[i].equals(savedTtsModel)) spTtsModel.setSelection(i);
+            } else {
+                AppConfigStore.Model m = mCustomTtsModels.get(i - TTS_MODEL_KEYS.length);
+                if (m.name.equals(savedTtsModel)) spTtsModel.setSelection(i);
+            }
+        }
 
         // 事件
         btnSpeak.setOnClickListener(v -> doSynthesize());
@@ -151,10 +206,33 @@ public class TtsTestActivity extends AppCompatActivity {
             if (mEngine instanceof SystemTtsEngine) ((SystemTtsEngine) mEngine).stop();
             stopAudio();
         });
+        btnSaveConfig.setOnClickListener(v -> saveConfig());
     }
 
-    private String currentTtsKey() {
-        return TTS_MODEL_KEYS[spTtsModel.getSelectedItemPosition()];
+    /** 保存当前配置（引擎 + 模型 + 语速）到数据库，下次打开自动加载 */
+    private void saveConfig() {
+        mStore.setConfig("tts_engine", ENGINE_KEYS[spEngine.getSelectedItemPosition()]);
+        mStore.setConfig("tts_model", ttsModelKeyFor(spTtsModel.getSelectedItemPosition()));
+        float speed = 0.5f + sbSpeed.getProgress() / 100f * 1.5f;
+        mStore.setConfig("tts_speed", String.valueOf(speed));
+        Toast.makeText(this, "配置已保存：" + ENGINE_NAMES[spEngine.getSelectedItemPosition()]
+                + " / " + ttsModelKeyFor(spTtsModel.getSelectedItemPosition())
+                + " / " + String.format("%.1fx", speed), Toast.LENGTH_SHORT).show();
+    }
+
+    /** 模型下拉位置 → 配置 key（内置 key 或自定义模型名） */
+    private String ttsModelKeyFor(int pos) {
+        if (pos < TTS_MODEL_KEYS.length) return TTS_MODEL_KEYS[pos];
+        return mCustomTtsModels.get(pos - TTS_MODEL_KEYS.length).name;
+    }
+
+    /** 当前选中模型的实际目录（内置 key 或自定义绑定的路径） */
+    private File currentTtsModelDir(AudioService as) {
+        int pos = spTtsModel.getSelectedItemPosition();
+        if (pos < TTS_MODEL_KEYS.length) {
+            return as.getTtsModelDir(TTS_MODEL_KEYS[pos]);
+        }
+        return new File(mCustomTtsModels.get(pos - TTS_MODEL_KEYS.length).path);
     }
 
     private void doSynthesize() {
@@ -164,9 +242,12 @@ public class TtsTestActivity extends AppCompatActivity {
         String key = ENGINE_KEYS[spEngine.getSelectedItemPosition()];
         AudioService as = AudioService.getInstance(this);
 
-        if ("sherpa".equals(key) && !as.isTtsInstalled(currentTtsKey())) {
-            Toast.makeText(this, "TTS 模型未下载，请到模型管理页下载", Toast.LENGTH_LONG).show();
-            return;
+        if ("sherpa".equals(key)) {
+            File ttsDir = currentTtsModelDir(as);
+            if (!ttsDir.exists() || !ttsDir.isDirectory()) {
+                Toast.makeText(this, "TTS 模型未下载，请到模型管理页下载", Toast.LENGTH_LONG).show();
+                return;
+            }
         }
 
         float speed = 0.5f + sbSpeed.getProgress() / 100f * 1.5f;
@@ -180,7 +261,7 @@ public class TtsTestActivity extends AppCompatActivity {
         btnSpeak.setEnabled(false);
         tvStatus.setText("初始化引擎...");
 
-        mEngine.init(as.getTtsModelDir(currentTtsKey()), new ITtsEngine.Callback() {
+        mEngine.init(currentTtsModelDir(as), new ITtsEngine.Callback() {
             @Override
             public void onAudio(byte[] wav) {
                 runOnUiThread(() -> {

@@ -27,8 +27,12 @@ import androidx.core.content.ContextCompat;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import alin.android.alinos.voice.AudioService;
+import alin.android.alinos.voice.AppConfigStore;
 import alin.android.alinos.voice.engine.IAsrEngine;
 
 /**
@@ -40,7 +44,7 @@ public class AsrTestActivity extends AppCompatActivity {
     private static final int REQ_RECORD = 300;
 
     private Spinner spEngine, spModel;
-    private Button btnLoad, btnRecord, btnStop, btnRecognize;
+    private Button btnLoad, btnRecord, btnStop, btnRecognize, btnSaveConfig;
     private TextView tvStatus, tvResult;
 
     private IAsrEngine mEngine;
@@ -49,6 +53,9 @@ public class AsrTestActivity extends AppCompatActivity {
     private boolean mRecording;
     private Thread mRecThread;
     private Handler mHandler = new Handler(Looper.getMainLooper());
+
+    private AppConfigStore mStore;
+    private List<AppConfigStore.Model> mCustomAsrModels = new ArrayList<>();
 
     private static final String[] ENGINES = {"sherpa", "vosk"};
     private static final String[] ENGINE_NAMES = {"sherpa-onnx (paraformer等)", "Vosk (vosk-model-small-cn)"};
@@ -86,6 +93,7 @@ public class AsrTestActivity extends AppCompatActivity {
         root.addView(space(12 * dp));
 
         AudioService as = AudioService.getInstance(this);
+        mStore = as.getConfigStore();
 
         // 引擎选择
         root.addView(t("引擎：", 13, 0xFF666666, false));
@@ -94,19 +102,32 @@ public class AsrTestActivity extends AppCompatActivity {
         root.addView(spEngine);
         root.addView(space(4 * dp));
 
-        // 模型选择（仅 sherpa 时显示）
+        // 模型选择（仅 sherpa 时显示）：内置 + 自定义
         root.addView(t("模型：", 13, 0xFF666666, false));
         spModel = new Spinner(this);
+        mCustomAsrModels.clear();
+        for (AppConfigStore.Model m : mStore.getModels("asr")) {
+            if (!m.builtin) mCustomAsrModels.add(m);
+        }
+        List<String> modelNames = new ArrayList<>(Arrays.asList(MODEL_NAMES));
+        for (AppConfigStore.Model m : mCustomAsrModels) modelNames.add("自定义: " + m.name);
         android.widget.ArrayAdapter<String> ad = new android.widget.ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, MODEL_NAMES);
+                android.R.layout.simple_spinner_item, modelNames);
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spModel.setAdapter(ad);
         root.addView(spModel);
         root.addView(space(12 * dp));
 
-        // 加载模型
+        // 加载模型 + 保存配置
+        android.widget.LinearLayout cfgRow = new android.widget.LinearLayout(this);
+        cfgRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         btnLoad = btn("🔄 加载模型", 0xFF2196F3);
-        root.addView(btnLoad);
+        btnLoad.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, 48 * dp, 1));
+        cfgRow.addView(btnLoad);
+        btnSaveConfig = btn("💾 保存配置", 0xFF009688);
+        btnSaveConfig.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, 48 * dp, 1));
+        cfgRow.addView(btnSaveConfig);
+        root.addView(cfgRow);
         root.addView(space(4 * dp));
         tvStatus = t("状态：等待加载", 13, 0xFF999999, false);
         root.addView(tvStatus);
@@ -150,15 +171,51 @@ public class AsrTestActivity extends AppCompatActivity {
             }
             @Override public void onNothingSelected(android.widget.AdapterView<?> p) {}
         });
+        spModel.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> p, android.view.View v, int pos, long id) {}
+            @Override public void onNothingSelected(android.widget.AdapterView<?> p) {}
+        });
+
+        // 打开时加载上次保存的配置
+        String savedEngine = mStore.getConfig("asr_engine", "sherpa");
+        for (int i = 0; i < ENGINES.length; i++) {
+            if (ENGINES[i].equals(savedEngine)) { spEngine.setSelection(i); break; }
+        }
+        String savedModel = mStore.getConfig("asr_model", "paraformer");
+        int modelPos = -1;
+        for (int i = 0; i < modelNames.size(); i++) {
+            if (i < MODELS.length) {
+                if (MODELS[i].equals(savedModel)) modelPos = i;
+            } else {
+                AppConfigStore.Model m = mCustomAsrModels.get(i - MODELS.length);
+                if (m.name.equals(savedModel)) modelPos = i;
+            }
+        }
+        if (modelPos >= 0) spModel.setSelection(modelPos);
 
         // 事件
         btnLoad.setOnClickListener(v -> loadModel());
+        btnSaveConfig.setOnClickListener(v -> saveConfig());
         btnRecord.setOnClickListener(v -> startRecording());
         btnStop.setOnClickListener(v -> stopRecording());
         btnRecognize.setOnClickListener(v -> doRecognize());
     }
 
+    /** 保存当前配置（引擎 + 模型）到数据库，下次打开自动加载 */
+    private void saveConfig() {
+        mStore.setConfig("asr_engine", ENGINES[spEngine.getSelectedItemPosition()]);
+        mStore.setConfig("asr_model", modelKeyFor(spModel.getSelectedItemPosition()));
+        Toast.makeText(this, "配置已保存：" + ENGINE_NAMES[spEngine.getSelectedItemPosition()]
+                + " / " + modelKeyFor(spModel.getSelectedItemPosition()), Toast.LENGTH_SHORT).show();
+    }
+
     // ==================== 模型 ====================
+
+    /** 模型下拉位置 → 配置 key（内置 key 或自定义模型名） */
+    private String modelKeyFor(int pos) {
+        if (pos < MODELS.length) return MODELS[pos];
+        return mCustomAsrModels.get(pos - MODELS.length).name;
+    }
 
     private void loadModel() {
         AudioService as = AudioService.getInstance(this);
@@ -168,7 +225,14 @@ public class AsrTestActivity extends AppCompatActivity {
         if ("vosk".equals(eng)) {
             modelDir = as.getVoskModelDir();
         } else {
-            modelDir = as.getAsrModelDir(MODELS[spModel.getSelectedItemPosition()]);
+            int pos = spModel.getSelectedItemPosition();
+            if (pos < MODELS.length) {
+                modelDir = as.getAsrModelDir(MODELS[pos]);
+            } else {
+                // 自定义模型：直接用数据库绑定的路径
+                AppConfigStore.Model m = mCustomAsrModels.get(pos - MODELS.length);
+                modelDir = new File(m.path);
+            }
         }
 
         if (!modelDir.exists() || !modelDir.isDirectory()) {
@@ -218,6 +282,16 @@ public class AsrTestActivity extends AppCompatActivity {
 
     private void doStartRecording() {
         int minBuf = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
         mAudioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf * 2);
         if (mAudioRecord.getState() != AudioRecord.STATE_INITIALIZED) {

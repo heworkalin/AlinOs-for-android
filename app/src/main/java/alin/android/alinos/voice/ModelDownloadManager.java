@@ -43,14 +43,18 @@ public class ModelDownloadManager {
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09.tar.bz2";
 
     /** KWS 模型 */
-    public static final String MODEL_KWS_MOBILE = 
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01-mobile.tar.bz2";
-    public static final String MODEL_KWS_ZH_EN = 
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zh-en-3M-2025-12-20.tar.bz2";
+    // 注意：旧版 wenetspeech-3.3M-2024-01-01 模型包缺少 zipformer2 metadata，在 sherpa-onnx 1.13.5 下加载会 native 崩溃；
+    // 两个入口统一使用兼容的 zh-en-3M-2025-12-20（中英文都支持）。
+    public static final String MODEL_KWS_MOBILE =
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20.tar.bz2";
+    public static final String MODEL_KWS_ZH_EN =
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20.tar.bz2";
 
-    /** 声纹模型（推荐：ONNX 格式，直接可用） */
-    public static final String MODEL_SPEAKER_CAMPLUS = 
-            "https://huggingface.co/welcomyou/campplus-3dspeaker-200k-onnx/resolve/main/campplus_cn_en_common_200k.onnx";
+    /** 声纹模型（推荐：官方已加 metadata 的 campplus，sherpa-onnx 1.13.5 可直接加载）
+     *  注意：原始 3D-Speaker 导出（如 huggingface 的 campplus_cn_en_common_200k.onnx）没有
+     *  framework/output_dim 等 metadata，加载时 native 会 SIGSEGV 崩溃，必须用官方处理版。 */
+    public static final String MODEL_SPEAKER_CAMPLUS =
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx";
 
     /** VAD 静音检测模型 */
     public static final String MODEL_VAD_SILERO = 

@@ -183,9 +183,6 @@
             android:name="alin.android.alinos.McpServerActivity"
             android:exported="false" />
         <activity
-            android:name="alin.android.alinos.TextToSpeechActivity"
-            android:exported="true"/>
-        <activity
             android:name="alin.android.alinos.dev.DevToolsActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize|stateHidden" />
