@@ -1,6 +1,6 @@
 # AlinOs-for-Android 项目状态与推进报告
 
-> 更新日期：2026-07-06
+> 更新日期：2026-07-06（语音模块增补：2026-08-16）
 > 数据来源：全量源码分析 + 工具调用系统重构记录
 
 ---
@@ -101,6 +101,23 @@
 | 4 | SSH 隧道 + 远程操作 | LocalShellExecutor + JSch | ⭐⭐ |
 | 5 | 终端仿真 UI | LocalShellTestActivity | ⭐⭐⭐ |
 
+### 4.4 🔊 音频服务对接（2026-08 已完成）
+
+> 项目当前方向：**声音 / 音频相关服务**。以下为已落地部分。
+
+| # | 能力 | 组件 | 成熟度 |
+|---|------|------|--------|
+| 1 | sherpa-onnx 升级 1.13.5（Java/原生匹配，修复 qnnConfig JNI 崩溃） | libs/sherpa-onnx-1.13.5.aar | ⭐⭐⭐ |
+| 2 | ASR 离线识别（paraformer/sensevoice/whisper + 自定义模型） | SherpaAsrEngine + OfflineRecognizer | ⭐⭐⭐ |
+| 3 | TTS 合成（sherpa 离线 + 系统 TTS，含系统设置入口） | SherpaTtsEngine / SystemTtsEngine | ⭐⭐⭐ |
+| 4 | KWS 关键词唤醒（zipformer2，中英文唤醒词 token 转换 + 词表校验） | SherpaKwsEngine + KeywordTokenizer | ⭐⭐⭐ |
+| 5 | KWS 五轮录音验证（静音/声纹/长录音/报告） | KwsTestActivity | ⭐⭐⭐ |
+| 6 | 声纹注册/验证（campplus + 数据库） | VoiceprintStore + SpeakerEmbeddingManager | ⭐⭐⭐ |
+| 7 | 音频配置数据库（configs + models 双表，扫描自动建库） | AppConfigStore | ⭐⭐⭐ |
+| 8 | 统一音频服务接口（自动读配置→加载→执行） | AudioService.asr/tts/kws 统一入口 | ⭐⭐⭐ |
+| 9 | 自定义模型导入（压缩包 + 长按配置类型 + 兼容性提示） | AudioModelManagerActivity | ⭐⭐ |
+| 10 | 公共音频模块（录音/转换/RMS/WAV + 模型解析） | voice/core（AudioUtil/ModelResolver） | ⭐⭐⭐ |
+
 ---
 
 ## 五、🔧 近期修复记录
@@ -197,6 +214,25 @@
 **方案**：参照 `autoCompact` 模式，消息历史接近 token 限制时自动摘要旧消息。
 
 **涉及文件**：`PromptService.java`, 新增 `CompactService.java`
+
+### 6.6 🔊 音频服务待规划（尚未开工）
+
+| # | 能力 | 说明 | 优先级 |
+|---|------|------|:------:|
+| 1 | **悬浮窗常驻监听** | VAD 静音检测 + KWS 唤醒词两级流水线，悬浮窗内始终在线唤醒，唤醒后拉起 ASR | P0 |
+| 2 | 音频能力对外 SDK/AAR | voice/core + 引擎接口打包，供外部应用统一调用 | P1 |
+| 3 | 声音样本管理 | 声纹/声音样本的采集、更新、删除（本地库）完善 | P2 |
+
+### 6.7 🔧 工具 / 终端服务重构（规划，尚未开工）
+
+> 背景：实测低智能模型在复杂工具链路中**出错率/失败率偏高、缓存命中偏低**，工具与终端执行层需重构以提升容错与任务完成率。
+
+| # | 事项 | 说明 |
+|---|------|------|
+| 1 | 工具执行层重构 | 参数校验、错误恢复、重试机制、结果回注容错 |
+| 2 | 终端服务重构 | shell 会话稳定性、命令超时、输出截断处理 |
+| 3 | 工具缓存策略优化 | 提升缓存命中率，降低重复执行 |
+| 4 | 低智能模型降级策略 | 简化工具描述、拆分子任务、失败自动兜底 |
 
 ---
 
