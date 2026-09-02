@@ -25,3 +25,7 @@ signing.properties
 .idea/*
 docs/*
 .gradle/*
+
+# ===== 大二进制/引擎包：不入 git，改由 scripts/fetch_deps.sh 下载到工作区 =====
+app/libs/*.aar
+app/libs/*.jar
