@@ -54,17 +54,35 @@ AlinOs-for-android 开源协议声明
 
 三、预编译运行环境 (assets/files.default.*.tar.gz.so)
 
-  四个架构的预编译 Termux 根文件系统镜像（共约 160MB），内含 openssh、bash、
-  openssl、coreutils、openjdk-17 等。由 Termux 官方软件仓库的 .deb 包经魔改
-  构建流程裁剪合并而成，非 Termux 官方 bootstrap。
+四个架构的预编译 Termux 精简根文件系统镜像（各约 32~37MB），内含 openssh、
+bash、openssl、coreutils 等，由 Termux 官方 .deb 经魔改裁剪合并而成，非官方 bootstrap，
+并已内置 proot 虚拟化工具链（见下节）。
 
-  文件：app/src/main/assets/files.default.{aarch64,arm,x86_64,i686}.tar.gz.so
+  新版：app/src/{arm,arm64,x86_64,i686}/assets/files.default.{arm,aarch64,x86_64,i686}.tar.gz.so
+  （旧版曾位于 app/src/main/assets，已随仓库历史清洗移除）
 
-  其中各软件的协议以 Termux 官方仓库对应包的 LICENSE 为准（多数为 GPLv2/v3、
-  MIT、BSD），本 tar.gz 仅作为聚合分发载体。
+其中各软件协议以 Termux 官方仓库对应包 LICENSE 为准（多数 GPLv2/v3、MIT、BSD），
+本 tar.gz 仅作聚合分发载体，不改变单软件自身许可。
 
 
-四、第三方依赖库
+四、语音/虚拟化引擎与工具（新一轮引入）
+
+  A. sherpa-onnx 离线语音/合成/唤醒引擎     Apache-2.0     upstream: k2-fsa/sherpa-onnx
+       落地文件：app/libs/sherpa-onnx-1.13.5.aar（不入 git；由 scripts/fetch_deps.sh 拉取）
+       其内置推理运行时 libonnxruntime                    MIT     upstream: microsoft/onnxruntime
+
+  B. Vosk 离线语音引擎                      Apache-2.0     upstream: alphacep/vosk-api
+       坐标：com.alphacephei:vosk-android
+       语音模型（vosk-model-*）许可以 alphacephei.com/vosk/models 原始声明为准
+
+  C. proot / unzip / libtalloc / libbz2（内置于第三节的 files.default.*）
+       · proot                          GPLv2（上游 proot-me/PRoot；termux 构建）
+       · unzip (Info-ZIP)               类 BSD 许可
+       · libtalloc (Samba)               LGPL-2.1+
+       · libbz2 (bzip2)                 BSD-like
+     以上源自 termux 系构建，明细见 THIRD_PARTY_NOTICES.md。
+
+五、第三方依赖库（Maven / AndroidX）
 
   com.jcraft:jsch:0.1.55                 BSD-style     SSH 客户端
   dev.rikka.shizuku:api:13.1.5           Apache 2.0    ADB 权限代理
@@ -76,10 +94,12 @@ AlinOs-for-android 开源协议声明
   io.noties.markwon:core:4.6.2           Apache 2.0    Markdown 渲染
   io.noties:prism4j:2.0.0                Apache 2.0    代码高亮
   com.airbnb.android:lottie:6.1.0        Apache 2.0    动画
+  androidx.media3:media3-*:1.2.0        Apache 2.0    音视频/数据源(media3-okhttp)
+  net.java.dev.jna:jna                  LGPL-2.1      本地访问(5.14.0@aar)
   AndroidX 系列                          Apache 2.0    Android 支持库
 
 
-五、使用者义务
+六、使用者义务
 
   1. 分发本项目（含 APK）必须同时提供完整源代码，且必须以 GPLv3 授权。
   2. 必须保留所有上游版权声明和协议文本。

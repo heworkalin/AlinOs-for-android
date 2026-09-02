@@ -2,6 +2,13 @@
 
 基于 Android 平台的云端 AI 接口专属客户端。核心架构为 **安卓应用壳 + 轻量 Termux 底层**。
 
+> **⚠️ 项目性质（重要）**
+> 本项目为 **个人评估 / 学习 / 测试用途**，代码**由 AI 辅助产出**、由项目主导者（个人）负责需求拆解与真机验证。
+> - **暂不发布编译版本 / 发行版 / 上架**；仓库仅公开托管日常源码与演进记录。
+> - 当前仍处**方向探索中**，技术路线（终端执行层 / proot 虚拟化 / 音频服务等）尚未完全定型。
+> - 交互/架构思路上有参考 [pi.dev](https://pi.dev) 等开源项目哲学（无后台常驻、单次可观测命令执行等），但**代码均为本项目独立开发**，可明确受开源组件的许可约束（见下方版权与 LICENSE）。
+> - 若后续决定走向发行，会再单独评审许可兼容性并补齐相应合规流程。
+
 安卓应用层负责封装并对接各类云端 Open API，Termux 作为辅助层执行本地 CLI 命令、搭建轻量 Linux 运行环境。
 
 > **当前方向：声音 / 音频服务**——已落地端侧 ASR（语音识别）、TTS（语音合成）、KWS（关键词唤醒）、声纹验证四大音频能力，并搭建统一的音频配置数据库与服务接口，后续围绕「声音 + 音频」持续深化。
@@ -67,11 +74,14 @@
 
 Copyright © 2026 heworkalin. All rights reserved.
 
-本项目为**个人学习与测试用途**，当前不发布编译版本或发行版。
+本项目为**个人学习与测试（评估）用途**，当前**不发布编译版本、不发行、不上架**。进入发行前会对许可兼容性单独评审。
 
-本项目包含来自第三方的代码组件，其版权归各自所有者所有：
-- `com.termux.*` 包 — 基于 [Termux](https://github.com/termux/termux-app) 项目，遵循 GPLv3 协议
-- `com.termux.terminal` 包 — 基于 [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)，遵循 Apache 2.0 协议
-- `alin.android.alinos` 包 — 原创代码，保留所有权利
+本项目基于 / 嵌入了多个第三方开源组件，版权归其各自所有者所有；**使用本项目即代表你同样受这些上游许可约束**。第三方协议的完整清单与逐项归属见 [`LICENSE`](LICENSE) 与 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。摘要如下：
+
+- `com.termux.*` / `termux-shared` / 部分原生环境 — 基于 [Termux (termux-app)](https://github.com/termux/termux-app)：主体 `GPLv3`，个别文件 `MIT` / `Apache-2.0` / `GPLv2+Classpath`，详见 LICENSE。
+- `com.termux.terminal`/`view` — 基于 [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)：`Apache 2.0`。
+- **音频引擎（sherpa-onnx / vosk 等）** — [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)、内含 [onnxruntime](https://github.com/microsoft/onnxruntime)、[alphacep/vosk-api](https://github.com/alphacep/vosk-api)：`Apache-2.0` / `MIT`。（运行时语音模型许可以各模型原始声明为准，多为通用许可证。）
+- **预编译 proot / unzip / libtalloc / libbz2 工具**（内置于新版 `files.default.*`）— 来自 termux 系构建：proot 上游 `GPLv2`、unzip(Info-ZIP) `BSD-lite 类`、其余按上游 `MIT/BSD` 等，见 LICENSE。
+- `alin.android.alinos` 原创代码、以及其余通过 Gradle 拉取的第三方（AndroidX、JNA、jna、okhttp、gson、media3、lottie、prism4j/markwon 等）— 各自 `Apache-2.0 / MIT / LGPL` 等，逐项见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
 第三方组件的协议以其原始声明的许可证为准。
