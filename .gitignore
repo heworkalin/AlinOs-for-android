@@ -28,3 +28,4 @@ docs/*
 
 # ===== 最小编译依赖引擎包（sherpa-onnx aar）：不入 git，clone 后执行 scripts/fetch_deps.sh 拉取 =====
 app/libs/*.aar
+AGENTS.md
