@@ -11,7 +11,13 @@
 
 安卓应用层负责封装并对接各类云端 Open API，Termux 作为辅助层执行本地 CLI 命令、搭建轻量 Linux 运行环境。
 
-> **当前方向：声音 / 音频服务**——已落地端侧 ASR（语音识别）、TTS（语音合成）、KWS（关键词唤醒）、声纹验证四大音频能力，并搭建统一的音频配置数据库与服务接口，后续围绕「声音 + 音频」持续深化。
+> **路线状态（精简收敛中）**：
+> - 早期围绕 **PTY 会话终端 + 多层工具 + 语音/音频端侧能力**展开过较多探索；经评估 **PTY 长会话执行层优化代价过高**，决定改为 **CLI / bash 单次执行**（工具收敛为读写/修改/执行等基础动作），不再维持复杂会话生命周期。
+> - **音频（sherpa/vosk 的 ASR/TTS/KWS/声纹）短期搁置**，非当前主线，短期不做深度更新。
+> - 思路（提示词组装、上下文压缩、可观测单次命令执行）**参考 [pi.dev](https://pi.dev)** 等开源哲学；MCP 方向大概率作为**客户端、直接采用 mcp-cli** 接入远端，而非自维护服务端。
+> - 当前仓库定位仍是**个人评估 / 探索存档**，不做发行承诺。
+>
+> **文档约定**：只认 README + `docs/_archive_*` 已归档内容；详细旧报告见 “文档归档”。
 
 ---
 
@@ -48,13 +54,26 @@
 | **统一音频服务接口** | `AudioService.asrRecognizePcm / ttsSynthesize / kwsDetectPcm`——自动读配置→自动加载→自动执行 |
 | **自定义模型导入** | 压缩包导入 + 长按配置类型（ASR/TTS/KWS），兼容性规范提示 |
 
-## 未来规划
+## 后续方向（收敛后候选）
 
-- 对接更多 API：OpenAI (Responses) / Vertex AI (Express Mode) / Anthropic Messages API
-- SSH 深度集成：AI 通过 SSH 执行远程命令、SCP 文件迁移
-- Agent 端到端闭环：工具按需加载、多步推理
-- **重写终端 / 工具服务**：低智能模型在复杂工具链路中出错率/失败率高、缓存命中偏低，计划重构工具执行与终端服务，提升容错与任务完成率
-- **音频服务深化**：悬浮窗常驻监听（VAD + KWS 两级流水线）、声音样本管理、音频能力对外开放（SDK/AAR）
+- **执行层收敛**：PTY 会话 → CLI / bash 单次执行（读写/修改/执行等基础动作），提升容错与可观测，降低低智能模型在长链路中的高频失败。
+- **MCP**：优先以**客户端**形态或直接调用 mcp-cli 接入远端；此前的服务端能力暂不承诺保留（方向可能撤/收回到工具内部用）。
+- **Agent 提示词 / 相对路径 / 上下文压缩**：参考 pi.dev 等开源思路做轻量实现（若直接引用其设计，注意相应许可）。
+- **API 多路由（可选）**：OpenAI Responses / Vertex / Anthropic 等，按需再议。
+- **音频（搁置）**：ASR/TTS 等本期不深度更新；VAD/KWS 悬浮监听、SDK/AAR 列入低频候选。
+
+## 文档归档（docs/）
+
+为避免多份文档彼此迷失、看不清该看哪份，历史详细报告已收拢到 `docs/`（保留随仓库，仅作索引）：
+
+| 归档文件 | 内容 |
+|------|------|
+| `docs/_archive_PROJECT_STATUS.md` | 阶段推进 / 状态报告 |
+| `docs/_archive_AGENT_CAPABILITY_ROADMAP.md` | Agent 能力规划分析 |
+| `docs/_archive_PROOT_REFACTOR_PLAN.md` | proot 单次执行重构方案（曾规划） |
+| `docs/_archive_TMOE_PROOT_ANALYSIS.md` | proot 启动流程深度分析 |
+| `docs/_archive_SYSTEM_REPORT.md` | 早期系统报告 |
+| `docs/_archive_mcp.md` | MCP 官方规范摘录 |
 
 ## 致谢
 
