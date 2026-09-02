@@ -26,6 +26,5 @@ signing.properties
 docs/*
 .gradle/*
 
-# ===== 大二进制/引擎包：不入 git，改由 scripts/fetch_deps.sh 下载到工作区 =====
+# ===== 最小编译依赖引擎包（sherpa-onnx aar）：不入 git，clone 后执行 scripts/fetch_deps.sh 拉取 =====
 app/libs/*.aar
-app/libs/*.jar
