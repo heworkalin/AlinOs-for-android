@@ -31,3 +31,5 @@ wrapping cloud Open APIs (OpenAI-compatible) and executing local commands/audio.
 ## License / credits
 See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Termux-derived parts are
 GPLv3; engine libs Apache-2.0/MIT; emulator Apache-2.0; proot GPLv2; see details there.
+
+> Also referenced / studied: Termux, Android-Terminal-Emulator, TMOE, k2-fsa/sherpa-onnx etc. If code is reused, obey their own licenses.

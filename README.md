@@ -77,6 +77,8 @@
 
 ## 致谢
 
+> **参考 / 曾被借鉴的开源项目**：开发过程中参考了 [Termux](https://github.com/termux/termux-app)、[Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)、[TMOE](https://github.com/2moe/tmoe) 及 k2-fsa/sherpa-etc 等开源项目的用法/思路。本仓库已对其可能引入的部分均做了归并，但**学术/落地都以各上游自身许约为准**；若涉及具体代码复用，请核对对应 LICENSE。
+
 诚挚感谢所有助力项目开发的伙伴：
 
 - 感谢ヾ^_^♪ [pi agent](pi.dev)以及对接的deepseek-v4-falsh完成近期的，项目推进和开发.
