@@ -80,8 +80,18 @@
 
 开发中参考 / 借鉴了 [Termux](https://github.com/termux/termux-app)、[Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)、[TMOE](https://github.com/2moe/tmoe) 及 k2-fsa/sherpa 等开源项目的用法 / 思路；可能引入的部分已归并说明，**具体以各上游自身许可为准**，代码复用请核对其 LICENSE。
 
-同时感谢一路参与开发的伙伴/工具：
-- [pi](https://pi.dev) agent（近期的方向梳理与代码协作）、[DeepSeek](https://chat.deepseek.com/)（早期接口对接/重构）等各 AI 与检索平台。
+同时感谢一路参与开发、调试、资料与代码协作的 **AI 工具（绝大多数为网页端）**：
+
+| AI 工具 | 网页地址 | 用在哪 |
+|---|---|---|
+| **pi** | https://pi.dev | 近期的方向梳理与代码协作、大文件/仓库整理 |
+| **DeepSeek** | https://chat.deepseek.com | 早期代码生成、接口对接与云端 API 调试 |
+| **Kimi** | https://www.kimi.com | 早期代码拼接、长文阅读 |
+| **Claude** | https://claude.ai | 复杂逻辑排查、代码审查 |
+| **通义千问** | https://www.tongyi.com | 资料查询 / 汇总 |
+| **豆包** | https://www.doubao.com | 早期代码生成与资料查询 |
+
+> 以上均为 Web 端入口（个别功能也可能有桌面 / 移动端）。此处只作开发历程致谢，不构成任何推广或担保。仍以你实际使用方式为准。
 
 > 坦白记录：这个项目历经很久、做了很多探索，但在“轻量精简”上反复折腾、结果往往越叠越重、重复造轮子。现已按现实收敛写入本 README，后续是否还能持续由主导者评估决定。
 

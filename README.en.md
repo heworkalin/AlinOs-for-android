@@ -99,8 +99,18 @@ Development referenced / drew on [Termux](https://github.com/termux/termux-app),
 [TMOE](https://github.com/2moe/tmoe) and k2-fsa/sherpa etc.; anything possibly incorporated is described here,
 but **the upstream license of each governs** — verify each LICENSE before code reuse.
 
-Also thanks to peers/tools along the way: [pi](https://pi.dev) agent (recent direction & code collaboration),
-[DeepSeek](https://chat.deepseek.com/) (early API integration/refactor), and other AI/search platforms.
+Also thanks to the **AI tools (mostly web) used** throughout development & debugging:
+
+| Tool | Web site | Used for |
+|---|---|---|
+| **pi** | https://pi.dev | recent direction & code collaboration, large-file/repo cleanup |
+| **DeepSeek** | https://chat.deepseek.com | early code-gen, API integration & cloud-API debugging |
+| **Kimi** | https://www.kimi.com | early code stitching, long-text reading |
+| **Claude** | https://claude.ai | debugging tricky logic, code review |
+| **Tongyi Qianwen** | https://www.tongyi.com | documentation research / summaries |
+| **Doubao** | https://www.doubao.com | early code-gen & research |
+
+> Web entrypoints listed. Acknowledgement of the dev journey only — no endorsement implied.
 
 > Honest record: this project spanned a long time with lots of exploration but kept re-inventing wheels while
 > chasing “slim” — often getting heavier. It is now documented truthfully above; whether it continues is the
