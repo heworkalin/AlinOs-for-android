@@ -1,33 +1,26 @@
 # AlinOs-for-Android
 
-基于 Android 平台的云端 AI 接口专属客户端。核心架构为 **安卓应用壳 + 内置 proot 的用户态 Linux 执行层（files.default 精简 rootfs）**。
-> 不再把这套环境标榜成“轻量”：它实际随 proot 虚拟化运行，体积/依赖都偏厚重；之所以保留 proot，是为了拿到一个**真正可执行、可被脚本/CLI 驱动的用户态 Linux 层**，而非为了“小而美”。
+基于 Android 平台的云端 AI 接口专属客户端。核心架构为 **安卓应用壳 ＋ 内置 proot 的用户态 Linux 执行层（files.default rootfs，四架构）**。
 
-**EN（英文版）**: [English README](README.en.md) ／ 中文为权威主档。
+> 本环境**不标榜“轻量/精简”**：它随 proot 虚拟化运行，体积、依赖都偏厚重；之所以选择 proot，是为了在无 root 的第三方应用权限下拿到一个**真正可执行、可被脚本 / CLI / AI 工具驱动的近乎完整 Linux 用户态**，而不是为了“小而美”。执行侧早期以 Termux 精简辅助层为主，现已把重心放到 proot-root 之上。
 
-> **⚠️ 项目性质（重要）**
-> 本项目为 **个人评估 / 学习 / 测试用途**，代码**由 AI 辅助产出**、由项目主导者（个人）负责需求拆解与真机验证。
-> - **暂不发布编译版本 / 发行版 / 上架**；仓库仅公开托管日常源码与演进记录。
-> - 当前仍处**方向探索中**，技术路线（终端执行层 / proot 虚拟化 / 音频服务等）尚未完全定型。
-> - 交互/架构思路上有参考 [pi.dev](https://pi.dev) 等开源项目哲学（无后台常驻、单次可观测命令执行等），但**代码均为本项目独立开发**，可明确受开源组件的许可约束（见下方版权与 LICENSE）。
-> - 若后续决定走向发行，会再单独评审许可兼容性并补齐相应合规流程。
+**EN（English）**: [English README](README.en.md) — 中文为权威主档。
 
-安卓应用层负责封装并对接各类云端 Open API；执行侧不再只依赖“Termux 精简辅助层”，而是**随仓内置 proot + 四架构 rootfs（files.default）**，在无 root 的第三方应用权限下提供近乎完整的 Linux 用户态（含 openssh/bash 等）供脚本/CLI/AI 工具调用。
+---
 
-> **路线状态（重新评估后的方向）**：
-> - 早期围绕 **PTY 会话终端 + 多层工具 + 语音/音频端侧能力**展开过较多探索；早期曾试图把执行层做得“精准/轻量”，但**逐项堆叠工具后越做越重、重复造轮子**，并没有达到预期。重评估后：**执行层直接采用 proot**，用随环境预置的 proot 在 rootfs 里做 **CLI / bash 单次执行**，把原本复杂难维护的 PTY 长会话降级为无状态的读写/修改/执行原语；不再追求“精简轻量”，而是追求“可跑、可维护”。
-> - **音频（sherpa/vosk 的 ASR/TTS/KWS/声纹）短期搁置**，非当前主线，短期不做深度更新。
-> - 思路（提示词组装、上下文压缩、可观测单次命令执行）**参考 [pi.dev](https://pi.dev)** 等开源哲学；MCP 方向大概率作为**客户端、直接采用 mcp-cli** 接入远端，而非自维护服务端。
-> - 当前仓库定位仍是**个人评估 / 探索存档**，不做发行承诺。
->
-> **文档约定**：只认 README + `docs/_archive_*` 已归档内容；详细旧报告见 “文档归档”。
+## 项目性质与当前状态（请先读）
+
+- **个人评估 / 学习 / 测试用途**；代码 **由 AI 辅助产出**，由项目主导者（个人）负责需求拆解、Bug 定位与真机验证。
+- **暂不发布编译版本 / 发行版 / 不上架**；仓库仅公开托管源码与演进记录。
+- 仍处 **方向探索中，且短期可能遥遥无期 / 搁置**：技术路线（执行层 / proot / 音频 / MCP / Agent 形态）尚未定型，主导者短期忙于其他事务，想清楚了再推进。
+- 交互与架构思路上**参考了 [pi.dev](https://pi.dev) 等开源哲学**（无后台常驻、可观测的单次命令执行、提示词/上下文压缩思路等）；若确有代码级复用，相应许可会随之生效，见 LICENSE / THIRD_PARTY_NOTICES。
+- 若未来转为发行，会先单独评审许可兼容性并补齐合规流程。
 
 ---
 
 ## 项目编译要求
 
-- Gradle 发行版：gradle-8.14
-- Gradle JDK：JDK 21
+- Gradle 发行版：gradle-8.14；Gradle JDK：JDK 21
 - Android Studio：[Android Studio](https://developer.android.google.cn/studio)
 
 ## 项目地址
@@ -35,39 +28,42 @@
 - [GitHub](https://github.com/heworkalin/AlinOs-for-android)
 - [Gitee](https://gitee.com/hewrod/AlinOs-for-android)
 
-## 当前能力
+## 一线执行的现状（如实）
 
-- **AI 对话**：流式 SSE 对话，支持多会话管理
-- **Tool Calling**：Function Calling 工具调用循环（解析→执行→回注→递归）
-- **Agent 工具集**：16 个已注册工具（含元工具 search_tools）
-- **Think 块展示**：AI 思考过程可折叠卡片
-- **工具调用记录**：独立数据库存储完整调用日志
-- **终端仿真**：PTY Shell 会话 + 远程 SSH 连接
-- **配置管理**：多 AI 服务配置（OpenAI / DeepSeek）
+- **运行/依赖前置**：clone 后先执行 `bash scripts/fetch_deps.sh` 拉取被移出 git 的最小编译引擎（`sherpa-onnx-1.13.5.aar` → `app/libs/`）；四架构 `files.default.*`（内含 proot / unzip / libtalloc / libbz2）随仓库保留。
 
-### 🔊 音频 / 声音模块（新）
+### 已实现的模块（曾完成，按当前真实状态标注）
 
-| 模块 | 说明 |
-|------|------|
-| **ASR 语音识别** | sherpa-onnx 1.13.5 离线识别（paraformer/sensevoice/whisper，支持自定义模型） |
-| **TTS 语音合成** | sherpa-onnx 离线 TTS（melo/aishell/xiaoya）+ Android 系统 TTS（含设置入口） |
-| **KWS 关键词唤醒** | zipformer2 唤醒词检测，中英文唤醒词（内置拼音/音素转换 + 词表校验） |
-| **声纹验证** | campplus 说话人识别（五轮声纹注册、余弦相似度比对） |
-| **音频配置数据库** | SQLite 双表（configs 配置 + models 模型注册），扫描自动建库，模型路径数据库优先 |
-| **统一音频服务接口** | `AudioService.asrRecognizePcm / ttsSynthesize / kwsDetectPcm`——自动读配置→自动加载→自动执行 |
-| **自定义模型导入** | 压缩包导入 + 长按配置类型（ASR/TTS/KWS），兼容性规范提示 |
+| 模块 | 说明 | 状态 |
+|------|------|:----:|
+| AI 对流对话 | 流式 SSE，多会话 + 历史 | ✅ 在用 |
+| Tool Calling | FT 解析→执行→回注→递归循环 | ✅ 在用（工具将随执行层精简） |
+| Agent 工具集 | 若干已注册工具（含元工具 search_tools） | ✅ 在用，将在重构中收敛 |
+| Think / 工具日志 | 思考块展示 / 调用记录入库 | ✅ 在用 |
+| 配置管理 | 多 AI 服务（OpenAI / DeepSeek） | ✅ 在用 |
+| 终端执行/远端 SSH | 本地 Shell(PTY) + JSch 远端 | 🟡 **遗留** — 因 PTY 长会话难维护，正改向 proot 单次 CLI |
+| 音频（ASR/TTS/KWS/声纹） | sherpa-onnx / vosk 离线端侧八大能力 | ⏸️ **短期搁置** |
+| MCP 服务端 | 早前实验 HttpServer 实现 | 🟡 **可能撤/收回内部** — 改用 MCP 客户端（mcp-cli）接入远端 |
 
-## 后续方向（收敛后候选）
+> 说明：上表是当前“能跑/曾跑”的真实盘点。短期不会新增功能；后续若推进，重点是**精简工具与执行层到 proot 单次 CLI 三大件（读写/修改/执行）**。
 
-- **执行层收敛**：PTY 会话 → CLI / bash 单次执行（读写/修改/执行等基础动作），提升容错与可观测，降低低智能模型在长链路中的高频失败。
-- **MCP**：优先以**客户端**形态或直接调用 mcp-cli 接入远端；此前的服务端能力暂不承诺保留（方向可能撤/收回到工具内部用）。
-- **Agent 提示词 / 相对路径 / 上下文压缩**：参考 pi.dev 等开源思路做轻量实现（若直接引用其设计，注意相应许可）。
+### 后端预置环境
+
+`app/src/{arm,arm64,x86_64,i686}/assets/files.default.*.tar.gz.so` —— 四架构非官方精简 rootfs（内含 openssh/bash/coreutils 等），并内置 proot/unzip 等，供执行层容器化调用；无外部重建源，故随仓库保留。
+
+---
+
+## 后续方向（收敛后的候选，非承诺）
+
+- **执行层**：PTY 会话 → proot 内的 **CLI / bash 单次执行**（无状态、可观测），把工具收敛为读写 / 修改 / 执行等基础原语。
+- **MCP**：优先以**客户端**形态，或直接调用 `mcp-cli` 接入远端，而非自维护服务端。
+- **Agent**：提示词组装 / 相对路径 / 上下文压缩等，参考 pi.dev 思路做轻量实现；区分“给 AI 的能力”与“工具内部用”的能力，避免外放一堆旁支。
 - **API 多路由（可选）**：OpenAI Responses / Vertex / Anthropic 等，按需再议。
-- **音频（搁置）**：ASR/TTS 等本期不深度更新；VAD/KWS 悬浮监听、SDK/AAR 列入低频候选。
+- **音频（搁置）**：短期不深度更新；如推进再评估 VAD/KWS 悬浮监听、SDK/AAR 等低频候选。
 
 ## 文档归档（docs/）
 
-为避免多份文档彼此迷失、看不清该看哪份，历史详细报告已收拢到 `docs/`（保留随仓库，仅作索引）：
+为**避免多份文档彼此迷失、看不清该看哪份**，历史长报告已收拢到 `docs/`（保留随仓库，仅作索引）：
 
 | 归档文件 | 内容 |
 |------|------|
@@ -78,19 +74,16 @@
 | `docs/_archive_SYSTEM_REPORT.md` | 早期系统报告 |
 | `docs/_archive_mcp.md` | MCP 官方规范摘录 |
 
+**文档约定**：先看本 README；找不到再翻 `docs/_archive_*`。
+
 ## 致谢
 
-> **参考 / 曾被借鉴的开源项目**：开发过程中参考了 [Termux](https://github.com/termux/termux-app)、[Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)、[TMOE](https://github.com/2moe/tmoe) 及 k2-fsa/sherpa-etc 等开源项目的用法/思路。本仓库已对其可能引入的部分均做了归并，但**学术/落地都以各上游自身许约为准**；若涉及具体代码复用，请核对对应 LICENSE。
+开发中参考 / 借鉴了 [Termux](https://github.com/termux/termux-app)、[Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)、[TMOE](https://github.com/2moe/tmoe) 及 k2-fsa/sherpa 等开源项目的用法 / 思路；可能引入的部分已归并说明，**具体以各上游自身许可为准**，代码复用请核对其 LICENSE。
 
-诚挚感谢所有助力项目开发的伙伴：
+同时感谢一路参与开发的伙伴/工具：
+- [pi](https://pi.dev) agent（近期的方向梳理与代码协作）、[DeepSeek](https://chat.deepseek.com/)（早期接口对接/重构）等各 AI 与检索平台。
 
-- 感谢ヾ^_^♪ [pi agent](pi.dev)以及对接的deepseek-v4-falsh完成近期的，项目推进和开发.
-- 感谢 **[DeepSeek](https://chat.deepseek.com/)** 网页版早期代码生成，接口逻辑重构与云端 API 对接调试，攻克复杂模块开发难点。
-- 感谢 **[Kimi](https://www.kimi.com/)** 早期的代码拼接，**[claude](https://claude.ai/)** 免费账号协助复杂逻辑排查，**[千问](https://www.qianwen.com/)** 资料查询，**[豆包](https://www.doubao.com/)** 早期代码生成与资料查询。
-
-这个项目的完成，首先要归功于大语言模型带来的技术红利。它让我跳出了代码细节的束缚，转而专注于功能模块的梳理、资料的查询与整合，以及用文字清晰地表达需求。但回过头来看，真正让想法落地的，还是个人的执行力——面对层出不穷的环境配置问题，只有坚持去解决，才能走到最后。
-
-作为项目主导者，我全程负责需求拆解、Bug 定位、真机调试、功能反馈与版本追踪，推进项目从框架搭建到核心流程落地。
+> 坦白记录：这个项目历经很久、做了很多探索，但在“轻量精简”上反复折腾、结果往往越叠越重、重复造轮子。现已按现实收敛写入本 README，后续是否还能持续由主导者评估决定。
 
 ---
 
@@ -98,14 +91,14 @@
 
 Copyright © 2026 heworkalin. All rights reserved.
 
-本项目为**个人学习与测试（评估）用途**，当前**不发布编译版本、不发行、不上架**。进入发行前会对许可兼容性单独评审。
+本项目为**个人学习与测试（评估）用途**，**不发布编译版本 / 不发行 / 不上架**；发行前会另行评审许可兼容性。
 
-本项目基于 / 嵌入了多个第三方开源组件，版权归其各自所有者所有；**使用本项目即代表你同样受这些上游许可约束**。第三方协议的完整清单与逐项归属见 [`LICENSE`](LICENSE) 与 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。摘要如下：
+本项目基于 / 嵌入了多个第三方开源组件，版权归各所有者；**使用本项目即代表接受这些上游许可约束**。完整清单见 [`LICENSE`](LICENSE) 与 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。摘要：
 
-- `com.termux.*` / `termux-shared` / 部分原生环境 — 基于 [Termux (termux-app)](https://github.com/termux/termux-app)：主体 `GPLv3`，个别文件 `MIT` / `Apache-2.0` / `GPLv2+Classpath`，详见 LICENSE。
-- `com.termux.terminal`/`view` — 基于 [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)：`Apache 2.0`。
-- **音频引擎（sherpa-onnx / vosk 等）** — [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)、内含 [onnxruntime](https://github.com/microsoft/onnxruntime)、[alphacep/vosk-api](https://github.com/alphacep/vosk-api)：`Apache-2.0` / `MIT`。（运行时语音模型许可以各模型原始声明为准，多为通用许可证。）
-- **预编译 proot / unzip / libtalloc / libbz2 工具**（内置于新版 `files.default.*`）— 来自 termux 系构建：proot 上游 `GPLv2`、unzip(Info-ZIP) `BSD-lite 类`、其余按上游 `MIT/BSD` 等，见 LICENSE。
-- `alin.android.alinos` 原创代码、以及其余通过 Gradle 拉取的第三方（AndroidX、JNA、jna、okhttp、gson、media3、lottie、prism4j/markwon 等）— 各自 `Apache-2.0 / MIT / LGPL` 等，逐项见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+- `com.termux.*` / `termux-shared` / 原生环境 — [Termux (termux-app)](https://github.com/termux/termux-app)：主体 GPLv3，个别 MIT / Apache-2.0 / GPLv2+Classpath。
+- `com.termux.terminal` / `view` — [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)：Apache-2.0。
+- 音频引擎 — [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)（含 [onnxruntime](https://github.com/microsoft/onnxruntime)）、[alphacep/vosk-api](https://github.com/alphacep/vosk-api)：Apache-2.0 / MIT（模型许以各原始声明为准）。
+- 预编译 proot / unzip / libtalloc / libbz2（内置于 `files.default.*`）— proot 上游 GPLv2、unzip(Info-ZIP) BSD 类、libtalloc LGPL-2.1+、libbz2 BSD-like。
+- `alin.android.alinos` 原创代码及 Gradle 三方（AndroidX / JNA / okhttp / gson / media3 / lottie / markwon-prism 等）— Apache-2.0 / MIT / LGPL，细节见 NOTICE。
 
-第三方组件的协议以其原始声明的许可证为准。
+第三方组件协议以其原始声明为准。
