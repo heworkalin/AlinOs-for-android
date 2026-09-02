@@ -6,7 +6,7 @@ android {
     namespace 'alin.android.alinos'
     compileSdk 36
 
-    // ========== 新增：加载根目录 signing.properties 签名配置 ==========
+    // ========== 签名配置 ==========
     Properties signProp = new Properties()
     File propFile = rootProject.file("signing.properties")
     println("====签名调试=== 配置文件存在：" + propFile.exists())
@@ -15,7 +15,7 @@ android {
         println("====签名调试=== jks路径：" + signProp.getProperty("storeFile"))
         println("====签名调试=== 密钥别名：" + signProp.getProperty("keyAlias"))
     }
-    // ========== 新增：定义全局签名配置（debug + release 共用一套jks） ==========
+
     signingConfigs {
         release {
             if (propFile.exists()) {
@@ -39,14 +39,53 @@ android {
         applicationId "alin.android.alinos"
         minSdk 24
         targetSdk 36
-        versionCode 1
-        versionName "1.0"
+        versionCode 10
+        versionName "1.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        // ✅ 简化 NDK 配置
-        ndk {
-            abiFilters 'arm64-v8a', 'x86_64'// 仅包含需要的 ABI，减少 APK 大小'
+    }
+
+    flavorDimensions "abi"
+    productFlavors {
+        arm64 {
+            dimension "abi"
+            ndk {
+                abiFilters "arm64-v8a"
+            }
+        }
+        x86_64 {
+            dimension "abi"
+            ndk {
+                abiFilters "x86_64"
+            }
+        }
+        arm {
+            dimension "abi"
+            ndk {
+                abiFilters "armeabi-v7a"
+            }
+        }
+        i686 {
+            dimension "abi"
+            ndk {
+                abiFilters "x86"
+            }
+        }
+    }
+
+    sourceSets {
+        arm64 {
+            assets.srcDirs += "src/arm64/assets"
+        }
+        x86_64 {
+            assets.srcDirs += "src/x86_64/assets"
+        }
+        arm {
+            assets.srcDirs += "src/arm/assets"
+        }
+        i686 {
+            assets.srcDirs += "src/i686/assets"
         }
     }
 
@@ -54,10 +93,8 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // ========== 新增：绑定release签名 ==========
             signingConfig signingConfigs.release
         }
-        // ========== 新增：debug变体绑定自定义签名，assembleDebug自动签名 ==========
         debug {
             signingConfig signingConfigs.debug
         }
@@ -72,12 +109,15 @@ android {
         jniLibs {
             useLegacyPackaging true
         }
-        pickFirst 'lib/arm64-v8a/*'
-        pickFirst 'lib/arm64-v8a/libtalloc.so.2'
-        pickFirst 'lib/x86_64/*'
-        pickFirst 'lib/x86_64/libtalloc.so.2'
+    }
+
+    aaptOptions {
+        noCompress 'tar.gz.so'
     }
 }
+
+
+
 configurations {
     all {
         exclude group: 'org.jetbrains', module: 'annotations-java5'
