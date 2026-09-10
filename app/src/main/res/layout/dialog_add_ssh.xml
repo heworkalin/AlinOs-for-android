@@ -247,30 +247,125 @@
                 android:clickable="true"/>
         </LinearLayout>
 
-        <EditText
-            android:id="@+id/et_password"
+        <RelativeLayout
+            android:id="@+id/layout_password_input"
             android:layout_width="match_parent"
             android:layout_height="42dp"
-            android:background="@drawable/bg_ssh_input"
-            android:paddingHorizontal="10dp"
-            android:textSize="13sp"
-            android:textColor="#303133"
-            android:hint="请输入密码"
-            android:inputType="textPassword"
-            android:singleLine="true"/>
+            android:background="@drawable/bg_ssh_input">
 
-        <EditText
-            android:id="@+id/et_key"
+            <EditText
+                android:id="@+id/et_password"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingHorizontal="10dp"
+                android:paddingEnd="40dp"
+                android:textSize="13sp"
+                android:textColor="#303133"
+                android:hint="请输入密码"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                android:background="@null"/>
+
+            <ImageView
+                android:id="@+id/iv_password_toggle"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="8dp"
+                android:src="@android:drawable/ic_menu_view"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="显示密码" />
+        </RelativeLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="私钥内容"
+            android:textSize="10sp"
+            android:textColor="#909399"
+            android:layout_marginTop="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp"
+            android:visibility="gone"
+            android:id="@+id/layout_key_row">
+
+            <EditText
+                android:id="@+id/et_key"
+                android:layout_width="0dp"
+                android:layout_height="90dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_ssh_input"
+                android:padding="10dp"
+                android:textSize="11sp"
+                android:textColor="#303133"
+                android:hint="粘贴密钥内容"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:scrollbars="vertical"/>
+
+            <TextView
+                android:id="@+id/tv_pick_key_file"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_ssh_input"
+                android:paddingHorizontal="12dp"
+                android:gravity="center"
+                android:text="选择"
+                android:textSize="12sp"
+                android:textColor="#409EFF"
+                android:clickable="true" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cb_key_encrypted"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="私钥已加密，需要密码解密"
+            android:textSize="12sp"
+            android:textColor="#606266"
+            android:buttonTint="#409EFF"
+            android:visibility="gone" />
+
+        <RelativeLayout
+            android:id="@+id/layout_key_passphrase"
             android:layout_width="match_parent"
             android:layout_height="42dp"
+            android:layout_marginTop="4dp"
             android:background="@drawable/bg_ssh_input"
-            android:paddingHorizontal="10dp"
-            android:textSize="13sp"
-            android:textColor="#303133"
-            android:hint="请输入密钥路径或粘贴密钥内容"
-            android:inputType="text"
-            android:singleLine="true"
-            android:visibility="gone"/>
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/et_key_passphrase"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@null"
+                android:paddingHorizontal="10dp"
+                android:textSize="13sp"
+                android:textColor="#303133"
+                android:hint="私钥解密密码"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                android:paddingEnd="36dp"/>
+
+            <ImageView
+                android:id="@+id/iv_key_passphrase_toggle"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="8dp"
+                android:src="@android:drawable/ic_menu_view"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="显示私钥密码" />
+        </RelativeLayout>
     </LinearLayout>
 
     <!-- ======================================================== -->
@@ -293,17 +388,35 @@
             android:paddingTop="6dp"
             android:paddingBottom="2dp"/>
 
-        <EditText
-            android:id="@+id/et_local_password"
+        <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="42dp"
-            android:background="@drawable/bg_ssh_input"
-            android:paddingHorizontal="10dp"
-            android:textSize="13sp"
-            android:textColor="#303133"
-            android:hint="请输入密码"
-            android:inputType="textPassword"
-            android:singleLine="true"/>
+            android:background="@drawable/bg_ssh_input">
+
+            <EditText
+                android:id="@+id/et_local_password"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingHorizontal="10dp"
+                android:paddingEnd="40dp"
+                android:textSize="13sp"
+                android:textColor="#303133"
+                android:hint="请输入密码"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                android:background="@null"/>
+
+            <ImageView
+                android:id="@+id/iv_local_password_toggle"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="8dp"
+                android:src="@android:drawable/ic_menu_view"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="显示密码" />
+        </RelativeLayout>
 
         <TextView
             android:id="@+id/tv_local_status"

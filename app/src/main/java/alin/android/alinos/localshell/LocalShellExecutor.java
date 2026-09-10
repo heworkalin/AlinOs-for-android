@@ -417,7 +417,19 @@ public class LocalShellExecutor {
 
     private boolean checkEnvironmentReady() {
         try {
-            return new File(LocalShellConstants.PREFIX_DIR_PATH).isDirectory();
+            // 不仅看 prefix 目录，还要确认 bash 可执行文件真实存在，
+            // 否则会误判为就绪，导致后续 exec 报 error=13 Permission denied
+            return new File(LocalShellConstants.PREFIX_DIR_PATH).isDirectory()
+                    && new File(LocalShellConstants.BIN_DIR_PATH, "bash").exists();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** bash 可执行文件是否已就绪（用于判断本地 shell 环境是否已安装）。 */
+    public static boolean isBashInstalled() {
+        try {
+            return new File(LocalShellConstants.BIN_DIR_PATH, "bash").exists();
         } catch (Exception e) {
             return false;
         }
@@ -921,6 +933,278 @@ public class LocalShellExecutor {
             "last_20", DEFAULT_RETURN_LINES, false);
     }
 
+    // ── exec_capture ──
+
+    /**
+     * 执行命令并返回真实 stdout/stderr（不依赖终端屏幕渲染）。
+     *
+     * 原理：命令输出重定向到临时文件，轮询退出标记文件，再用 Java 直接读文件。
+     * 因此不受 PTY 折行、ANSI、提示符、屏幕滚动等干扰，适合：
+     * - 批量执行命令并拿到精确输出
+     * - 需要区分退出码的场景
+     * - 脚本化验证流程
+     *
+     * 命令会包在 {{ ... ; }} 里，所以 cd/export 等只影响本次执行，不污染会话。
+     *
+     * @param sessionId 会话 ID
+     * @param command   要执行的命令（可含管道/重定向/多行）
+     * @param timeoutMs 最长等待毫秒（默认 30000）
+     * @param maxBytes  返回内容上限（默认 64KB，避免超大输出）
+     */
+    public JSONObject exec_capture(String sessionId, String command, long timeoutMs, int maxBytes) {
+        // 宽松初始化：只保证 appContext / 基础环境就绪，
+        // 不要求本地 bash 已安装（未安装时回退 /system/bin/sh）
+        if (!initialized) {
+            if (appContext == null) {
+                return errorJson("NOT_INITIALIZED", "Call provideContext() first");
+            }
+            this.context = appContext;
+            this.shellEnv = new LocalShellEnvironment();
+            this.initialized = true;
+            envReady = checkEnvironmentReady();
+            initPersistence(appContext);
+            LocalShellEnvironment.init(appContext);
+            Log.d(TAG, "exec_capture init: envReady=" + envReady + ", bashInstalled=" + isBashInstalled());
+        }
+        if (command == null || command.trim().isEmpty()) {
+            return errorJson("INVALID_COMMAND", "command cannot be empty");
+        }
+        if (timeoutMs <= 0) timeoutMs = 30000;
+        if (maxBytes <= 0) maxBytes = 64 * 1024;
+
+        // 优先用本地 bash；未安装时回退到系统 sh
+        boolean bashInstalled = isBashInstalled();
+
+        long startTime = System.currentTimeMillis();
+        Process process = null;
+        try {
+            String[] cmdArray;
+            if (bashInstalled) {
+                // Android 限制：不能直接 execve() app 私有目录的 ELF 文件。
+                // 解决：先用系统 sh 启动，再由它的 exec 内建命令替换进程加载私有 bash。
+                //   /system/bin/sh -c 'exec "$PREFIX/bin/bash" -c "<command>"'
+                // 这样可执行文件由已运行的 sh 进程上下文加载，绕过限制。
+                String bashPath = LocalShellConstants.BIN_DIR_PATH + "/bash";
+                String inner = "exec " + shqSingle(bashPath) + " -c " + shqSingle(command);
+                cmdArray = new String[]{"/system/bin/sh", "-c", inner};
+            } else {
+                cmdArray = new String[]{"/system/bin/sh", "-c", command};
+            }
+
+            String[] envArray = buildEnvArray();
+            File workDir = new File(LocalShellConstants.HOME_DIR_PATH);
+            if (!workDir.exists()) {
+                workDir.mkdirs();
+                if (!workDir.exists()) workDir = new File("/");
+            }
+
+            process = Runtime.getRuntime().exec(cmdArray, envArray, workDir);
+
+            // 超时控制：主进程销毁后 stop 残留子进程
+            final Process p = process;
+            java.util.Timer killer = new java.util.Timer(true);
+            killer.schedule(new java.util.TimerTask() {
+                @Override public void run() {
+                    try { if (p.isAlive()) p.destroyForcibly(); } catch (Exception ignored) {}
+                }
+            }, timeoutMs);
+
+            final java.io.ByteArrayOutputStream outBuf = new java.io.ByteArrayOutputStream();
+            final java.io.ByteArrayOutputStream errBuf = new java.io.ByteArrayOutputStream();
+            final int capBytes = maxBytes;
+            Thread tOut = new Thread(() -> pump(p.getInputStream(), outBuf, capBytes));
+            Thread tErr = new Thread(() -> pump(p.getErrorStream(), errBuf, capBytes));
+            tOut.start(); tErr.start();
+
+            int exitCode;
+            boolean finished;
+            try {
+                exitCode = process.waitFor();
+                finished = true;
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                exitCode = -1;
+                finished = false;
+            } finally {
+                killer.cancel();
+            }
+
+            try { tOut.join(1500); } catch (InterruptedException ignored) {}
+            try { tErr.join(1500); } catch (InterruptedException ignored) {}
+
+            String stdout = outBuf.toString("UTF-8");
+            String stderr = errBuf.toString("UTF-8");
+            boolean truncated = stdout.length() >= maxBytes || stderr.length() >= maxBytes;
+
+            JSONObject data = new JSONObject();
+            data.put("stdout", stdout);
+            data.put("stderr", stderr);
+            data.put("exit_code", exitCode);
+            data.put("duration_ms", System.currentTimeMillis() - startTime);
+            data.put("session_id", sessionId);
+            data.put("timed_out", !finished);
+            data.put("truncated", truncated);
+            data.put("shell", bashInstalled ? "bash(local)" : "sh(system)");
+            data.put("bash_installed", bashInstalled);
+
+            JSONObject result = new JSONObject();
+            result.put("status", exitCode == 0 ? "success" : "error");
+            if (exitCode != 0) {
+                result.put("error_code", finished ? "NON_ZERO_EXIT" : "TIMEOUT");
+                result.put("message", finished
+                        ? ("命令退出码 " + exitCode)
+                        : ("命令未在 " + timeoutMs + "ms 内完成，已终止"));
+            }
+            result.put("data", data);
+            // 顶层也放一份，便于模型直接读取
+            result.put("stdout", stdout);
+            result.put("stderr", stderr);
+            result.put("exit_code", exitCode);
+            return result;
+        } catch (Exception e) {
+            String msg = e == null ? "unknown" : e.getMessage();
+            // 环境未安装的典型报错：error=13, Permission denied
+            if (!bashInstalled && msg != null && msg.contains("Permission denied")) {
+                JSONObject e2 = errorJson("ENV_NOT_INSTALLED",
+                        "本地 Shell 环境未安装，且系统 sh 无法执行该命令");
+                try {
+                    e2.put("hint", "请先打开一次「终端」界面完成环境解压（约 60MB）");
+                    e2.put("expected_bash", LocalShellConstants.BIN_DIR_PATH + "/bash");
+                } catch (Exception ignored) {}
+                return e2;
+            }
+            return errorJson("EXEC_FAILED", msg);
+        } finally {
+            if (process != null && process.isAlive()) {
+                try { process.destroyForcibly(); } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    /** 构建 exec 所需的环境变量数组。 */
+    private String[] buildEnvArray() {
+        HashMap<String, String> env = null;
+        try {
+            if (shellEnv != null && appContext != null) {
+                env = shellEnv.getEnvironment(appContext, false);
+            }
+        } catch (Exception ignored) {}
+        if (env == null || env.isEmpty()) {
+            env = new HashMap<>();
+            env.put("HOME", LocalShellConstants.HOME_DIR_PATH);
+            env.put("PREFIX", LocalShellConstants.PREFIX_DIR_PATH);
+            env.put("PATH", LocalShellConstants.BIN_DIR_PATH + ":/system/bin:/system/xbin");
+            env.put("TMPDIR", LocalShellConstants.TMP_DIR_PATH);
+            env.put("TERM", "xterm-256color");
+            env.put("LANG", "en_US.UTF-8");
+            env.put("LD_LIBRARY_PATH", LocalShellConstants.LIB_DIR_PATH);
+        }
+        // linker 直接加载 ELF 时需要 LD_LIBRARY_PATH 能找到 $PREFIX/lib 下的 so
+        if (!env.containsKey("LD_LIBRARY_PATH") || env.get("LD_LIBRARY_PATH") == null) {
+            env.put("LD_LIBRARY_PATH", LocalShellConstants.LIB_DIR_PATH);
+        }
+        String[] arr = new String[env.size()];
+        int i = 0;
+        for (Map.Entry<String, String> e : env.entrySet()) {
+            arr[i++] = e.getKey() + "=" + e.getValue();
+        }
+        return arr;
+    }
+
+    /**
+     * 单引号转义，供嵌套 shell 命令使用。
+     * 内部单引号转换为 '\'' （结束→转义单引号→重新开始）。
+     */
+    private static String shqSingle(String s) {
+        if (s == null) return "''";
+        return "'" + s.replace("'", "'\\''") + "'";
+    }
+
+    /**
+     * 查找系统动态链接器（保留作为兼容备选方案）。
+     * 64 位优先 linker64，其次 linker。
+     */
+    private static String findLinker() {
+        String[] candidates = new String[]{
+                "/system/bin/linker64",
+                "/system/bin/linker",
+                "/apex/com.android.runtime/bin/linker64",
+                "/apex/com.android.runtime/bin/linker"
+        };
+        for (String c : candidates) {
+            try {
+                File f = new File(c);
+                if (f.exists()) return c;
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
+    /** 从流中读取并写入缓冲，超过上限后丢弃后续内容（避免内存爆炸）。 */
+    private static void pump(java.io.InputStream is, java.io.ByteArrayOutputStream sink, int maxBytes) {
+        if (is == null) return;
+        try (java.io.InputStream in = is) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                if (sink.size() < maxBytes) {
+                    sink.write(buf, 0, Math.min(n, maxBytes - sink.size()));
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public JSONObject exec_capture(String sessionId, String command) {
+        return exec_capture(sessionId, command, 30000, 64 * 1024);
+    }
+
+
+    /** 当前存活会话 ID 列表（用于错误提示）。 */
+    private JSONArray sessionIdList() {
+        JSONArray arr = new JSONArray();
+        try {
+            for (Map.Entry<String, PtySession> e : sessionPool.entrySet()) {
+                if (e.getValue().isAlive()) arr.put(e.getKey());
+            }
+        } catch (Exception ignored) {}
+        return arr;
+    }
+
+    /** 默认会话 ID（可自动创建）。 */
+    private static boolean isDefaultSessionId(String sid) {
+        return sid == null || "default".equals(sid.trim());
+    }
+
+    /** 读取文件内容（UTF-8，限制最大字节数）。 */
+    private String readFileSafe(File f, int maxBytes) {
+        if (f == null || !f.exists()) return "";
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(f)) {
+            long len = f.length();
+            int toRead = (int) Math.min(len, maxBytes);
+            byte[] buf = new byte[toRead];
+            int off = 0;
+            while (off < toRead) {
+                int n = fis.read(buf, off, toRead - off);
+                if (n < 0) break;
+                off += n;
+            }
+            return new String(buf, 0, off, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** 静默删除文件。 */
+    private void deleteFileQuietly(File f) {
+        if (f == null) return;
+        try { if (f.exists()) f.delete(); } catch (Exception ignored) {}
+    }
+
+    /** 单引号包裹 shell 参数。 */
+    private static String shq(String s) {
+        return "'" + s.replace("'", "'\\''") + "'";
+    }
+
     // ================================================================
     //  交互输入 — Agent API
     // ================================================================
@@ -1275,6 +1559,13 @@ public class LocalShellExecutor {
 
     public String getDefaultSessionScreen() {
         return getSessionPlainScreen("default");
+    }
+
+    /** 根据会话 ID 获取底层 TerminalSession（供 UI 精确挂载指定会话）。 */
+    public com.termux.terminal.TerminalSession getTerminalSession(String sessionId) {
+        if (sessionId == null) return null;
+        PtySession s = sessionPool.get(sessionId);
+        return s != null ? s.session : null;
     }
 
     public String getCwd(String sessionId) {

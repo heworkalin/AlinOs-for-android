@@ -29,3 +29,7 @@ docs/*
 # ===== 最小编译依赖引擎包（sherpa-onnx aar）：不入 git，clone 后执行 scripts/fetch_deps.sh 拉取 =====
 app/libs/*.aar
 AGENTS.md
+
+# 本地调试日志与数据库副本（含敏感信息：SSH 私钥/口令，禁止提交）
+/log/
+*.bak

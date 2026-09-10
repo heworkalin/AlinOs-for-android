@@ -111,6 +111,26 @@ public class ToolRegistry {
                 p.optInt("lines", 20),
                 p.optBoolean("colorEscape", true))
         );
+        registerTool("localshell_exec_capture",
+            "执行 Shell 命令并返回【真实 stdout/stderr 与退出码】，不依赖终端屏幕渲染。\n\n"
+            + "✅ 推荐用于：批量执行、需要精确输出、需要退出码、脚本化验证。\n"
+            + "   输出重定向到临时文件后由应用直接读取，不受 PTY 折行/ANSI/提示符干扰。\n\n"
+            + "⚙ 命令包裹在子 shell（{ ... ; }）里，cd/export 只影响本次执行。\n"
+            + "⏱ 会阻塞等待命令完成（最长 timeoutMs），适合短命令；\n"
+            + "   长时间下载/安装请改用 shell_exec + shell_read 轮询。\n\n"
+            + "返回：{stdout, stderr, exit_code, timed_out, truncated}",
+            params(
+                param("sessionId", "string", true, "default", "终端会话 ID"),
+                param("command", "string", true, "", "要执行的命令，支持管道/&&/重定向"),
+                param("timeoutMs", "int", false, "30000", "最长等待毫秒"),
+                param("maxBytes", "int", false, "65536", "返回内容上限字节数")
+            ),
+            p -> exec.exec_capture(
+                p.getString("sessionId"),
+                p.getString("command"),
+                p.optLong("timeoutMs", 30000),
+                p.optInt("maxBytes", 65536))
+        );
         registerTool("localshell_shell_write",
             "向会话写入文本（不追加回车），用于交互应答",
             params(

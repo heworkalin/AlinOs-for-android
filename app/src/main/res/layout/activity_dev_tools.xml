@@ -40,15 +40,17 @@
             android:paddingHorizontal="8dp" />
     </RelativeLayout>
 
-    <ScrollView
+    <alin.android.alinos.view.NoScrollScrollView
+        android:id="@+id/sv_dev_tools_root"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:overScrollMode="never">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="vertical"
             android:padding="8dp">
 
@@ -120,12 +122,12 @@
                     <ListView
                         android:id="@+id/lv_tool_results"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:maxHeight="200dp"
+                        android:layout_height="240dp"
                         android:visibility="gone"
                         android:background="#FFFFFF"
-                        android:divider="@null"
-                        android:dividerHeight="0dp" />
+                        android:divider="#EEEEEE"
+                        android:dividerHeight="1dp"
+                        android:scrollbars="vertical" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -237,10 +239,11 @@
                 android:textColor="#666666"
                 android:paddingBottom="4dp" />
 
-            <!-- ── 结果展示区 ── -->
+            <!-- ── 结果展示区（占据剩余空间，内部可滚动） ── -->
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:layout_marginBottom="8dp"
                 app:cardCornerRadius="6dp"
                 app:cardElevation="2dp"
@@ -248,7 +251,7 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
                     android:orientation="vertical"
                     android:padding="10dp">
 
@@ -289,14 +292,30 @@
                             android:background="?attr/selectableItemBackground"
                             android:clickable="true"
                             android:focusable="true" />
+
+                        <TextView
+                            android:id="@+id/tv_view_full"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="全屏复制"
+                            android:textSize="12sp"
+                            android:textColor="#409EFF"
+                            android:paddingHorizontal="8dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
 
                     <ScrollView
                         android:id="@+id/sv_result"
                         android:layout_width="match_parent"
-                        android:layout_height="250dp"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:minHeight="120dp"
+                        android:maxHeight="280dp"
                         android:paddingTop="4dp"
-                        android:fillViewport="true">
+                        android:fillViewport="true"
+                        android:scrollbars="vertical">
 
                         <TextView
                             android:id="@+id/tv_result"
@@ -314,5 +333,5 @@
             </androidx.cardview.widget.CardView>
 
         </LinearLayout>
-    </ScrollView>
+    </alin.android.alinos.view.NoScrollScrollView>
 </LinearLayout>

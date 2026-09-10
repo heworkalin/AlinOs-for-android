@@ -13,7 +13,7 @@ import alin.android.alinos.bean.SshConfigBean;
 
 public class SshDbHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "ssh_config.db";
-    private static final int DB_VERSION = 4;
+    private static final int DB_VERSION = 5;
     public static final String COL_UUID = "uuid";
     private static final String TABLE_NAME = "ssh_config";
 
@@ -25,6 +25,7 @@ public class SshDbHelper extends SQLiteOpenHelper {
     public static final String COL_PASSWORD = "password";
     public static final String COL_AUTH_TYPE = "auth_type";
     public static final String COL_KEY_CONTENT = "key_content";
+    public static final String COL_KEY_PASSPHRASE = "key_passphrase";
     public static final String COL_DESCRIPTION = "description";
     public static final String COL_CONFIG_TYPE = "config_type";
 
@@ -44,6 +45,7 @@ public class SshDbHelper extends SQLiteOpenHelper {
                 COL_PASSWORD + " TEXT, " +
                 COL_AUTH_TYPE + " TEXT DEFAULT 'password', " +
                 COL_KEY_CONTENT + " TEXT, " +
+                COL_KEY_PASSPHRASE + " TEXT, " +
                 COL_DESCRIPTION + " TEXT, " +
                 COL_CONFIG_TYPE + " TEXT DEFAULT 'remote')");
     }
@@ -68,6 +70,9 @@ public class SshDbHelper extends SQLiteOpenHelper {
             }
             c.close();
         }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + COL_KEY_PASSPHRASE + " TEXT");
+        }
     }
 
     public long addConfig(SshConfigBean config) {
@@ -82,6 +87,7 @@ public class SshDbHelper extends SQLiteOpenHelper {
         values.put(COL_PASSWORD, config.getPassword());
         values.put(COL_AUTH_TYPE, config.getAuthType());
         values.put(COL_KEY_CONTENT, config.getKeyContent());
+        values.put(COL_KEY_PASSPHRASE, config.getKeyPassphrase());
         values.put(COL_DESCRIPTION, config.getDescription());
         values.put(COL_CONFIG_TYPE, config.getConfigType());
         long id = db.insert(TABLE_NAME, null, values);
@@ -99,6 +105,7 @@ public class SshDbHelper extends SQLiteOpenHelper {
         values.put(COL_PASSWORD, config.getPassword());
         values.put(COL_AUTH_TYPE, config.getAuthType());
         values.put(COL_KEY_CONTENT, config.getKeyContent());
+        values.put(COL_KEY_PASSPHRASE, config.getKeyPassphrase());
         values.put(COL_DESCRIPTION, config.getDescription());
         values.put(COL_CONFIG_TYPE, config.getConfigType());
         db.update(TABLE_NAME, values, COL_ID + "=?", new String[]{String.valueOf(config.getId())});
@@ -175,6 +182,7 @@ public class SshDbHelper extends SQLiteOpenHelper {
         config.setPassword(cursor.getString(cursor.getColumnIndexOrThrow(COL_PASSWORD)));
         config.setAuthType(cursor.getString(cursor.getColumnIndexOrThrow(COL_AUTH_TYPE)));
         config.setKeyContent(cursor.getString(cursor.getColumnIndexOrThrow(COL_KEY_CONTENT)));
+        config.setKeyPassphrase(cursor.getString(cursor.getColumnIndexOrThrow(COL_KEY_PASSPHRASE)));
         config.setDescription(cursor.getString(cursor.getColumnIndexOrThrow(COL_DESCRIPTION)));
         config.setConfigType(cursor.getString(cursor.getColumnIndexOrThrow(COL_CONFIG_TYPE)));
         return config;

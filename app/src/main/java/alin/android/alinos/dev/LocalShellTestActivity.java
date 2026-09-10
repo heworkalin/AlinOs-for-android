@@ -83,6 +83,8 @@ import alin.android.alinos.localshell.LocalShellService;
 public class LocalShellTestActivity extends AppCompatActivity implements ServiceConnection {
 
     private static final String LOG_TAG = "LocalShellTestActivity";
+    /** Intent extra：指定要挂载的会话 ID */
+    public static final String EXTRA_SESSION_ID = "session_id";
 
     // ========== 终端基础设施（原 TermuxActivity） ==========
 
@@ -198,6 +200,18 @@ public class LocalShellTestActivity extends AppCompatActivity implements Service
             mTermuxTerminalViewClient.onStart();
         if (mPreferences.isTerminalMarginAdjustmentEnabled())
             addTermuxActivityRootViewGlobalLayoutListener();
+
+        // onStart 里的 TermuxTerminalSessionActivityClient.onStart() 会从持久化恢复上次会话，
+        // 可能把会话切回本地 termux。若本次 Intent 明确指定了 session id，必须在它之后重新挂载。
+        String wantedSid = getIntent().getStringExtra(EXTRA_SESSION_ID);
+        if (wantedSid == null || wantedSid.isEmpty()) {
+            wantedSid = getIntent().getStringExtra("reuse_session_id");
+        }
+        if (wantedSid != null && !wantedSid.isEmpty()
+                && mTermuxService != null && !mTermuxService.isTermuxSessionsEmpty()) {
+            attachCurrentSession();
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -294,6 +308,16 @@ public class LocalShellTestActivity extends AppCompatActivity implements Service
     }
 
     // ========== 终端基础设施方法 ==========
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        // 已是 CLEAR_TOP 复用实例：重新按新传入的 session id 挂载并刷新
+        if (mTermuxService != null && !mTermuxService.isTermuxSessionsEmpty()) {
+            attachCurrentSession();
+        }
+    }
 
     private void reloadProperties() {
         mProperties.loadTermuxPropertiesFromDisk();
@@ -683,12 +707,35 @@ public class LocalShellTestActivity extends AppCompatActivity implements Service
     /** 将 mTermuxService 中的最后一个 session 挂载到终端视图 */
     private void attachCurrentSession() {
         setTermuxSessionsListView();
-        if (mTermuxService != null && !mTermuxService.isTermuxSessionsEmpty()) {
-            getTermuxTerminalSessionClient().setCurrentSession(
-                mTermuxService.getLastTermuxSession().getTerminalSession());
+        TerminalSession target = null;
+
+        // 优先：按 SshTestActivity / 复用请求传入的 session id 精确挂载
+        String wantedSid = getIntent().getStringExtra(EXTRA_SESSION_ID);
+        if (wantedSid != null && !wantedSid.isEmpty()) {
+            target = LocalShellExecutor.getInstance().getTerminalSession(wantedSid);
         }
-        if (getCurrentSession() != null) {
-            getTerminalView().onScreenUpdated();
+
+        // 兼容旧 key（reuse_session_id）
+        if (target == null) {
+            String legacySid = getIntent().getStringExtra("reuse_session_id");
+            if (legacySid != null && !legacySid.isEmpty()) {
+                target = LocalShellExecutor.getInstance().getTerminalSession(legacySid);
+            }
+        }
+
+        // 兜底：取列表中最后一个会话
+        if (target == null && mTermuxService != null && !mTermuxService.isTermuxSessionsEmpty()) {
+            target = mTermuxService.getLastTermuxSession().getTerminalSession();
+        }
+
+        if (target != null) {
+            getTermuxTerminalSessionClient().setCurrentSession(target);
+            // 强制刷新终端视图，避免显示旧会话（如本地 termux）的残留内容
+            if (getTerminalView() != null) {
+                getTerminalView().onScreenUpdated();
+                getTerminalView().invalidate();
+            }
+            mTermuxSessionListViewController.notifyDataSetChanged();
         }
     }
 

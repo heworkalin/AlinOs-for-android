@@ -43,6 +43,9 @@ public class DevToolsActivity extends AppCompatActivity {
     // UI
     private EditText etSearch;
     private ListView lvToolResults;
+    private android.widget.ScrollView outerScroll;
+    private ToolDropdownAdapter toolListAdapter;
+    private Runnable refreshToolList;
     private TextView tvSignature;
     private LinearLayout layoutForm;
     private TextView tvNoParams;
@@ -50,7 +53,7 @@ public class DevToolsActivity extends AppCompatActivity {
     private SwitchCompat switchMode;
     private Button btnExecute, btnReset;
     private TextView tvStatus, tvResult;
-    private TextView tvViewRaw, tvViewPretty;
+    private TextView tvViewRaw, tvViewPretty, tvViewFull;
     private ScrollView svResult;
 
     // 状态
@@ -86,6 +89,7 @@ public class DevToolsActivity extends AppCompatActivity {
     private void bindViews() {
         etSearch = findViewById(R.id.actv_tool_selector);
         lvToolResults = findViewById(R.id.lv_tool_results);
+        outerScroll = findViewById(R.id.sv_dev_tools_root);
         tvSignature = findViewById(R.id.tv_function_signature);
         layoutForm = findViewById(R.id.layout_form);
         tvNoParams = findViewById(R.id.tv_no_params);
@@ -107,56 +111,123 @@ public class DevToolsActivity extends AppCompatActivity {
     // ================================================================
 
     private void setupToolSelector() {
-        List<String> names = new ArrayList<>();
-        for (ToolMeta t : allTools) names.add(t.displayName);
+        // 下拉适配器：左列工具名，右列能力摘要
+        toolListAdapter = new ToolDropdownAdapter();
+        lvToolResults.setAdapter(toolListAdapter);
 
-        ArrayAdapter<String> resultsAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_list_item_1, new ArrayList<>());
-        lvToolResults.setAdapter(resultsAdapter);
+        // 刷新列表：空查询→全部工具；有查询→全部匹配项
+        refreshToolList = () -> {
+            String query = etSearch.getText().toString().trim().toLowerCase();
+            List<ToolMeta> matched = new ArrayList<>();
+            for (ToolMeta t : allTools) {
+                if (query.isEmpty()
+                        || t.displayName.toLowerCase().contains(query)
+                        || (t.description != null && t.description.toLowerCase().contains(query))) {
+                    matched.add(t);
+                }
+            }
+            toolListAdapter.setData(matched);
+            lvToolResults.setVisibility(matched.isEmpty() ? View.GONE : View.VISIBLE);
+            // 列表展开时禁用外层滚动，避免滑动冲突；收起时恢复
+            setOuterScrollEnabled(matched.isEmpty());
+        };
 
-        // 搜索过滤 → 实时显示匹配结果
+        // 搜索过滤 → 实时显示所有匹配结果
         etSearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String query = s.toString().trim().toLowerCase();
-                if (query.isEmpty()) {
-                    lvToolResults.setVisibility(View.GONE);
-                    if (s.length() == 0) clearToolSelection();
-                    return;
-                }
-                List<String> matched = new ArrayList<>();
-                for (String n : names) {
-                    if (n.toLowerCase().contains(query)) matched.add(n);
-                }
-                resultsAdapter.clear();
-                if (!matched.isEmpty()) {
-                    resultsAdapter.addAll(matched);
-                    resultsAdapter.notifyDataSetChanged();
-                    lvToolResults.setVisibility(View.VISIBLE);
-                } else {
-                    lvToolResults.setVisibility(View.GONE);
-                }
+                if (s.toString().trim().isEmpty() && s.length() == 0) clearToolSelection();
+                refreshToolList.run();
             }
             @Override public void afterTextChanged(Editable s) {}
         });
 
-        // 点击匹配项 → 选中工具
-        lvToolResults.setOnItemClickListener((AdapterView<?> parent, View view, int position, long id) -> {
-            String name = (String) parent.getItemAtPosition(position);
-            ToolMeta tool = ToolRegistry.findTool(name);
-            if (tool != null) {
-                onToolSelected(tool);
-                etSearch.setText(name);
-                lvToolResults.setVisibility(View.GONE);
-            }
+        // 点击搜索框 → 展开全部工具列表
+        etSearch.setOnClickListener(v -> refreshToolList.run());
+
+        // 获得焦点 → 展开全部工具列表
+        etSearch.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) refreshToolList.run();
         });
 
-        // 搜索框焦点丢失 → 隐藏列表
-        etSearch.setOnFocusChangeListener((v, hasFocus) -> {
-            if (!hasFocus) {
-                lvToolResults.postDelayed(() -> lvToolResults.setVisibility(View.GONE), 200);
+        // 点击项 → 选中工具
+        lvToolResults.setOnItemClickListener((AdapterView<?> parent, View view, int position, long id) -> {
+            ToolMeta tool = toolListAdapter.toolAt(position);
+            if (tool != null) {
+                onToolSelected(tool);
+                etSearch.setText(tool.displayName);
+                etSearch.setSelection(tool.displayName.length());
+                etSearch.clearFocus();
+                hideToolDropdown();
             }
         });
+    }
+
+    /** 收起下拉并恢复外层滚动。 */
+    private void hideToolDropdown() {
+        lvToolResults.setVisibility(View.GONE);
+        setOuterScrollEnabled(true);
+    }
+
+    /** 控制外层 ScrollView 是否可滚动（列表展开时禁用，避免交互冲突）。 */
+    private void setOuterScrollEnabled(boolean enabled) {
+        if (outerScroll == null) return;
+        outerScroll.requestDisallowInterceptTouchEvent(!enabled);
+        // 同时阻止父层拦截，让列表能正常滑动
+        if (!enabled) lvToolResults.requestDisallowInterceptTouchEvent(true);
+    }
+
+    // ================================================================
+    //  工具下拉适配器（名字 + 能力摘要）
+    // ================================================================
+
+    private class ToolDropdownAdapter extends android.widget.BaseAdapter {
+        private final List<ToolMeta> data = new ArrayList<>();
+
+        void setData(List<ToolMeta> list) {
+            data.clear();
+            if (list != null) data.addAll(list);
+            notifyDataSetChanged();
+        }
+
+        ToolMeta toolAt(int pos) {
+            return (pos >= 0 && pos < data.size()) ? data.get(pos) : null;
+        }
+
+        @Override public int getCount() { return data.size(); }
+        @Override public Object getItem(int pos) { return toolAt(pos); }
+        @Override public long getItemId(int pos) { return pos; }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            View v = convertView;
+            if (v == null) {
+                v = getLayoutInflater().inflate(R.layout.item_tool_dropdown, parent, false);
+            }
+            ToolMeta t = data.get(position);
+            TextView tvName = v.findViewById(R.id.tv_tool_name);
+            TextView tvCap = v.findViewById(R.id.tv_tool_capability);
+
+            tvName.setText(t.displayName);
+            tvCap.setText(shortCapability(t));
+            return v;
+        }
+
+        /** 取描述首句作为能力摘要（去掉换行与多余空白）。 */
+        private String shortCapability(ToolMeta t) {
+            String d = t.description == null ? "" : t.description.trim();
+            if (d.isEmpty()) return "";
+            int cut = d.length();
+            int nl = d.indexOf('\n');
+            if (nl > 0) cut = Math.min(cut, nl);
+            for (String sep : new String[]{"。", "；", ";", "．"}) {
+                int i = d.indexOf(sep);
+                if (i > 0) cut = Math.min(cut, i);
+            }
+            String s = d.substring(0, cut).trim();
+            if (s.length() > 28) s = s.substring(0, 28) + "…";
+            return s;
+        }
     }
 
     private void clearToolSelection() {

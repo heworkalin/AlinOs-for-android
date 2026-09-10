@@ -13,6 +13,7 @@ public class SshConfigBean {
     private String password;
     private String authType;   // "password" / "key"
     private String keyContent;
+    private String keyPassphrase;   // 私钥密码（有则用于 ssh-add 解密）
     private String description;
     private String configType;  // "local_termux" / "remote"
 
@@ -62,6 +63,9 @@ public class SshConfigBean {
 
     public String getKeyContent() { return keyContent; }
     public void setKeyContent(String keyContent) { this.keyContent = keyContent; }
+
+    public String getKeyPassphrase() { return keyPassphrase; }
+    public void setKeyPassphrase(String keyPassphrase) { this.keyPassphrase = keyPassphrase; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

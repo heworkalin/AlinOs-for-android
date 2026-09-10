@@ -131,6 +131,8 @@ This project embeds/references third-party open-source components owned by their
 
 - `com.termux.*` / `termux-shared` / native env — [Termux (termux-app)](https://github.com/termux/termux-app):
   mainly GPLv3, some MIT / Apache-2.0 / GPLv2+Classpath.
+- **Local runtime toolchain (bash / ssh / coreutils / proot, etc.) — [termux/termux-packages](https://github.com/termux/termux-packages)**:
+  the upstream source of build scripts and Android porting patches; each package under its own declared license.
 - `com.termux.terminal` / `view` — [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator): Apache-2.0.
 - Audio engines — [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (incl. [onnxruntime](https://github.com/microsoft/onnxruntime)),
   [alphacep/vosk-api](https://github.com/alphacep/vosk-api): Apache-2.0 / MIT (models per their own notices).

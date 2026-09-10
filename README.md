@@ -106,6 +106,7 @@ Copyright © 2026 heworkalin. All rights reserved.
 本项目基于 / 嵌入了多个第三方开源组件，版权归各所有者；**使用本项目即代表接受这些上游许可约束**。完整清单见 [`LICENSE`](LICENSE) 与 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。摘要：
 
 - `com.termux.*` / `termux-shared` / 原生环境 — [Termux (termux-app)](https://github.com/termux/termux-app)：主体 GPLv3，个别 MIT / Apache-2.0 / GPLv2+Classpath。
+- **本地运行环境工具链（bash / ssh / coreutils / proot 等）— [termux/termux-packages](https://github.com/termux/termux-packages)**：构建脚本 + Android 适配补丁的上游源头；各包许以其中各自声明为准。
 - `com.termux.terminal` / `view` — [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)：Apache-2.0。
 - 音频引擎 — [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)（含 [onnxruntime](https://github.com/microsoft/onnxruntime)）、[alphacep/vosk-api](https://github.com/alphacep/vosk-api)：Apache-2.0 / MIT（模型许以各原始声明为准）。
 - 预编译 proot / unzip / libtalloc / libbz2（内置于 `files.default.*`）— proot 上游 GPLv2、unzip(Info-ZIP) BSD 类、libtalloc LGPL-2.1+、libbz2 BSD-like。
