@@ -4,6 +4,11 @@ AlinOs-for-android 开源协议声明
 本项目基于 termux/termux-app 深度定制，整合了多个上游开源项目。
 由于包含 GPLv3 代码，项目整体必须以 GPLv3 分发。
 
+核心上游一览（详见各节）：
+  · termux/termux-app        — App 层代码、原生库（GPLv3）
+  · termux/termux-packages   — 运行环境工具链的构建脚本与 Android 适配补丁（第三节）
+  · Android-Terminal-Emulator — 终端模拟器与视图（Apache 2.0）
+
 
 一、代码模块归属
 
@@ -55,13 +60,24 @@ AlinOs-for-android 开源协议声明
 三、预编译运行环境 (assets/files.default.*.tar.gz.so)
 
 四个架构的预编译 Termux 精简根文件系统镜像（各约 32~37MB），内含 openssh、
-bash、openssl、coreutils 等，由 Termux 官方 .deb 经魔改裁剪合并而成，非官方 bootstrap，
-并已内置 proot 虚拟化工具链（见下节）。
+bash、openssl、coreutils 等。
+
+【核心上游：termux/termux-packages】
+  上游：https://github.com/termux/termux-packages
+  本环境内**所有工具链**（bash / openssh / openssl / coreutils / proot / unzip /
+  libtalloc / libbz2 等）的**源码、交叉编译脚本（build.sh）与 Android 适配补丁
+  （packages/<pkg>/*.patch）均来自该项目**。
+  本项目仅做裁剪、聚合打包与运行时集成，不重新实现这些工具。
+  没有 termux-packages，就没有在 Android 上可用的上述工具。
+
+  本环境由 Termux 官方 .deb 经魔改裁剪合并而成，非官方 bootstrap，
+  并已内置 proot 虚拟化工具链（见下节）。
 
   新版：app/src/{arm,arm64,x86_64,i686}/assets/files.default.{arm,aarch64,x86_64,i686}.tar.gz.so
   （旧版曾位于 app/src/main/assets，已随仓库历史清洗移除）
 
-其中各软件协议以 Termux 官方仓库对应包 LICENSE 为准（多数 GPLv2/v3、MIT、BSD），
+其中各软件协议以 termux-packages 对应包目录（packages/<名>/）的 LICENSE
+及其上游原始声明为准（多数 GPLv2/v3、MIT、BSD），
 本 tar.gz 仅作聚合分发载体，不改变单软件自身许可。
 
 
@@ -80,7 +96,7 @@ bash、openssl、coreutils 等，由 Termux 官方 .deb 经魔改裁剪合并而
        · unzip (Info-ZIP)               类 BSD 许可
        · libtalloc (Samba)               LGPL-2.1+
        · libbz2 (bzip2)                 BSD-like
-     以上源自 termux 系构建，明细见 THIRD_PARTY_NOTICES.md。
+     以上均由 termux/termux-packages 构建产出，明细见 THIRD_PARTY_NOTICES.md。
 
 五、第三方依赖库（Maven / AndroidX）
 
@@ -115,4 +131,5 @@ bash、openssl、coreutils 等，由 Termux 官方 .deb 经魔改裁剪合并而
   MIT:                https://opensource.org/licenses/MIT
 
   termux/termux-app:                  https://github.com/termux/termux-app
+  termux/termux-packages:             https://github.com/termux/termux-packages
   jackpal/Android-Terminal-Emulator:  https://github.com/jackpal/Android-Terminal-Emulator
