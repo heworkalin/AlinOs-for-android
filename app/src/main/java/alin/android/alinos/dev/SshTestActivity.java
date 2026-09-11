@@ -814,10 +814,16 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
 
         // 验证用 SSH 命令：ConnectTimeout 只约束握手阶段（不会打断密码交互）
         String sshCmd = "ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "
+                + "-o ServerAliveInterval=15 -o ServerAliveCountMax=3 "
                 + config.getUsername() + "@" + config.getHost()
                 + " -p " + config.getPort();
         // 正式连接命令：不带 ConnectTimeout（跨域/DNS 慢时握手可能超 5 秒，带上会误断）
+        // 带保活参数：避免 app 切后台/息屏后被系统或中间设备断开会话
+        //   ServerAliveInterval=15  每 15 秒发一次保活包
+        //   ServerAliveCountMax=3   连续 3 次无响应才断开（容忍短暂卡顿）
+        //   TCPKeepAlive=yes        启用 TCP 层保活
         String realSshCmd = "ssh -o StrictHostKeyChecking=accept-new "
+                + "-o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o TCPKeepAlive=yes "
                 + config.getUsername() + "@" + config.getHost()
                 + " -p " + config.getPort();
         String password = config.getPassword() != null ? config.getPassword() : "";

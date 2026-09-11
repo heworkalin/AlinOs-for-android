@@ -6,8 +6,10 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -39,6 +41,82 @@ public class LocalShellService extends TermuxService {
     private final List<TermuxSession> mOwnSessions = new ArrayList<>();
     private final LocalBinder mBinder = new LocalBinder();
     private com.termux.terminal.TerminalSessionClient mSessionClient;
+
+    // 保活锁：防止 app 切后台/息屏后 WiFi 休眠、CPU 深度睡眠导致 SSH 连接被断
+    private PowerManager.WakeLock mWakeLock;
+    private WifiManager.WifiLock mWifiLock;
+
+    /** 确保服务处于前台模式（幂等）。
+     * 场景：销毁旧会话后 stopForeground(false)，重建新会话时必须重新进入前台，
+     * 否则服务退化普通后台服务，app 切后台约 60s 即被系统杀死，导致 SSH 断连。
+     */
+    private void ensureForeground() {
+        try {
+            Notification n = buildNotification();
+            if (n != null) {
+                startForeground(NOTIFICATION_ID, n);
+            } else {
+                startForeground(NOTIFICATION_ID, buildMinimalNotification());
+            }
+            Log.d(LOG_TAG, "ensureForeground()");
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "ensureForeground failed: " + e.getMessage());
+        }
+    }
+
+    /** 获取保活锁（幂等，重复调用安全）。 */
+    private void acquireKeepAliveLocks() {
+        try {
+            if (mWakeLock == null) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                            "AlinOs::LocalShellService");
+                    mWakeLock.setReferenceCounted(false);
+                }
+            }
+            if (mWakeLock != null && !mWakeLock.isHeld()) {
+                mWakeLock.acquire();
+                Log.d(LOG_TAG, "WakeLock acquired");
+            }
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "acquire WakeLock failed: " + e.getMessage());
+        }
+
+        try {
+            if (mWifiLock == null) {
+                WifiManager wm = (WifiManager) getApplicationContext()
+                        .getSystemService(Context.WIFI_SERVICE);
+                if (wm != null) {
+                    mWifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                            "AlinOs::LocalShellService");
+                    mWifiLock.setReferenceCounted(false);
+                }
+            }
+            if (mWifiLock != null && !mWifiLock.isHeld()) {
+                mWifiLock.acquire();
+                Log.d(LOG_TAG, "WifiLock acquired");
+            }
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "acquire WifiLock failed: " + e.getMessage());
+        }
+    }
+
+    /** 释放保活锁（仅在无会话时调用）。 */
+    private void releaseKeepAliveLocks() {
+        try {
+            if (mWakeLock != null && mWakeLock.isHeld()) {
+                mWakeLock.release();
+                Log.d(LOG_TAG, "WakeLock released");
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (mWifiLock != null && mWifiLock.isHeld()) {
+                mWifiLock.release();
+                Log.d(LOG_TAG, "WifiLock released");
+            }
+        } catch (Exception ignored) {}
+    }
 
     @Override
     public void onCreate() {
@@ -81,6 +159,7 @@ public class LocalShellService extends TermuxService {
             if (ts != null && ts.isRunning()) ts.finishIfRunning();
         }
         mOwnSessions.clear();
+        releaseKeepAliveLocks();
         stopForeground(true);
         // 不调 super.onDestroy() —— 父类的 killAllTermuxExecutionCommands() 会访问
         // 未初始化的 mShellManager（onCreate 跳过了 super.onCreate），导致 NPE
@@ -147,6 +226,7 @@ public class LocalShellService extends TermuxService {
         // （stopSelf 会导致正在进行的 SSH 连接中断和其他客户端黑屏）
         if (mOwnSessions.isEmpty()) {
             stopForeground(false);
+            releaseKeepAliveLocks();   // 无会话时释放保活锁，省电
         }
         return idx;
     }
@@ -171,6 +251,8 @@ public class LocalShellService extends TermuxService {
             }, new LocalShellEnvironment(), null, false);
         if (session != null) {
             mOwnSessions.add(session);
+            ensureForeground();        // 重新进入前台（之前可能因会话清空而 stopForeground）
+            acquireKeepAliveLocks();   // 有会话时持有保活锁，防后台断连
             updateNotification();
             // Notify session list
             com.termux.app.terminal.TermuxTerminalSessionActivityClient activityClient = getTermuxTerminalSessionActivityClient();
