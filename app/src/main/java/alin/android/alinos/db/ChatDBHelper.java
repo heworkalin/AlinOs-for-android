@@ -18,7 +18,7 @@ import alin.android.alinos.bean.ConfigBean;
 
 public class ChatDBHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "chat_db.db";
-    private static final int DB_VERSION = 3;
+    private static final int DB_VERSION = 4;
 
     private static final String TABLE_SESSION = "chat_session";
     public static final String SESSION_ID = "id";
@@ -39,6 +39,17 @@ public class ChatDBHelper extends SQLiteOpenHelper {
     public static final String RECORD_PROMPT_TOKENS = "prompt_tokens";
     public static final String RECORD_COMPLETION_TOKENS = "completion_tokens";
     public static final String RECORD_TOTAL_TOKENS = "total_tokens";
+    // 用量与费用（新增）
+    /** 完整用量 JSON（含 cost 明细）。 */
+    public static final String RECORD_USAGE_JSON = "usage_json";
+    /** 本条消息累计费用（美元）。 */
+    public static final String RECORD_COST_TOTAL = "cost_total";
+    /** 本条消息使用的模型 id。 */
+    public static final String RECORD_MODEL_ID = "model_id";
+    /** 命中缓存的读取 token。 */
+    public static final String RECORD_CACHE_READ_TOKENS = "cache_read_tokens";
+    /** 写入缓存的 token。 */
+    public static final String RECORD_CACHE_WRITE_TOKENS = "cache_write_tokens";
 
     private final Context context;
 
@@ -67,7 +78,12 @@ public class ChatDBHelper extends SQLiteOpenHelper {
                 RECORD_TOKEN_COUNT + " INTEGER DEFAULT 0, " +
                 RECORD_PROMPT_TOKENS + " INTEGER DEFAULT 0, " +
                 RECORD_COMPLETION_TOKENS + " INTEGER DEFAULT 0, " +
-                RECORD_TOTAL_TOKENS + " INTEGER DEFAULT 0)";
+                RECORD_TOTAL_TOKENS + " INTEGER DEFAULT 0, " +
+                RECORD_USAGE_JSON + " TEXT, " +
+                RECORD_COST_TOTAL + " REAL DEFAULT 0, " +
+                RECORD_MODEL_ID + " TEXT, " +
+                RECORD_CACHE_READ_TOKENS + " INTEGER DEFAULT 0, " +
+                RECORD_CACHE_WRITE_TOKENS + " INTEGER DEFAULT 0)";
         db.execSQL(createRecordSql);
     }
 
@@ -85,11 +101,14 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             db.execSQL("ALTER TABLE " + TABLE_RECORD + " ADD COLUMN " + RECORD_COMPLETION_TOKENS + " INTEGER DEFAULT 0");
             db.execSQL("ALTER TABLE " + TABLE_RECORD + " ADD COLUMN " + RECORD_TOTAL_TOKENS + " INTEGER DEFAULT 0");
         } else {
-            // 版本3或更高，如果需要其他升级，可以在这里添加
-            // 目前如果没有特定升级路径，则删除并重建表
-            db.execSQL("DROP TABLE IF EXISTS " + TABLE_RECORD);
-            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SESSION);
-            onCreate(db);
+            if (oldVersion < 4) {
+                db.execSQL("ALTER TABLE " + TABLE_RECORD + " ADD COLUMN " + RECORD_USAGE_JSON + " TEXT");
+                db.execSQL("ALTER TABLE " + TABLE_RECORD + " ADD COLUMN " + RECORD_COST_TOTAL + " REAL DEFAULT 0");
+                db.execSQL("ALTER TABLE " + TABLE_RECORD + " ADD COLUMN " + RECORD_MODEL_ID + " TEXT");
+                db.execSQL("ALTER TABLE " + TABLE_RECORD + " ADD COLUMN " + RECORD_CACHE_READ_TOKENS + " INTEGER DEFAULT 0");
+                db.execSQL("ALTER TABLE " + TABLE_RECORD + " ADD COLUMN " + RECORD_CACHE_WRITE_TOKENS + " INTEGER DEFAULT 0");
+            }
+            // 版本已是最新，无需其他升级
         }
     }
 
@@ -208,6 +227,28 @@ public class ChatDBHelper extends SQLiteOpenHelper {
                         record.setTotalTokens(cursor.getInt(totalTokensIndex));
                     }
 
+                    // 用量与费用（兼容旧库，列不存在时跳过）
+                    int usageJsonIndex = cursor.getColumnIndex(RECORD_USAGE_JSON);
+                    if (usageJsonIndex != -1) {
+                        record.setUsageJson(cursor.getString(usageJsonIndex));
+                    }
+                    int costIndex = cursor.getColumnIndex(RECORD_COST_TOTAL);
+                    if (costIndex != -1) {
+                        record.setCostTotal(cursor.getDouble(costIndex));
+                    }
+                    int modelIdIndex = cursor.getColumnIndex(RECORD_MODEL_ID);
+                    if (modelIdIndex != -1) {
+                        record.setModelId(cursor.getString(modelIdIndex));
+                    }
+                    int cacheReadIndex = cursor.getColumnIndex(RECORD_CACHE_READ_TOKENS);
+                    if (cacheReadIndex != -1) {
+                        record.setCacheReadTokens(cursor.getInt(cacheReadIndex));
+                    }
+                    int cacheWriteIndex = cursor.getColumnIndex(RECORD_CACHE_WRITE_TOKENS);
+                    if (cacheWriteIndex != -1) {
+                        record.setCacheWriteTokens(cursor.getInt(cacheWriteIndex));
+                    }
+
                     list.add(record);
                 } while (cursor.moveToNext());
             }
@@ -231,6 +272,12 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             values.put(RECORD_PROMPT_TOKENS, record.getPromptTokens());
             values.put(RECORD_COMPLETION_TOKENS, record.getCompletionTokens());
             values.put(RECORD_TOTAL_TOKENS, record.getTotalTokens());
+            // 用量与费用
+            values.put(RECORD_USAGE_JSON, record.getUsageJson());
+            values.put(RECORD_COST_TOTAL, record.getCostTotal());
+            values.put(RECORD_MODEL_ID, record.getModelId());
+            values.put(RECORD_CACHE_READ_TOKENS, record.getCacheReadTokens());
+            values.put(RECORD_CACHE_WRITE_TOKENS, record.getCacheWriteTokens());
             return db.insert(TABLE_RECORD, null, values);
         } catch (Exception e) {
             Log.e("ChatDBHelper", "addRecord 异常", e);
@@ -278,6 +325,26 @@ public class ChatDBHelper extends SQLiteOpenHelper {
         if (record == null || record.getId() <= 0) return;
         updateRecordTokens(record.getId(), record.getTokenCount(), record.getPromptTokens(),
                 record.getCompletionTokens(), record.getTotalTokens());
+    }
+
+    /** 写入真实用量与费用（prompt=/=completion=cache 均以服务端上报为准）。 */
+    public void updateRecordUsage(long recordId, String usageJson, double costTotal,
+                                  int promptTokens, int completionTokens, int totalTokens,
+                                  int cacheReadTokens, int cacheWriteTokens) {
+        if (recordId <= 0) return;
+        try (SQLiteDatabase db = getWritableDatabase()) {
+            ContentValues values = new ContentValues();
+            values.put(RECORD_USAGE_JSON, usageJson);
+            values.put(RECORD_COST_TOTAL, costTotal);
+            values.put(RECORD_PROMPT_TOKENS, promptTokens);
+            values.put(RECORD_COMPLETION_TOKENS, completionTokens);
+            values.put(RECORD_TOTAL_TOKENS, totalTokens);
+            values.put(RECORD_CACHE_READ_TOKENS, cacheReadTokens);
+            values.put(RECORD_CACHE_WRITE_TOKENS, cacheWriteTokens);
+            db.update(TABLE_RECORD, values, RECORD_ID + "=?", new String[]{String.valueOf(recordId)});
+        } catch (Exception e) {
+            Log.e("ChatDBHelper", "updateRecordUsage 异常", e);
+        }
     }
 
     public String getRecordContentById(long recordId) {

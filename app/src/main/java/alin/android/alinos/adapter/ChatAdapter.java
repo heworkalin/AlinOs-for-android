@@ -84,6 +84,24 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         }
     }
 
+    /** 设置 AI 消息的元信息（token / 费用）。 */
+    public void setMessageMeta(int position, String meta) {
+        if (position < 0 || position >= mMessageList.size()) return;
+        ChatMessage msg = mMessageList.get(position);
+        if (msg.type != ChatMessage.TYPE_AI) return;
+        msg.meta = meta;
+        RecyclerView.ViewHolder holder = mRecyclerView.findViewHolderForAdapterPosition(position);
+        if (holder instanceof AiViewHolder) {
+            AiViewHolder aiHolder = (AiViewHolder) holder;
+            if (meta != null && !meta.isEmpty()) {
+                aiHolder.tvAiMeta.setText(meta);
+                aiHolder.tvAiMeta.setVisibility(View.VISIBLE);
+            } else {
+                aiHolder.tvAiMeta.setVisibility(View.GONE);
+            }
+        }
+    }
+
     /** 更新工具调用卡片的状态。 */
     public void updateToolCallMessage(int position, String newContent, boolean isExecuting) {
         if (position >= 0 && position < mMessageList.size()) {
@@ -143,6 +161,14 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     private void bindAiMessage(AiViewHolder holder, ChatMessage message) {
         holder.tvAiContent.setText(message.content);
+
+        // 用量/费用元信息
+        if (message.meta != null && !message.meta.isEmpty()) {
+            holder.tvAiMeta.setText(message.meta);
+            holder.tvAiMeta.setVisibility(View.VISIBLE);
+        } else {
+            holder.tvAiMeta.setVisibility(View.GONE);
+        }
 
         boolean isLoading = message.isLoading;
         holder.llAiLoading.setVisibility(isLoading ? View.VISIBLE : View.GONE);
@@ -268,6 +294,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     // AI消息ViewHolder
     public static class AiViewHolder extends RecyclerView.ViewHolder {
         public TextView tvAiContent;
+        public TextView tvAiMeta;
         public LinearLayout llAiLoading;
         public TextView tvLoadingTips;
         public ProgressBar pbLoadingCircle;
@@ -275,6 +302,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         public AiViewHolder(@NonNull View itemView) {
             super(itemView);
             tvAiContent = itemView.findViewById(R.id.tv_ai_content);
+            tvAiMeta = itemView.findViewById(R.id.tv_ai_meta);
             llAiLoading = itemView.findViewById(R.id.ll_ai_loading);
             tvLoadingTips = itemView.findViewById(R.id.tv_loading_tips);
             pbLoadingCircle = itemView.findViewById(R.id.pb_loading_circle);

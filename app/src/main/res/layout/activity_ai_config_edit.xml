@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- ================= 基础配置 ================= -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="基础配置"
+                android:textColor="#1976D2"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="模型提供方（Provider）"
+                android:textSize="13sp" />
+
+            <Spinner
+                android:id="@+id/sp_provider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="API 协议"
+                android:textSize="13sp" />
+
+            <Spinner
+                android:id="@+id/sp_api_type"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="模型"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/et_model"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="模型 id，如 deepseek-chat / claude-sonnet-4-5"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/btn_pick_model"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="选择"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btn_refresh_models"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="刷新"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_model_price"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="#757575"
+                android:textSize="11sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="服务器地址（留空用 Provider 默认）"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/et_server_url"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="https://api.deepseek.com"
+                android:importantForAutofill="no"
+                android:inputType="textUri"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="API Key"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/et_api_key"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="sk-..."
+                android:importantForAutofill="no"
+                android:inputType="textPassword"
+                android:textSize="13sp" />
+
+            <!-- ================= 高级参数 ================= -->
+            <TextView
+                android:id="@+id/tv_advanced_toggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:text="高级参数 ▸"
+                android:textColor="#1976D2"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/ll_advanced"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="最大上下文窗口（tokens）"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/et_context_window"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="131072"
+                    android:importantForAutofill="no"
+                    android:inputType="number"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="最大回复 tokens"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/et_max_response_tokens"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="8192"
+                    android:importantForAutofill="no"
+                    android:inputType="number"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="用户输入字符上限"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/et_user_input_limit"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="200000"
+                    android:importantForAutofill="no"
+                    android:inputType="number"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="temperature"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/et_temperature"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="0.7（留空用默认）"
+                    android:importantForAutofill="no"
+                    android:inputType="numberDecimal"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="top_p"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/et_top_p"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="留空用默认"
+                    android:importantForAutofill="no"
+                    android:inputType="numberDecimal"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- ================= 自定义参数 ================= -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="自定义参数"
+                android:textColor="#1976D2"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="会原样并入请求体，可用于服务端特有参数"
+                android:textColor="#9E9E9E"
+                android:textSize="11sp" />
+
+            <LinearLayout
+                android:id="@+id/ll_custom_params"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/btn_add_param"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="+ 添加自定义参数"
+                android:textSize="13sp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- ================= 底部操作 ================= -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#F5F5F5"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <Button
+            android:id="@+id/btn_cancel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="取消" />
+
+        <Button
+            android:id="@+id/btn_save"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:text="保存" />
+    </LinearLayout>
+</LinearLayout>

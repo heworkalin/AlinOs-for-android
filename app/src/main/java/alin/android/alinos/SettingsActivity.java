@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
 import alin.android.alinos.dev.LocalShellTestActivity;
+import alin.android.alinos.dev.ProotContainerTestActivity;
 import alin.android.alinos.dev.SshTestActivity;
 
 /**
@@ -33,6 +34,7 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         CardView cvTextToVoiceTest = findViewById(R.id.cv_text_to_voice_test); // 新增：文字转语音测试
         CardView cvLocalShell = findViewById(R.id.cv_local_shell);
         CardView cvSshConfig = findViewById(R.id.cv_ssh_config);
+        CardView cvProotContainer = findViewById(R.id.cv_proot_container);
 
         // 语音模块卡片
         CardView cvVoiceAsr = findViewById(R.id.cv_voice_asr);        // ASR 语音识别
@@ -47,6 +49,7 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         cvTextToVoiceTest.setOnClickListener(this);
         cvLocalShell.setOnClickListener(this);
         cvSshConfig.setOnClickListener(this);
+        cvProotContainer.setOnClickListener(this);
         cvVoiceAsr.setOnClickListener(this);
         cvVoiceTts.setOnClickListener(this);
         cvVoiceKws.setOnClickListener(this);
@@ -74,6 +77,9 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         } else if (id == R.id.cv_ssh_config) {
             // 找到 SSH 卡片
             startActivity(new Intent(this, SshTestActivity.class));
+        } else if (id == R.id.cv_proot_container) {
+            // Proot 容器部署测试（下载 + 解压）
+            startActivity(new Intent(this, ProotContainerTestActivity.class));
         } else if (id == R.id.cv_voice_asr) {
             startActivity(new Intent(this, AsrTestActivity.class));
         } else if (id == R.id.cv_voice_tts) {

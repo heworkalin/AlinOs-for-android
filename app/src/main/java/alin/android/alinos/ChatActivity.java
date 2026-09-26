@@ -81,6 +81,15 @@ public class ChatActivity extends AppCompatActivity {
 
     // 流式相关控制
     private long mStreamRecordId = -1; // 流式消息ID（隔离原有ID）
+
+    // 最近一次请求的真实用量与费用（由流事件写入，结束时落库）
+    private String mLastUsageJson;
+    private double mLastCostTotal;
+    private int mLastPromptTokens;
+    private int mLastCompletionTokens;
+    private int mLastTotalTokens;
+    private int mLastCacheReadTokens;
+    private int mLastCacheWriteTokens;
     private final StringBuilder mStreamContentBuffer = new StringBuilder();
     private int mAiMessagePosition = -1; // AI消息在列表中的位置
     private int mThinkMessagePosition = -1; // Think 块消息位置
@@ -379,7 +388,8 @@ public class ChatActivity extends AppCompatActivity {
         mStreamRecordId = addRecordToDb(loadingRecord);
         Log.d(TAG, "流式loading记录入库，recordId=" + mStreamRecordId);
 
-        // 标记流式加载中
+        // 标记流式加载中，并清空上一轮的用量
+        resetUsageState();
         isStreamLoading = true;
         setSendButtonState(true);
 
@@ -391,6 +401,23 @@ public class ChatActivity extends AppCompatActivity {
 
     // 流式事件处理方法
     private void handleStreamEvent(ChatStreamEventBus.StreamEventData data) {
+        // ========== 用量/费用事件（不结束流） ==========
+        if (data.isUsage()) {
+            mLastUsageJson = data.getUsageJson();
+            mLastCostTotal = data.getCostTotal();
+            mLastPromptTokens = data.getPromptTokens();
+            mLastCompletionTokens = data.getCompletionTokens();
+            mLastTotalTokens = data.getTotalTokens();
+            Log.d(TAG, "用量: prompt=" + mLastPromptTokens + " completion=" + mLastCompletionTokens
+                    + " total=" + mLastTotalTokens + " cost=$" + mLastCostTotal);
+            // 实时把费用显示到消息卡片下方
+            if (mAiMessagePosition != -1 && mLastCostTotal > 0) {
+                mChatAdapter.setMessageMeta(mAiMessagePosition,
+                        mLastTotalTokens + " tokens · " + formatCost(mLastCostTotal));
+            }
+            return;
+        }
+
         // ========== 异常处理 ==========
         if (data.isError()) {
             Log.e(TAG, "流式错误：" + data.getErrorMsg());
@@ -711,15 +738,22 @@ public class ChatActivity extends AppCompatActivity {
 
     // 新增：抽离写库逻辑，统一正常/异常场景，减少冗余
     private void writeStreamRecordToDb(String content) {
-        // 估算内容的token数
+        // 估算内容的token数（服务端未上报时作为兵底）
         int estimatedTokens = TokenEstimator.estimateTokens(content);
+        boolean hasRealUsage = mLastUsageJson != null && !mLastUsageJson.isEmpty();
 
         if (mStreamRecordId != -1) {
             // 更新现有记录的内容和token信息
             updateRecordContentInDb(mStreamRecordId, content);
-            // 更新token信息（对于流式AI回复，tokenCount就是估算的token数）
             if (mChatDbHelper != null) {
-                mChatDbHelper.updateRecordTokens(mStreamRecordId, estimatedTokens, 0, estimatedTokens, estimatedTokens);
+                if (hasRealUsage) {
+                    mChatDbHelper.updateRecordUsage(mStreamRecordId, mLastUsageJson, mLastCostTotal,
+                            mLastPromptTokens, mLastCompletionTokens, mLastTotalTokens,
+                            mLastCacheReadTokens, mLastCacheWriteTokens);
+                } else {
+                    mChatDbHelper.updateRecordTokens(mStreamRecordId, estimatedTokens, 0,
+                            estimatedTokens, estimatedTokens);
+                }
             }
         } else {
             // 创建新记录，设置token信息
@@ -730,12 +764,37 @@ public class ChatActivity extends AppCompatActivity {
                     content,
                     System.currentTimeMillis()
             );
-            // 设置token信息（对于流式AI回复，使用估算值）
             record.setTokenCount(estimatedTokens);
             record.setCompletionTokens(estimatedTokens);
             record.setTotalTokens(estimatedTokens);
+            if (hasRealUsage) {
+                record.setUsageJson(mLastUsageJson);
+                record.setCostTotal(mLastCostTotal);
+                record.setPromptTokens(mLastPromptTokens);
+                record.setCompletionTokens(mLastCompletionTokens);
+                record.setTotalTokens(mLastTotalTokens);
+                record.setModelId(mCurrentConfig.getModel());
+            }
             addRecordToDb(record);
         }
+    }
+
+    /** 费用文本。 */
+    private static String formatCost(double cost) {
+        if (cost <= 0) return "";
+        if (cost < 0.01) return String.format(java.util.Locale.US, "$%.6f", cost);
+        return String.format(java.util.Locale.US, "$%.4f", cost);
+    }
+
+    /** 清空本轮用量记录。 */
+    private void resetUsageState() {
+        mLastUsageJson = null;
+        mLastCostTotal = 0;
+        mLastPromptTokens = 0;
+        mLastCompletionTokens = 0;
+        mLastTotalTokens = 0;
+        mLastCacheReadTokens = 0;
+        mLastCacheWriteTokens = 0;
     }
 
     // 新建会话：选择AI配置（含模型）

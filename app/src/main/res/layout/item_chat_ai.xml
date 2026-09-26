@@ -60,6 +60,17 @@
                     android:indeterminateTint="#666666"
                     style="?android:attr/progressBarStyleSmall"/>
             </LinearLayout>
+
+            <!-- 用量/费用元信息（默认隐藏） -->
+            <TextView
+                android:id="@+id/tv_ai_meta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="4dp"
+                android:textColor="#9E9E9E"
+                android:textSize="11sp"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

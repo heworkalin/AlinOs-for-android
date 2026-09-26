@@ -14,11 +14,12 @@ public class TestToolSet {
     private TestToolSet() {}
     public static void register() {
         ToolRegistry.register("search_tools",
-                "搜索当前系统已注册的所有可用工具/技能。支持按关键词模糊搜索名称和描述。" +
-                "不传 query 时返回全部工具列表。AI 可以用此工具了解自己有哪些能力可用",
+                "Search the tool registry for available tools/skills. Matches the query fuzzily "
+                + "against tool names and descriptions. Omit query to list every registered tool.",
                 ToolMeta.params(
                         ToolMeta.param("query", "string", false, "",
-                                "搜索关键词，模糊匹配工具名称和描述。留空返回全部工具")
+                                "Search keyword matched against tool names and descriptions. "
+                                        + "Leave empty to return all tools")
                 ),
                 params -> {
                     String query = params.optString("query", "").trim();

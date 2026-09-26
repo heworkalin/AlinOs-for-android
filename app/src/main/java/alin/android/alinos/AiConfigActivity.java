@@ -52,10 +52,8 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
         // 初始化配置列表
         initConfigList();
 
-        // 加号按钮：添加配置
-        fabAdd.setOnClickListener(v -> {
-            showConfigDialog(new ConfigBean()); // 新增配置，id默认0
-        });
+        // 加号按钮：新建配置（跳转独立编辑页）
+        fabAdd.setOnClickListener(v -> openEditor(0));
     }
 
     // 初始化配置列表
@@ -290,13 +288,29 @@ public class AiConfigActivity extends AppCompatActivity implements OnConfigOpera
     private void refreshConfigList() {
         mConfigList = mDbHelper.getAllConfigs();
         mAdapter = new ConfigAdapter(this, mConfigList, this);
+        rvConfigList.setLayoutManager(new LinearLayoutManager(this));
         rvConfigList.setAdapter(mAdapter);
+    }
+
+    /** 打开独立配置编辑页（configId=0 表示新建）。 */
+    private void openEditor(int configId) {
+        android.content.Intent i = new android.content.Intent(this, AiConfigEditActivity.class);
+        i.putExtra(AiConfigEditActivity.EXTRA_CONFIG_ID, configId);
+        startActivityForResult(i, REQ_EDIT);
+    }
+
+    private static final int REQ_EDIT = 1001;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_EDIT) refreshConfigList();
     }
 
     // -------------------- 实现 OnConfigOperationListener 接口 --------------------
     @Override
     public void onEdit(ConfigBean config) {
-        showConfigDialog(config);
+        openEditor(config.getId());
     }
 
     @Override

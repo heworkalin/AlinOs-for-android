@@ -16,6 +16,18 @@ public class ChatRecordBean {
     private int completionTokens = 0;     // AI回复的token数
     private int totalTokens = 0;          // 总token数
 
+    // 用量与费用（新增）
+    /** 完整用量 JSON（含 cost 明细）。 */
+    private String usageJson;
+    /** 本条消息累计费用（美元）。 */
+    private double costTotal = 0;
+    /** 本条消息使用的模型 id。 */
+    private String modelId;
+    /** 命中缓存的读取 token。 */
+    private int cacheReadTokens = 0;
+    /** 写入缓存的 token。 */
+    private int cacheWriteTokens = 0;
+
     // 新增：带5个参数的构造器（匹配 ChatActivity 第153、164行调用）
     public ChatRecordBean(int sessionId, int msgType, String sender, String content, long sendTime) {
         this.sessionId = sessionId;
@@ -70,6 +82,28 @@ public class ChatRecordBean {
 
     public int getTotalTokens() { return totalTokens; }
     public void setTotalTokens(int totalTokens) { this.totalTokens = totalTokens; }
+
+    public String getUsageJson() { return usageJson; }
+    public void setUsageJson(String usageJson) { this.usageJson = usageJson; }
+
+    public double getCostTotal() { return costTotal; }
+    public void setCostTotal(double costTotal) { this.costTotal = costTotal; }
+
+    public String getModelId() { return modelId; }
+    public void setModelId(String modelId) { this.modelId = modelId; }
+
+    public int getCacheReadTokens() { return cacheReadTokens; }
+    public void setCacheReadTokens(int cacheReadTokens) { this.cacheReadTokens = cacheReadTokens; }
+
+    public int getCacheWriteTokens() { return cacheWriteTokens; }
+    public void setCacheWriteTokens(int cacheWriteTokens) { this.cacheWriteTokens = cacheWriteTokens; }
+
+    /** 费用文本，例如 "$0.001234"。 */
+    public String costText() {
+        if (costTotal <= 0) return "";
+        if (costTotal < 0.01) return String.format(java.util.Locale.US, "$%.6f", costTotal);
+        return String.format(java.util.Locale.US, "$%.4f", costTotal);
+    }
 
     /**
      * 获取当前消息的预估token数（优先使用云端返回的，没有则使用本地估算的）

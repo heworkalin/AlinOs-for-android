@@ -1,1168 +1,569 @@
-# TMOE Proot 启动流程深度分析
+# tmoe-linux Proot 方案分析（校准版）
 
-> 分析日期：2026-09-02  
-> 来源项目：https://github.com/2moe/tmoe  
-> 核心文件：`install`（安装+修补）→ `startup`（生成启动脚本）→ `management`（调用启动）
-
----
-
-## 一、核心流程概览
-
-tmoe 的容器管理分**两个阶段**：
-
-```
-阶段一：标准安装流程（一次性）
-  下载 rootfs → 解压 → 配置镜像源 → 配置环境 → 生成启动脚本
-
-阶段二：启动修补流程（每次启动前）
-  source 启动脚本 → 构建 proot 参数 → exec 执行
-```
-
-**对 AlinOs 的意义**：
-- 我们只需在**首次安装时**跑一遍安装流程
-- 每次 AI 调用 bash 时，**Java 直接拼出完整的 proot 命令**
-- 不需要 shell 脚本，不需要配置文件，Java 一锅炖
+> 归档文档 · 最后校准：2026-09-26
+> 目的：为 AlinOs 在 Android/Termux 上自建 proot 容器提供**经实测校准**的参考。
+>
+> **本文所有结论均来自两处一手证据：**
+> 1. tmoe 仓库源码：`/data/data/com.termux/files/home/.local/share/tmoe-linux/git`
+> 2. 本机已安装的真实容器：`~/.local/share/tmoe-linux/containers/proot/ubuntu-noble_arm64`
+>
+> 凡未在这两处得到证实的内容，一律标注「未证实」或删除。上一版文档中大量「看着合理」的描述已列入
+> [§7 幻觉纠正表](#七旧文档幻觉纠正表)。
 
 ---
 
-## 二、阶段一：标准安装流程（一次性）
+## 〇、术语与路径约定
 
-### 2.1 下载 rootfs
+| 变量 | 实际值（Android/Termux） | 说明 |
+|------|--------------------------|------|
+| `$HOME` | `/data/data/com.termux/files/home` | Termux 家目录 |
+| `$PREFIX` | `/data/data/com.termux/files/usr` | Termux 前缀 |
+| `TMOE_LINUX_DIR` | `$HOME/.local/share/tmoe-linux` | tmoe 数据根 |
+| `TMOE_GIT_DIR` | `${TMOE_LINUX_DIR}/git` | 仓库 |
+| `TMOE_CONTAINER_DIR` | `${TMOE_LINUX_DIR}/containers` | 容器根 |
+| `CONFIG_FOLDER` | `$HOME/.config/tmoe-linux` | 配置 |
+| `ROOTFS_DIR`（下载缓存） | `/sdcard/Download/backup/rootfs`（优先 external-1） | 镜像 tar 缓存 |
+| `DEBIAN_FOLDER` | `${LINUX_CONTAINER_DISTRO}_${ARCH_TYPE}` | 如 `ubuntu-noble_arm64` |
+| `DEBIAN_CHROOT` | `${TMOE_CONTAINER_DIR}/proot/${DEBIAN_FOLDER}` | **rootfs 真实落盘位置** |
+| `TMOE_STARTUP_SCRIPT` | `${DEBIAN_CHROOT}/usr/local/etc/tmoe-linux/container/tmoe-linux-container` | 生成的启动脚本 |
 
-tmoe 从 BFSU（北京外国语大学）LXC 镜像站下载：
+> ⚠️ 旧文档把它写成 proot-distro 的
+> `.../usr/var/lib/proot-distro/containers/ubuntu/rootfs`，**完全错误**。tmoe 从不使用 proot-distro 的目录。
+
+---
+
+## 一、仓库现状（本次核对发现的最大变化）
+
+### 1.1 仓库已归档
+
+`git log` 只有 1 个提交（浅克隆 `--depth=1`）：
 
 ```
-URL: https://mirrors.nju.edu.cn/lxc-images/images/debian/sid/${ARCH}/default/${DATE}rootfs.tar.xz
-备选: https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/debian/sid/${ARCH}/default/${DATE}rootfs.tar.xz
+ebc811a 2024-10-11 chore(ubuntu): fix codename
 ```
 
-**我们的 Ubuntu 24 镜像源**：
-```
-URL: https://mirrors.nju.edu.cn/lxc-images/images/ubuntu/noble/${ARCH}/default/${DATE}rootfs.tar.xz
-备选: https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/ubuntu/noble/${ARCH}/default/${DATE}rootfs.tar.xz
-```
+根目录 `Readme.md` 全文：
 
-### 2.2 解压 rootfs
+> The old edition has been archived, the next one will be the new edition.
+> See you next time.
 
-```bash
-tar -pxJf rootfs.tar.xz  # -p 保留权限 -J 解压 xz
-```
+也就是说：**我们分析的是一套已冻结、不再维护的旧版实现**。`origin/master` 与本地一致，无新提交。
 
-**关键点**：`-p` 保留所有权限和所有者，这是容器内文件权限正常的关键。
+### 1.2 新版入口 `debian.sh` 已改为「下载 awk 运行」
 
-### 2.3 配置容器内环境（核心修补）
+根 `debian.sh` 是 POSIX sh 引导器，逻辑为：
 
-tmoe 在安装后做了以下修补：
-
-#### 2.3.1 设置 hostname 和 hosts
-
-```bash
-# 获取 Android 设备型号作为 hostname
-ANDROID_HOST_NAME=$(getprop ro.product.model | sed \
-  -e 's@ @-@g' -e 's@ @@g' -e 's/[^0-9a-zA-Z.-]\+//g')
-
-# 写入容器
-echo "$ANDROID_HOST_NAME" > ${容器}/etc/hostname
-echo "127.0.0.1       $ANDROID_HOST_NAME" >> ${容器}/etc/hosts
+```sh
+main() {
+    run_old_file || {          # 若存在旧版 manager 则直接运行旧版
+        _tmp_awk_file=$(get_temp_file)
+        _tmp_awk_uri=$(get_awk_uri gh)   # 下载 2/2.awk
+        get_awk_file
+        check_file_size
+        run_awk_program
+    }
+}
 ```
 
-#### 2.3.2 创建目录结构
+- 新版权威源：`https://raw.githubusercontent.com/2moe/tmoe/2/2.awk`（备选 `gi.tmoe.me`、`gitee.com/mo2/linux`）。
+- 旧版全部保留在 `share/old-version/`，并由 `run_old_file()` 直接调用
+  `share/old-version/share/app/manager`。
+- 本机容器正是通过旧版路径安装出来的。
 
-```bash
-mkdir -pv ${容器}/media/sd
-mkdir -pv ${容器}/run/shm
-mkdir -pv ${容器}/etc/gitstatus
-mkdir -pv ${容器}/tmp
-mkdir -pv ${容器}/usr/local/etc/tmoe-linux/environment
-mkdir -pv ${容器}/usr/local/etc/tmoe-linux/proot_proc
+### 1.3 本地未提交改动（4 处 shebang）
+
+`git status` 显示 4 个文件被本地修改，均只是把 shebang 改为 Termux 绝对路径：
+
+```
+share/old-version/share/app/manager               #!/data/data/com.termux/files/usr/bin/env bash
+share/old-version/share/app/tmoe                  同上
+share/old-version/share/container/debian/debian   同上
+share/old-version/share/container/debian/lnk-menu 同上
 ```
 
-#### 2.3.3 创建符号链接
+属于运行环境适配，非上游变更。
 
-```bash
-# 容器内 /root → /media/sd 的快捷方式
-ln -sf ../media/sd ${容器}/root/
+---
 
-# 容器内 /sd → /media/sd 的快捷方式
-ln -sf media/sd ${容器}/sd
+## 二、实测容器：`ubuntu-noble_arm64`
 
-# Android /storage/emulated 映射
-mkdir -pv ${容器}/storage/emulated
-ln -s ../../media/sd ${容器}/storage/emulated/0
-```
+### 2.1 基本信息
 
-#### 2.3.4 写入 container.env（环境变量文件）
+| 项 | 值 |
+|----|----|
+| 发行版配置 | `$HOME/.config/tmoe-linux/linux_container_distro.txt` = `ubuntu-noble` |
+| 容器目录 | `~/.local/share/tmoe-linux/containers/proot/ubuntu-noble_arm64` |
+| 架构 | `across_architecture_container.txt` = `arm64`（与宿主一致，**未启用 QEMU**） |
+| locale | `$HOME/.config/tmoe-linux/locale.txt` = `zh_CN.UTF-8` |
+| 镜像缓存 | `/sdcard/Download/backup/rootfs/ubuntu-noble_arm64-rootfs.tar.xz` |
+| 启动脚本 | `$ROOTFS/usr/local/etc/tmoe-linux/container/tmoe-linux-container`（约 35 KB，可执行） |
 
-tmoe 在容器内创建 `/usr/local/etc/tmoe-linux/environment/container.env`，内容包含：
+### 2.2 容器内关键配置（实测）
 
-```bash
-export TMOE_CHROOT=false  # proot 模式下为 false
-export TMOE_PROOT=true
-export PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin
-# ... 其他环境变量
-```
+```ini
+# etc/hostname
+PJE110                              # 取自 getprop ro.product.model
 
-**这个文件在每次启动时被 source，注入所有环境变量**。
-
-#### 2.3.5 配置 /etc/environment
-
-```bash
-cat >> ${容器}/etc/environment <<EOF
-export TMOE_CHROOT=false
+# etc/environment
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin"
 export TMOE_PROOT=true
 export MOZ_FAKE_NO_SANDBOX=1
-EOF
-```
+export QT_QPA_PLATFORMTHEME=qt5ct
 
-#### 2.3.6 配置镜像源
+# etc/apt/sources.list（LXC 官方原样，未被 tmoe 改写）
+deb http://ports.ubuntu.com/ubuntu-ports noble main restricted universe multiverse
+...（另有已注释的 bfsu 源）
 
-根据发行版自动配置 apt/yum/pacman 源，使用 BFSU 或 USTC 镜像。
+# etc/apt/sources.list.d/mozillateam-ubuntu-ppa-noble.sources（第三方 PPA）
 
-#### 2.3.7 创建 proot_proc 文件
-
-tmoe 检测到宿主 `/proc` 文件权限受限，创建伪文件供容器内使用：
-
-```bash
-mkdir -pv ${容器}/usr/local/etc/tmoe-linux/proot_proc
-
-# 创建伪 /proc 文件
-cat > ${容器}/usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.stat <<EOF
-cpu  13543674 2263150 11590764 15571271 210309 1343827 851885 0 0 0
-ctxt 1941467212
-btime 1597149124
+# etc/resolv.conf
+nameserver 114.114.114.114
 ...
-EOF
-
-# 创建伪 /proc/version
-echo "Linux version $(uname -r) $(uname -v)" > ${容器}/usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.version
 ```
 
-**原因**：Android 普通应用权限下，`/proc/stat`、`/proc/version` 等文件可能无法读取，需要伪造。
+容器内已存在用户 `he`（uid/gid 1001），与宿主用户名一致；启动脚本因此使用
+`--change-id=1001:1001` 而**不是** `--root-id`（详见 §4）。
+
+### 2.3 容器内的 tmoe 文件
+
+```
+$ROOTFS/usr/local/etc/tmoe-linux/
+├── container/tmoe-linux-container        # 生成的启动脚本（唯一真正被执行的）
+├── environment/container.env            # 环境变量文件（本机为空）
+├── environment/entrypoint               # cd ~
+├── environment/login                    # 执行 /etc/profile.d/permanent/* 等
+├── proot_proc/                          # ~36 个 /proc 伪文件（已解压）
+│   ├── .tmoe-container.stat
+│   ├── .tmoe-container.version
+│   ├── uptime / loadavg / vmstat / ...
+│   └── bus/input, bus/pci ...
+├── git/                                 # 容器内又克隆了一份完整 tmoe 仓库
+├── locale.txt
+├── icons/  novnc  ...
+└── tmp/resolv.conf
+```
+
+> 注意：`container.env` 为空、`git/` 是完整仓库副本、`/usr/local/etc/tmoe-linux` 同时存在于
+> 宿主与容器两侧 —— 这些都是旧版设计的冗余，AlinOs 不必复刻。
 
 ---
 
-## 三、阶段二：启动流程（每次 AI 调用）
+## 三、安装流程（源码实测）
 
-### 3.1 启动脚本结构
-
-tmoe 的启动脚本（`tmoe-linux-container`）是一个完整的 bash 脚本，核心是 `start_tmoe_gnu_linux_container()` 函数。
-
-**生成方式**：安装时通过 `startup` 脚本的 `cat >"${TMOE_STARTUP_SCRIPT}" <<-ENDOFPROOT ... ENDOFPROOT` 生成。
-
-### 3.2 启动步骤详解
-
-#### Step 1: 加载全局配置
+tmoe 的 `share/old-version/share/container/install` **本身是一份 debian 模板脚本**，
+其它发行版通过 `sed` 打补丁后 `bash -c` 执行：
 
 ```bash
-load_global_conf() {
-    # 加载 proot 全局配置
-    [[ ${LOAD_PROOT_CONF} = true && -r ${PROOT_CONF_FILE} ]] && source ${PROOT_CONF_FILE}
-    # 加载 SD 卡挂载配置
-    [[ -z ${MOUNT_SD} && -r ${SD_CONF_FILE} ]] && source ${SD_CONF_FILE}
-    # ... 其他配置文件
+# share/container/list
+linux_distro_common_model_01() {
+    bash -c "$(sed -n p .../container/install |
+        sed -E -e "s/debian container/${DISTRO_NAME} container/g" \
+               -e "s:debian-sid:${DISTRO_NAME}-${DISTRO_CODE}:g" \
+               -e "s:debian/sid:${DISTRO_NAME}/${DISTRO_CODE}:g" \
+               -e "s:Debian GNU/Linux:${DISTRO_NAME} GNU/Linux:g")"
 }
 ```
 
-#### Step 2: 设置 proot 二进制和 loader
+所以「debian/sid」在 Ubuntu 分支会被替换为「ubuntu/noble」。真实流程如下。
+
+### 3.1 架构探测
 
 ```bash
-set_proot_bin_and_loader_env() {
-    case ${PROOT_BIN} in
-        default|system) PROOT_PROGRAM=proot ;;
-        termux|prefix) PROOT_PROGRAM=${PREFIX}/bin/proot ;;
-        compatibility)
-            # dotNET 6 兼容模式
-            PROOT_PROGRAM=${PROOT_COMPATIBLE_MODE_BIN}
-            SHARE_PROOT_LOADER=true
-            PROOT_LOADER=${COMPATIBLE_MODE_LOADER}
-            LD_LIB_PATH=${COMPATIBLE_MODE_LD_LIB_PATH}
-            ;;
-        32)
-            PROOT_PROGRAM=${PROOT_32_TERMUX_BIN}
-            PROOT_LOADER=${PROOT_32_TERMUX_LOADER}
-            LD_LIB_PATH=${PROOT_32_TERMUX_LD_LIB_PATH}
-            ;;
-        *) PROOT_PROGRAM=${PROOT_BIN} ;;  # 绝对路径
-    esac
-}
+dpkg --print-architecture      # aarch64 → ARCH_TYPE=arm64
+# 或 uname -m 兜底
+# 跨架构时读 $CONFIG_FOLDER/across_architecture_container.txt（第1行容器架构，第2行QEMU架构）
 ```
 
-**对我们的意义**：Java 中只需要判断是否用兼容模式，默认用 `/system/bin/proot`。
-
-#### Step 3: 构建 proot 命令参数（核心）
+### 3.2 下载 LXC 官方裸镜像
 
 ```bash
-# 用户映射
-if [ ${PROOT_USER} = root ]; then
-    set -- "$@" --root-id
-else
-    UID=$(grep "^${PROOT_USER}:" /etc/passwd | awk -F: '{print $3}')
-    GID=$(grep "^${PROOT_USER}:" /etc/passwd | awk -F: '{print $4}')
-    set -- "$@" --change-id=${UID}:${GID}
-fi
+# 模板里的变量（sed 后对 ubuntu noble arm64 生效）
+TUNA_LXC_IMAGE_MIRROR_REPO="https://mirrors.nju.edu.cn/lxc-images/images/ubuntu/noble/arm64/default"
+TUNA_LXC_IMAGE_MIRROR_REPO_02="https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/ubuntu/noble/arm64/default"
+TMOE_ROOTFS_TAR_XZ="ubuntu-noble_arm64-rootfs.tar.xz"
 
-# 工作目录
-set -- "$@" --pwd=${PROOT_HOME}
+# 目录日期：抓取镜像站目录，取 date 链接的最后一行
+TTIME=$(curl --connect-timeout 10 -L "${REPO}/" | grep date | ... | tail -n 1)
 
-# 根文件系统
-set -- "$@" --rootfs=${ROOTFS_DIR}
-
-# Android 系统挂载
-[[ ${MOUNT_SYSTEM} ]] && set -- "$@" --mount=/system
-[[ ${MOUNT_APEX} ]] && set -- "$@" --mount=/apex
-
-# 功能标志
-[[ ${KILL_ON_EXIT} ]] && set -- "$@" --kill-on-exit
-[[ ${PROOT_SYSVIPC} ]] && set -- "$@" --sysvipc
-[[ ${PROOT_L} ]] && set -- "$@" -L
-[[ ${PROOT_H} ]] && set -- "$@" -H
-[[ ${LINK_TO_SYMLINK} ]] && set -- "$@" --link2symlink
+# 下载
+aria2c --console-log-level=warn --connect-timeout=10 --no-conf \
+       -x 5 -k 1M --split 5 -o ${TMOE_ROOTFS_TAR_XZ} \
+       "${REPO}/${TTIME}rootfs.tar.xz"
+# 失败则用清华备镜像重试
 ```
 
-#### Step 4: 设备挂载
+下载缓存目录 `ROOTFS_DIR`：优先 `~/storage/external-1/Download/backup/rootfs`，
+否则 `/sdcard/Download/backup/rootfs`。本机实际为 `/sdcard/Download/backup/rootfs`。
+
+### 3.3 解压 rootfs
+
+Android 分支的关键命令（`install: uncompress_tar_xz_file`）：
 
 ```bash
-# /proc（挂载宿主机 /proc，伪造部分条目）
-# tmoe 的 /proc 修复：只伪造 stat/version/loadavg/cap_last_cap，其余继续访问宿主机
-# --mount=/proc 会挂载宿主机 /proc，然后下面的 --mount 覆盖特定文件
-set -- "$@" --mount=/proc
-
-# 伪造 /proc/stat（Android 普通应用无法读取 /proc/stat）
-set -- "$@" --mount=${FAKE_PROC_DIR}/stat:/proc/stat
-
-# 伪造 /proc/version（某些程序需要内核版本）
-set -- "$@" --mount=${FAKE_PROC_DIR}/version:/proc/version
-
-# 伪造 /proc/loadavg（uptime 等程序依赖）
-set -- "$@" --mount=${FAKE_PROC_DIR}/loadavg:/proc/loadavg
-
-# 伪造 /proc/sys/kernel/cap_last_cap（空文件）
-set -- "$@" --mount=/dev/null:/proc/sys/kernel/cap_last_cap
-
-# /dev（挂载宿主机 /dev）
-set -- "$@" --mount=/dev
-
-# 设备文件描述符映射
-set -- "$@" --mount=/proc/self/fd:/dev/fd
-set -- "$@" --mount=/proc/self/fd/0:/dev/stdin
-set -- "$@" --mount=/proc/self/fd/1:/dev/stdout
-set -- "$@" --mount=/proc/self/fd/2:/dev/stderr
-
-# /dev/urandom → /dev/random
-set -- "$@" --mount=/dev/urandom:/dev/random
+cd ${DEBIAN_CHROOT}
+pv ${CURRENT_TMOE_DIR}/${TMOE_ROOTFS_TAR_XZ} \
+  | proot --link2symlink ${GNU_TAR_BIN} -pJx
 ```
 
-#### Step 5: 设置环境变量
+- `-p` 保留权限；`-J` = xz；`--link2symlink` 把硬链接退化为符号链接，
+  规避 Android 文件系统/权限限制 —— **这是 Android 下解压 LXC 镜像的必要手段**。
+- 解压后若 `usr/bin/env` 与 `bin/busybox` 都不存在，会再解压一次并 `chown -R 0:0`。
+- 本机另存有 `debian-bookworm`、`debian-trixie`、`archlinux-latest` 等镜像，说明该目录可复用。
+
+### 3.4 创建 proot_proc 伪文件目录
 
 ```bash
-# 清除所有宿主环境变量，重建
-set -- "$@" /usr/bin/env -i \
-    HOSTNAME=localhost \
-    HOME=/root \
-    USER=root \
-    TERM=xterm-256color \
-    SDL_IM_MODULE=fcitx \
-    XMODIFIERS=@im=fcitx \
-    QT_IM_MODULE=fcitx \
-    GTK_IM_MODULE=fcitx \
-    TMOE_CHROOT=false \
-    TMOE_PROOT=true \
-    TMPDIR=/tmp \
-    DISPLAY=:2 \
-    PULSE_SERVER=tcp:127.0.0.1:4713 \
-    LANG=en_US.UTF-8 \
-    PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin \
-    ${CONTAINER_BIN_PATH} \
-    SHELL=/bin/zsh -l
+cd ${CONFIG_FOLDER}
+git clone --depth=1 https://gitee.com/ak2/proot_proc proot_proc \
+  || git clone --depth=1 https://github.com/cu233/proot_proc proot_proc
+# 失败则 aria2c 直下 proc.tar.xz
+
+cd ${DEBIAN_CHROOT}
+tar -Jxf ${CONFIG_FOLDER}/proot_proc/proc.tar.xz
+# → 生成 $ROOTFS/usr/local/etc/tmoe-linux/proot_proc/*
 ```
 
-#### Step 6: 加载容器环境变量
+### 3.5 修补容器内环境
 
 ```bash
-# source container.env 中的 export 语句
-if [ -s ${CONTAINER_ENV_FILE} ]; then
-    for i in $(sed -E 's@export\s+@@' ${CONTAINER_ENV_FILE}); do
-        set -- "$@" "$i"
-    done
-fi
-```
-
-#### Step 7: 最终 exec
-
-```bash
-exec proot \
-    --root-id \
-    --pwd=/root \
-    --rootfs=/data/data/.../ubuntu_24 \
-    --mount=/system \
-    --mount=/apex \
-    --mount=/proc \
-    --mount=/dev \
-    --mount=/proc/self/fd:/dev/fd \
-    --mount=/dev/urandom:/dev/random \
-    --sysvipc \
-    -L \
-    --link2symlink \
-    --kill-on-exit \
-    /usr/bin/env -i \
-    HOSTNAME=localhost HOME=/root USER=root TERM=xterm-256color \
-    LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin \
-    SHELL=/bin/zsh -l
-```
-
----
-
-## 四、tmoe 踩过的坑（我们的避坑指南）
-
-### 4.1 /proc 权限问题
-
-**问题**：Android 普通应用无法读取 `/proc/stat`、`/proc/version` 等文件。
-
-**tmoe 方案**：预创建伪文件，启动时 mount 到容器内 `/proc/` 对应位置。
-
-**我们的方案**：首次安装时创建 `/usr/local/etc/tmoe-linux/proot_proc/` 目录，写入伪文件。
-
-### 4.2 符号链接问题
-
-**问题**：proot 对符号链接的处理与 chroot 不同。
-
-**tmoe 方案**：使用 `--link2symlink` 选项，将硬链接转为符号链接。
-
-**我们的方案**：始终加 `--link2symlink` 参数。
-
-### 4.3 SELinux 硬链接
-
-**问题**：SELinux 策略不允许硬链接。
-
-**tmoe 方案**：`--link2symlink` 自动处理。
-
-### 4.4 容器内 root 权限
-
-**问题**：proot 模式下容器内 root 不是宿主机 root。
-
-**tmoe 方案**：
-- 使用 `--root-id` 让容器 root 获得宿主机 root 权限映射
-- 给容器 root 添加 80+ 个 Android aid 组
-
-### 4.5 cap_last_cap 问题
-
-**问题**：某些程序需要读取 `/proc/sys/kernel/cap_last_cap`。
-
-**tmoe 方案**：`--mount=/dev/null:/proc/sys/kernel/cap_last_cap` 伪造为零长度。
-
-### 4.6 /dev/shm 不存在
-
-**问题**：Android 没有 `/dev/shm`，某些程序会崩溃。
-
-**tmoe 方案**：`--mount=/tmp:/dev/shm` 映射容器 tmp 到 /dev/shm。
-
-### 4.7 环境变量隔离
-
-**问题**：宿主环境变量（如 TERMUX 相关）会泄漏到容器内。
-
-**tmoe 方案**：`/usr/bin/env -i` 清除所有环境变量，只保留需要的。
-
-### 4.8 跨架构运行
-
-**问题**：arm64 宿主运行 i386 容器。
-
-**tmoe 方案**：`--qemu=qemu-user-i386` 自动调用 qemu-user 模拟器。
-
-**我们的方案**：先不支持跨架构，后续可扩展。
-
-### 4.9 proot loader
-
-**问题**：某些 ARM64 proot 版本需要额外的 loader。
-
-**tmoe 方案**：`--mount=/path/to/loader:/path/to/loader env PROOT_LOADER=/path/to/loader proot ...`
-
-**我们的方案**：检测 proot 是否需要 loader，需要则挂载。
-
-### 4.10 退出时进程清理
-
-**问题**：proot 容器内后台进程可能残留。
-
-**tmoe 方案**：`--kill-on-exit` 强制杀死所有子进程。
-
----
-
-## 五、我们的极简实现方案
-
-### 5.1 安装时（一次性）
-
-```java
-// 1. 下载 Ubuntu 24 rootfs
-// 2. tar -pxJf rootfs.tar.xz
-// 3. 修补：
-//    - 创建 /etc/hostname, /etc/hosts
-//    - 创建目录结构
-//    - 创建 proot_proc 伪文件
-//    - 创建 container.env
-//    - 写入 /etc/environment
-//    - 创建符号链接
-```
-
-### 5.2 运行时（Java 构建命令）
-
-```java
-// 拼出完整的 proot 命令
-StringBuilder cmd = new StringBuilder();
-cmd.append("proot ");
-cmd.append("--root-id ");
-cmd.append("--pwd=/root ");
-cmd.append("--rootfs=${CONTAINER_DIR} ");
-cmd.append("--mount=/system ");
-cmd.append("--mount=/apex ");
-cmd.append("--mount=/proc ");
-cmd.append("--mount=/dev ");
-cmd.append("--mount=/proc/self/fd:/dev/fd ");
-cmd.append("--mount=/proc/self/fd/0:/dev/stdin ");
-cmd.append("--mount=/proc/self/fd/1:/dev/stdout ");
-cmd.append("--mount=/proc/self/fd/2:/dev/stderr ");
-cmd.append("--mount=/dev/urandom:/dev/random ");
-cmd.append("--mount=/dev/null:/proc/sys/kernel/cap_last_cap ");
-cmd.append("--sysvipc ");
-cmd.append("-L ");
-cmd.append("--link2symlink ");
-cmd.append("--kill-on-exit ");
-cmd.append("/usr/bin/env -i ");
-cmd.append("HOSTNAME=localhost ");
-cmd.append("HOME=/root ");
-cmd.append("USER=root ");
-cmd.append("TERM=xterm-256color ");
-cmd.append("LANG=en_US.UTF-8 ");
-cmd.append("PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin ");
-cmd.append("SHELL=/bin/bash ");
-cmd.append("-c ");
-cmd.append("'${USER_COMMAND}'");
-```
-
-### 5.3 核心参数说明
-
-| 参数 | 作用 | 是否必需 |
-|------|------|----------|
-| `--root-id` | 容器 root 映射宿主机 root | 必需 |
-| `--pwd=/root` | 初始工作目录 | 必需 |
-| `--rootfs=` | 容器根目录 | 必需 |
-| `--mount=/system` | 挂载 Android /system | 必需 |
-| `--mount=/apex` | 挂载 Android /apex | 必需 |
-| `--mount=/proc` | 挂载 /proc | 必需 |
-| `--mount=/dev` | 挂载 /dev | 必需 |
-| `--mount=/proc/self/fd:/dev/fd` | 设备文件描述符 | 必需 |
-| `--mount=/dev/null:/proc/sys/kernel/cap_last_cap` | 伪造 cap_last_cap | 必需 |
-| `--sysvipc` | 系统 V IPC 支持 | 推荐 |
-| `-L` | 符号链接修复 | 推荐 |
-| `--link2symlink` | 硬链接转符号链接 | 推荐 |
-| `--kill-on-exit` | 退出时杀所有子进程 | 必需 |
-| `/usr/bin/env -i` | 清除环境变量 | 推荐 |
-
----
-
-## 六、与 tmoe 的差异总结
-
-| 维度 | tmoe | AlinOs |
-|------|------|--------|
-| **容器类型** | proot + chroot + nspawn | 仅 proot |
-| **发行版** | Debian/Ubuntu/Arch/Kali... | 仅 Ubuntu 24 |
-| **跨架构** | qemu 支持 | 暂不支持 |
-| **GUI** | VNC/X11 | 无 |
-| **配置文件** | 100+ shell 变量 | Java 硬编码参数 |
-| **启动脚本** | bash 脚本生成 | Java 直接拼命令 |
-| **安装流程** | 复杂修补 | 简化修补 |
-| **生命周期** | 持久运行 | 单次 bash |
-| **多容器** | 多个容器管理 | 单容器 |
-
----
-
-## 七、关键环境变量清单
-
-tmoe 启动时注入的环境变量（供 Java 参考）：
-
-```
-HOSTNAME=localhost
-HOME=/root
-USER=root
-TERM=xterm-256color
-LANG=en_US.UTF-8
-PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin
-SHELL=/bin/zsh
-TMOE_CHROOT=false
-TMOE_PROOT=true
-TMPDIR=/tmp
-DISPLAY=:2
-PULSE_SERVER=tcp:127.0.0.1:4713
-SDL_IM_MODULE=fcitx
-XMODIFIERS=@im=fcitx
-QT_IM_MODULE=fcitx
-GTK_IM_MODULE=fcitx
-MOZ_FAKE_NO_SANDBOX=1
-```
-
-**AI 使用场景下，精简为**：
-```
-HOSTNAME=localhost
-HOME=/root
-USER=root
-TERM=xterm-256color
-LANG=en_US.UTF-8
-PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin
-SHELL=/bin/bash
-```
-
----
-
-## 八、AI 调用分层拼接方案
-
-### 8.1 核心问题
-
-proot 命令太长（50+ 参数），每次 AI 调用都拼接一遍效率低。PTY 留给用户终端（业务层），AI 只负责执行 bash 命令。
-
-### 8.2 分层拼接设计
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ AI 调用                                                   │
-│ "执行 ls -la /usr/bin"                                    │
-└─────────────────────────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│ Java 拼接                                                 │
-│                                                         │
-│ 固定层（硬编码，每次复用）                                │
-│   proot --root-id --pwd=/root --rootfs=/... \
-│         --mount=/system --mount=/apex --mount=/proc \
-│         --mount=/dev --mount=/proc/self/fd:/dev/fd \
-│         --mount=/dev/urandom:/dev/random \
-│         --mount=/dev/null:/proc/sys/kernel/cap_last_cap \
-│         --sysvipc -L --link2symlink --kill-on-exit \
-│         /usr/bin/env -i \
-│         HOSTNAME=localhost HOME=/root USER=root \
-│         TERM=xterm-256color LANG=en_US.UTF-8 \
-│         PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin \
-│         SHELL=/bin/bash \
-│                                                         │
-│ 用户配置层（UI 配置，动态加载）                           │
-│   --mount=/storage/emulated/0:/storage \
-│   --mount=/data/data/com.termux:/termux \
-│   ...（用户配置的路径挂载）                                │
-│                                                         │
-│ 执行层（AI 命令）                                         │
-│   /bin/bash -c "ls -la /usr/bin"                       │
-└─────────────────────────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│ 执行结果                                                  │
-│   stdout: 总用量 xxx                                      │
-│   stderr: (空)                                           │
-│   exitCode: 0                                            │
-└─────────────────────────────────────────────────────────┘
-```
-
-### 8.3 container.env 文件（环境变量持久化）
-
-每次安装时生成 `/data/data/.../ubuntu_24/usr/local/etc/tmoe-linux/environment/container.env`：
-
-```bash
-export PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin
-export HOME=/root
-export USER=root
-export LANG=en_US.UTF-8
-export TERM=xterm-256color
-export SHELL=/bin/bash
-```
-
-**运行时加载方式**：
-```java
-// Java 读取 container.env 中的 export 语句
-// 拼接到 /usr/bin/env -i 后面的环境变量中
-```
-
-### 8.4 启动脚本方案（可选）
-
-**方案 A：Java 硬编码完整命令（推荐）**
-```java
-// 固定参数
-StringBuilder cmd = new StringBuilder();
-cmd.append("proot --root-id --pwd=/root --rootfs=${CONTAINER_DIR} ");
-cmd.append("--mount=/system --mount=/apex --mount=/proc --mount=/dev ");
-cmd.append("--mount=/proc/self/fd:/dev/fd --mount=/dev/urandom:/dev/random ");
-cmd.append("--mount=/dev/null:/proc/sys/kernel/cap_last_cap ");
-cmd.append("--sysvipc -L --link2symlink --kill-on-exit ");
-cmd.append("/usr/bin/env -i HOSTNAME=localhost HOME=/root USER=root ");
-cmd.append("TERM=xterm-256color LANG=en_US.UTF-8 ");
-cmd.append("PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin ");
-cmd.append("SHELL=/bin/bash");
-
-// 用户配置层（从 UI 配置读取）
-for (MountPath p : userConfig.getMountPaths()) {
-    cmd.append(" --mount=").append(p.getHostPath()).append(":").append(p.getContainerPath());
-}
-
-// 执行层（AI 命令）
-cmd.append(" /bin/bash -c ").append(quote(aiCommand));
-
-// 执行
-ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd.toString());
-Process p = pb.start();
-```
-
-**方案 B：tmoe 启动脚本模式**
-```bash
-# 安装时生成 /data/data/.../tmoe-linux-startup.sh
-cat > tmoe-linux-startup.sh << 'EOF'
-#!/bin/bash
-CONTAINER_DIR="/data/data/.../ubuntu_24"
-USER_CMD="${1}"
-
-exec proot \
-  --root-id --pwd=/root --rootfs=${CONTAINER_DIR} \
-  --mount=/system --mount=/apex --mount=/proc --mount=/dev \
-  --mount=/proc/self/fd:/dev/fd --mount=/dev/urandom:/dev/random \
-  --mount=/dev/null:/proc/sys/kernel/cap_last_cap \
-  --sysvipc -L --link2symlink --kill-on-exit \
-  /usr/bin/env -i \
-  HOSTNAME=localhost HOME=/root USER=root TERM=xterm-256color \
-  LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin \
-  SHELL=/bin/bash \
-  /bin/bash -c "${USER_CMD}"
-EOF
-chmod +x tmoe-linux-startup.sh
-
-# 运行时调用
-java.sh tmoe-linux-startup.sh "ls -la /usr/bin"
-```
-
-### 8.5 用户配置路径挂载
-
-用户通过 UI 配置允许 AI 访问的路径：
-
-```java
-class MountPath {
-    String hostPath;        // 宿主机路径
-    String containerPath;   // 容器内挂载点
-    boolean readOnly;       // 是否只读
-}
-
-// 预定义路径（用户可选开关）
-List<MountPath> defaultMounts = List.of(
-    new MountPath("/storage/emulated/0", "/storage", true),
-    new MountPath("/data/data/com.termux/files", "/termux", false),
-    new MountPath("/data/data/.../ubuntu_24", "/ubuntu", false)
-);
-```
-
-### 8.6 环境变量自动加载
-
-```java
-// 安装时写入 container.env
-class EnvironmentManager {
-    void writeContainerEnv(Path envFile) {
-        List<String> lines = List.of(
-            "export PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin",
-            "export HOME=/root",
-            "export USER=root",
-            "export LANG=en_US.UTF-8",
-            "export TERM=xterm-256color",
-            "export SHELL=/bin/bash"
-        );
-        Files.write(envFile, lines);
-    }
-    
-    // 运行时加载并拼接到 proot 命令
-    String buildEnvArgs(Path envFile) {
-        StringBuilder sb = new StringBuilder();
-        for (String line : Files.readAllLines(envFile)) {
-            if (line.startsWith("export ")) {
-                // 提取变量名和值
-                String var = line.replace("export ", "");
-                sb.append(var).append(" ");
-            }
-        }
-        return sb.toString();
-    }
-}
-```
-
-### 8.7 方案对比
-
-| 方案 | 优点 | 缺点 | 推荐度 |
-|------|------|------|--------|
-| **方案 A：Java 硬编码** | 无需管理脚本，一次构建 | 代码较长 | ⭐⭐⭐⭐⭐ |
-| **方案 B：启动脚本** | 代码简洁，易于修改 | 多一层脚本管理 | ⭐⭐⭐⭐ |
-| **方案 C：wrapper.sh** | 容器内直接调用 | 需要额外 proot 启动 | ⭐⭐⭐ |
-
-**推荐方案 A + B 结合**：Java 硬编码固定参数，用户配置动态注入，AI 命令直接追加。
-
----
-
-## 九、容器安装流程（一次性保姆级修复）
-
-安装是容器初始化的核心，必须保证容器**网络通畅、证书可用、环境完整**。
-
-### 9.1 镜像源配置（全面收集 tmoe）
-
-tmoe 支持的镜像源全面整理（仅 Ubuntu/Debian rootfs + apt 源）：
-
-#### A. LXC 镜像源（rootfs 下载）
-
-| 名称 | URL 模板 | 类型 | 归属 |
-|------|----------|------|------|
-| **BFSU（北京外国语大学）** | `https://mirrors.nju.edu.cn/lxc-images/images/debian/sid/${ARCH}/default/${DATE}rootfs.tar.xz` | rootfs | 国内 |
-| **TUNA（清华大学）** | `https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/debian/sid/${ARCH}/default/${DATE}rootfs.tar.xz` | rootfs | 国内 |
-| **LXC Images 官方** | `https://images.linuxcontainers.org/images/ubuntu/noble/${ARCH}/default/${DATE}rootfs.tar.xz` | rootfs | 境外 |
-
-> **注**：tmoe 默认用 BFSU，TUNA 为备选。Ubuntu 镜像目前只在 BFSU/TUNA 提供，官方镜像站暂无 Ubuntu Noble。
-
-#### B. apt 镜像源（容器内软件安装）
-
-**Ubuntu 镜像源**：
-
-| 名称 | URL | 类型 | 归属 |
-|------|-----|------|------|
-| **BFSU（北京外国语大学）** | `https://mirrors.nju.edu.cn/ubuntu/` | apt | 国内 |
-| **BFSU（北京外国语大学）** | `https://mirrors.bfsu.edu.cn/ubuntu/` | apt | 国内 |
-| **TUNA（清华大学）** | `https://mirrors.tuna.tsinghua.edu.cn/ubuntu/` | apt | 国内 |
-| **USTC（中国科学技术大学）** | `https://mirrors.ustc.edu.cn/ubuntu/` | apt | 国内 |
-| **华为云** | `https://mirrors.huaweicloud.com/ubuntu/` | apt | 国内 |
-| **阿里云** | `https://mirrors.aliyun.com/ubuntu/` | apt | 国内 |
-| **网易 163** | `https://mirrors.163.com/ubuntu/` | apt | 国内 |
-| **腾讯** | `https://mirrors.tencent.com/ubuntu/` | apt | 国内 |
-| **官方** | `https://archive.ubuntu.com/ubuntu/` | apt | 境外 |
-| **LXC Images** | `https://images.linuxcontainers.org/ubuntu/` | apt | 境外 |
-
-**Debian 镜像源**：
-
-| 名称 | URL | 类型 | 归属 |
-|------|-----|------|------|
-| **BFSU（北京外国语大学）** | `https://mirrors.nju.edu.cn/debian/` | apt | 国内 |
-| **BFSU（北京外国语大学）** | `https://mirrors.bfsu.edu.cn/debian/` | apt | 国内 |
-| **TUNA（清华大学）** | `https://mirrors.tuna.tsinghua.edu.cn/debian/` | apt | 国内 |
-| **USTC（中国科学技术大学）** | `https://mirrors.ustc.edu.cn/debian/` | apt | 国内 |
-| **华为云** | `https://mirrors.huaweicloud.com/debian/` | apt | 国内 |
-| **官方** | `https://deb.debian.org/debian/` | apt | 境外 |
-
-**Kali 镜像源**：
-
-| 名称 | URL | 类型 | 归属 |
-|------|-----|------|------|
-| **USTC（中国科学技术大学）** | `https://mirrors.ustc.edu.cn/kali/` | apt | 国内 |
-| **华为云** | `https://mirrors.huaweicloud.com/kali/` | apt | 国内 |
-| **东北大学（NEU）** | `https://mirrors.neusoft.edu.cn/kali/` | apt | 国内 |
-| **官方** | `https://.kali.org/kali/` | apt | 境外 |
-
-### 9.2 UI 化镜像源选择
-
-安装时提供 UI 界面，让用户选择镜像源：
-
-```java
-// 镜像源分类列表
-List<MirrorSource> sources = Arrays.asList(
-    // 国内源
-    new MirrorSource("BFSU-APT", "https://mirrors.nju.edu.cn/ubuntu/", true, "国内-推荐"),
-    new MirrorSource("BFSU-APT", "https://mirrors.bfsu.edu.cn/ubuntu/", true, "国内-推荐"),
-    new MirrorSource("TUNA-APT", "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/", true, "国内-推荐"),
-    new MirrorSource("USTC-APT", "https://mirrors.ustc.edu.cn/ubuntu/", true, "国内-推荐"),
-    new MirrorSource("华为云", "https://mirrors.huaweicloud.com/ubuntu/", true, "国内"),
-    new MirrorSource("阿里云", "https://mirrors.aliyun.com/ubuntu/", true, "国内"),
-    new MirrorSource("网易163", "https://mirrors.163.com/ubuntu/", true, "国内"),
-    new MirrorSource("腾讯", "https://mirrors.tencent.com/ubuntu/", true, "国内"),
-    
-    // 境外源
-    new MirrorSource("LXC Images", "https://images.linuxcontainers.org/ubuntu/", false, "境外"),
-    new MirrorSource("Ubuntu官方", "https://archive.ubuntu.com/ubuntu/", false, "境外")
-);
-```
-
-**用户操作**：
-1. 点击「选择镜像源」→ 显示列表
-2. 用户点选 → 确定
-3. 点击「应用」→ 写入 `/etc/apt/sources.list` → 执行 `apt update`
-
-### 9.2 下载与解压（Download & Extract）
-
-```bash
-# 1. 下载 rootfs（流式下载，不占内存）
-curl -O ${selected_mirror}/rootfs.tar.xz
-
-# 2. 解压到容器目录（保留权限）
-tar -pxJf rootfs.tar.xz -C /data/data/.../ubuntu_24/
-```
-
-### 9.3 首次启动修复（Repair Script）
-
-这是 tmoe 的核心价值，我们必须在安装时执行一次完整的修复流程。修复脚本（`repair.sh`）执行以下操作：
-
-#### Step 1: 基础环境修复
-```bash
-# 1. 设置 hostname
-HOSTNAME=$(getprop ro.product.model | sed 's/[^0-9a-zA-Z-]//g')
-echo "$HOSTNAME" > /etc/hostname
-# 写入 /etc/hosts
-echo "127.0.0.1 localhost" >> /etc/hosts
-
-# 2. 创建必要目录
-mkdir -p /storage /run/shm /tmp
-mkdir -p /usr/local/etc/tmoe-linux/environment
-mkdir -p /usr/local/etc/tmoe-linux/proot_proc
-
-# 3. 创建符号链接
-ln -sf ../storage /root
-ln -sf storage /sd
-mkdir -p /storage/emulated
-ln -sf ../../storage /storage/emulated/0
-```
-
-#### Step 2: /proc 文件修复
-
-**tmoe 的修复策略**：
-- **部分 /proc 文件伪造**：stat/version/loadavg（宿主机可能无法读取）
-- **其余 /proc 继续访问宿主机**：通过 `--mount=/proc` 保持映射
-
-**修复逻辑**：
-```bash
-# 1. 创建伪 stat 文件
-# 原因：Android 普通应用权限下，/proc/stat 可能无法读取
-# 某些程序（如 uptime, top）依赖 /proc/stat
-mkdir -p /usr/local/etc/tmoe-linux/proot_proc
-
-cat > /usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.stat << EOF
-cpu  1000000 0 1000000 1000000 0 0 0
-cpu0 500000 0 500000 500000 0 0 0
-cpu1 500000 0 500000 500000 0 0 0
-ctxt 1000000
-btime 1600000000
-processes 100
-procs_running 2
-procs_blocked 0
-EOF
-
-# 2. 创建伪 version 文件
-# 原因：某些程序需要读取 /proc/version 获取内核版本
-echo "Linux version $(uname -r) (gcc version 10.0.0 (GCC))" > /usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.version
-
-# 3. 创建伪 loadavg 文件
-# 原因：uptime 等程序依赖 /proc/loadavg
-cat > /usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.loadavg << EOF
-0.00 0.00 0.00 1/50 1000
-EOF
-
-# 4. 创建伪 cap_last_cap
-# 原因：某些程序需要 /proc/sys/kernel/cap_last_cap
-# /dev/null 内容为空，返回 cap_last_cap=0
-touch /usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.cap_last_cap
-```
-
-**proot 挂载参数**：
-```bash
-# 伪造的 /proc 条目
---mount=/usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.stat:/proc/stat
---mount=/usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.version:/proc/version
---mount=/usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.loadavg:/proc/loadavg
-
-# cap_last_cap 用 /dev/null 伪造（空文件）
---mount=/dev/null:/proc/sys/kernel/cap_last_cap
-
-# 其余 /proc 条目继续访问宿主机（通过 --mount=/proc）
---mount=/proc:/proc
-```
-
-> **关键**：tmoe 只伪造 stat/version/loadavg/cap_last_cap，其余 /proc 条目通过 `--mount=/proc` 直接访问宿主机。
-
-#### Step 3: CA 证书安装与镜像源配置（关键步骤！）
-
-**为什么要做这一步？**
-- 容器内默认没有最新的 CA 证书
-- `apt-get update` 需要 HTTPS
-- 如果证书缺失，`apt` 会报错
-
-**修复逻辑**：
-
-```bash
-# 根据用户选择的镜像源配置
-# 如果用户没选，默认用 BFSU（国内优先）
-MIRROR_URL="${USER_SELECTED_MIRROR:-https://mirrors.nju.edu.cn/ubuntu/}"
-
-# 1. 写入 sources.list
-MIRROR_NAME=$(echo $MIRROR_URL | cut -d/ -f3)
-cat > /etc/apt/sources.list << EOF
-deb ${MIRROR_URL} noble main restricted universe multiverse
-deb ${MIRROR_URL} noble-updates main restricted universe multiverse
-deb ${MIRROR_URL} noble-backports main restricted universe multiverse
-deb ${MIRROR_URL} noble-security main restricted universe multiverse
-EOF
-
-# 2. 更新并安装 CA 证书（这是核心！）
-apt-get update
-apt-get install -y ca-certificates
-
-# 3. 更新 CA 证书信任库
-update-ca-certificates
-```
-
-#### Step 4: 写入 container.env
-```bash
-cat > /usr/local/etc/tmoe-linux/environment/container.env << 'EOF'
-export PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin
-export HOME=/root
-export USER=root
-export LANG=en_US.UTF-8
-export TERM=xterm-256color
-export SHELL=/bin/bash
-EOF
-chmod 644 /usr/local/etc/tmoe-linux/environment/container.env
-```
-
-#### Step 5: 写入 /etc/environment
-```bash
-cat >> /etc/environment << 'EOF'
-export TMOE_CHROOT=false
+# /etc/environment
 export TMOE_PROOT=true
 export MOZ_FAKE_NO_SANDBOX=1
-EOF
-chmod 644 /etc/environment
+
+# hostname（Android 优先取设备型号）
+getprop ro.product.model | sed 's@ @-@g; s/[^0-9a-zA-Z.-]\+//g'
+# → 写入 $CONFIG_FOLDER/hostname，再 cp 到 $ROOTFS/etc/hostname
+
+# 把宿主 getprop 注入容器 /tmp/getprop（容器内可用）
+printf '#!/usr/bin/env sh\nPATH=$PATH:/system/bin exec /system/bin/getprop "$@"\n' > $TMPDIR/getprop
+mv $TMPDIR/getprop $ROOTFS/tmp/
+
+# /etc/hosts（容器运行时补齐，见 install 尾部）
+127.0.0.1 localhost
+::1 localhost ip6-localhost ip6-loopback
 ```
 
-### 9.4 镜像源探测与自动切换（下载前）
+### 3.6 生成启动脚本
 
-**核心逻辑**：用户选国内/国外 → 自动选源 → 探测是否封禁（404）→ 404 切换备用源
-
-#### 探测流程
-
-```java
-// 1. 用户选择「国内」
-if (userSelectedRegion == "国内") {
-    List<String> mirrors = Arrays.asList(
-        "https://mirrors.nju.edu.cn/ubuntu/",
-        "https://mirrors.bfsu.edu.cn/ubuntu/",
-        "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/",
-        "https://mirrors.ustc.edu.cn/ubuntu/",
-        "https://mirrors.huaweicloud.com/ubuntu/"
-    );
-    selectedMirror = detectAvailableMirror(mirrors);
-}
-
-// 2. 用户选择「国外」
-else if (userSelectedRegion == "国外") {
-    List<String> mirrors = Arrays.asList(
-        "https://images.linuxcontainers.org/ubuntu/",
-        "https://archive.ubuntu.com/ubuntu/"
-    );
-    selectedMirror = detectAvailableMirror(mirrors);
-}
-
-// 3. 探测可用节点
-String detectAvailableMirror(List<String> mirrorList) {
-    for (String mirror : mirrorList) {
-        try {
-            // 探测 Release 文件（404=封禁/不可用，200=可用）
-            String releaseUrl = mirror + "dists/noble/Release";
-            HttpURLConnection conn = (HttpURLConnection) new URL(releaseUrl).openConnection();
-            conn.setRequestMethod("HEAD");
-            conn.setConnectTimeout(5000);
-            int code = conn.getResponseCode();
-            
-            if (code == 200) {
-                return mirror;  // 找到可用源
-            } else if (code == 404) {
-                // IP 被封禁或镜像站问题，继续下一个
-                Log.d("MirrorDetect", "Mirror " + mirror + " returned 404, skipping");
-            }
-        } catch (Exception e) {
-            // 超时/网络错误，继续下一个
-        }
-    }
-    // 所有源都不可用 → 建议手动下载并导入
-    return null;
-}
+```bash
+TMOE_PROC_PATH="${DEBIAN_CHROOT}/usr/local/etc/tmoe-linux/proot_proc"
+source ${TMOE_SHARE_DIR}/container/proot/startup   # 用 heredoc 写出完整启动脚本
+chmod a+rx ${TMOE_STARTUP_DIR}
 ```
 
-#### 探测规则
+`startup` 会把所有可调参数（`PROOT_USER`、`MOUNT_*`、`PROOT_BIN` …）连同 `main()` 一起
+写入 `tmoe-linux-container`，随后用 `termux-fix-shebang` 修正 shebang。
 
-| HTTP 状态码 | 含义 | 操作 |
-|-------------|------|------|
-| 200 | 可用 | 使用该源 |
-| 404 | IP 封禁/镜像站问题 | 切换备用源 |
-| 超时/错误 | 网络不通 | 切换备用源 |
-| 301/302 | 重定向 | 跟随后探测 |
+### 3.7 proot_proc 权限自适应（重要）
 
-> **注**：国内源被封禁概率极低，但境外源可能有 IP 封禁风险。所有源都不可用时，提示用户手动下载 rootfs 并导入。
+安装收尾调用 `check_tmoe_proot_container_proc` →
+`share/environment/manager_environment: check_proot_proc_permissions`：
 
-### 9.5 环境提取机制（原生库提取，非容器内 tar）
-
-**关键发现**：项目**不依赖容器内的 `tar` 命令**，而是使用 Android 原生库 `libtar.so` 在 APK 层提取。
-
-#### 提取流程（见 `LocalShellTestActivity.setupEnvironmentIfNeeded`）
-
-```java
-// 1. 从 assets 拷贝架构对应的 tar.gz.so 到 cache
-String tarGzName = "files.default.aarch64.tar.gz.so";
-java.io.InputStream in = getAssets().open(tarGzName);
-java.io.FileOutputStream out = new java.io.FileOutputStream(tmpTarGz);
-// ... 写入 tmpTarGz
-
-// 2. 使用原生库提取（不依赖容器内的 tar）
-String libDir = getApplicationInfo().nativeLibraryDir;
-java.io.File libTar = new java.io.File(libDir, "libtar.so");
-String[] extractCmd = {libTar.getAbsolutePath(), "-xf", tmpTarGz.getAbsolutePath(), "-C", destDir};
-Process extractProc = Runtime.getRuntime().exec(extractCmd);
-extractProc.waitFor();
-
-// 3. 设置权限
-Runtime.getRuntime().exec(new String[]{"/system/bin/chmod", "-R", "755", binDir}).waitFor();
+```bash
+for i in buddyinfo cgroups consoles crypto devices diskstats execdomains fb \
+         filesystems interrupts iomem ioports kallsyms keys key-users kpageflags \
+         loadavg locks misc modules pagetypeinfo partitions sched_debug softirqs \
+         timer_list uptime vmallocinfo vmstat zoneinfo; do
+    TMOE_PROC_FILE=$(sed -n p /proc/${i} 2>/dev/null)
+    case "${TMOE_PROC_FILE}" in
+    "")  # 宿主无权读取 → 取消注释，启用伪文件 mount
+        sed -i "s@#.*set -- \"--mount=${TMOE_PROC_PATH}/${i}@set -- ...@" "${CONTAINER_STARTUP_FILE}" ;;
+    *)   # 宿主可读 → 注释掉伪文件 mount
+        sed -i "s@set.*tmoe-linux/proot_proc/${i}@#&@g" "${CONTAINER_STARTUP_FILE}" ;;
+    esac
+done
 ```
 
-**为什么用原生库？**
-- 容器内初始环境没有 `tar` 命令
-- 原生 `libtar.so` 是 Termux 编译的 tar，支持 `tar -xf`
-- 提取发生在 proot 启动之前，属于 App 层初始化
+也就是说：**伪文件 mount 是按宿主实际权限逐项开关的**，`stat`/`version`/`bus` 另有专门分支。
+本机 `/proc` 多不可读，因此生成脚本中这些 `set --` 行大多处于**启用**状态。
 
-**assets 中的架构包**：
+### 3.8 生成启动器命令
+
+```bash
+ln -sf ${TMOE_SHARE_DIR}/app/tmoe  ${PREFIX}/bin/tmoe
+ln -sf ${TMOE_SHARE_DIR}/app/manager ${PREFIX}/bin/debian-i
+ln -sf ${TMOE_SHARE_DIR}/container/debian/debian ${PREFIX}/bin/debian
+ln -svf tmoe tome
+# 还会生成 startvnc / stopvnc / startx11vnc / startxsdl / novnc 等一堆 GUI 包装器
 ```
-app/src/main/assets/
-├── files.default.aarch64.tar.gz.so   ← arm64-v8a
-├── files.default.arm.tar.gz.so       ← armeabi-v7a
-├── files.default.x86_64.tar.gz.so    ← x86_64
-└── files.default.i686.tar.gz.so      ← x86
-```
 
-**提取时机**：首次启动时检测 `/data/data/.../default/bin/bash` 是否存在，不存在则提取。
+`debian` 命令的实质：
 
-### 9.6 失败处理（所有源不可用）
-
-```java
-if (selectedMirror == null) {
-    // 提示用户手动下载 rootfs
-    AlertDialog.Builder builder = new AlertDialog.Builder(context);
-    builder.setTitle("所有镜像源不可用");
-    builder.setMessage("请手动下载 Ubuntu 24 rootfs 并导入\n\n下载链接：\nhttps://mirrors.nju.edu.cn/lxc-images/images/ubuntu/noble/arm64/default/\n\n支持 .tar.xz 格式");
-    builder.setPositiveButton("选择文件", (dialog, which) -> {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.setType("*/*");
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/x-xz", "application/x-tar"});
-        context.startActivityForResult(intent, REQUEST_CODE_IMPORT_ROOTFS);
-    });
-    builder.setNegativeButton("取消", null);
-    builder.show();
+```bash
+# share/container/debian/debian
+start_tmoe_gnu_linux_default_container() {
+    if [ -e "${CONFIG_FOLDER}/chroot_container" ]; then
+        bash ${PREFIX}/bin/tmoe ch
+    else
+        bash ${PREFIX}/bin/tmoe pr     # pr = proot
+    fi
 }
 ```
 
-### 9.5 安装完成，清理修复脚本
-
-修复完成后，**删除 `repair.sh`**，后续直接使用 Java 拼接的极简 proot 命令。修复脚本只负责
+即 `debian` → `tmoe pr` → 找到唯一/最近容器 → `source tmoe-linux-container` → `exec`。
 
 ---
 
-## 十、AI 工具路径解析机制（"虚拟根"映射）
+## 四、启动流程：启动脚本真正拼出的 proot 命令
 
-### 10.1 核心概念
+启动脚本不是「每次重新计算」，而是**把安装时确定的值固化成变量 + 一段 `main()`**，
+运行时 `source` 后直接拼参数、`exec`。
 
-**AI 的视角**：容器内 `/` 就是根目录。
-- AI 说：`cat /etc/apt/sources.list`
-- AI 认为：`/etc` 是绝对路径
+### 4.1 本机实测的关键变量值
 
-**App 的视角**：`/` 需要映射到真实路径。
-- App 处理：`/etc/apt/sources.list` → `/data/data/.../ubuntu_24/etc/apt/sources.list`
-- App 执行：`proot --rootfs=/data/data/.../ubuntu_24 -c "cat /etc/apt/sources.list"`
+| 变量 | 实测值 | 影响 |
+|------|--------|------|
+| `PROOT_USER` | `he` | 下文按 uid 1001 处理 |
+| `PROOT_BIN` | `default` | → `PROOT_PROGRAM=proot`（走 PATH） |
+| `SHARE_PROOT_LOADER` | `false` | **不注入 loader** |
+| `PROOT_LOADER` | 空 | 仅兼容模式才非空 |
+| `LD_LIB_PATH` | `default` | 不设 `LD_LIBRARY_PATH` |
+| `ROOTFS_DIR` | `.../containers/proot/ubuntu-noble_arm64` | `--rootfs` |
+| `KILL_ON_EXIT` | `true` | `--kill-on-exit` |
+| `PROOT_SYSVIPC` | `true` | `--sysvipc` |
+| `PROOT_L` | `true` | `-L` |
+| `PROOT_H` / `PROOT_P` | `false` | 不加 `-H`/`-p` |
+| `LINK_TO_SYMLINK` | `true` | `--link2symlink` |
+| `FAKE_KERNEL` | `false` | 不加 `--kernel-release` |
+| `MOUNT_PROC` | `true` | `--mount=/proc` |
+| `FAKE_PROOT_PROC` | `true` | 启用 §3.7 的伪文件 mount |
+| `MOUNT_DEV` | `true` | `--mount=/dev` + 子挂载 |
+| `MOUNT_SYSTEM` / `MOUNT_APEX` | `true` | `--mount=/system`、`--mount=/apex` |
+| `TMOE_SHELL` | `/bin/bash` | 容器内无 zsh/fish，落到 bash |
+| `HOST_NAME_FILE` | `$ROOTFS/etc/hostname` | → `PJE110` |
 
-### 10.2 路径处理流程
+挂载相关 conf（本机实测）：
 
-```java
-// AI 工具：Read/Write/Edit/Execute
-// AI 输入：file="/etc/apt/sources.list" content="..."
+```ini
+# ~/.config/tmoe-linux/rootless/mount_termux.conf
+MOUNT_TERMUX=true
+TERMUX_DIR="/data/data/com.termux/files/home"   # 注意：是 home，不是整个 files
 
-class PathResolver {
-    String containerRoot = "/data/data/.../ubuntu_24";
-    
-    // 核心方法：解析 AI 的路径
-    String resolve(String aiPath) {
-        // 如果路径以 / 开头（绝对路径），直接拼接
-        if (aiPath.startsWith("/")) {
-            return containerRoot + aiPath;
-        }
-        // 如果是相对路径（如 ./file），需要解析（可选）
-        // 建议：AI 只输出 / 开头的绝对路径
-        return aiPath;
-    }
-}
-
-// 示例：
-PathResolver resolver = new PathResolver();
-String realPath = resolver.resolve("/etc/apt/sources.list");
-// 结果: /data/data/.../ubuntu_24/etc/apt/sources.list
-
-String realPath = resolver.resolve("/usr/bin/python3");
-// 结果: /data/data/.../ubuntu_24/usr/bin/python3
+# ~/.config/tmoe-linux/rootless/mount_sd.conf
+MOUNT_SD=false
 ```
 
-### 10.3 AI 工具封装
+### 4.2 实际拼出的命令（按脚本逐行还原）
 
-AI 调用工具时，Java 自动处理路径：
-
-```java
-class ProotTools {
-    String containerRoot = "/data/data/.../ubuntu_24";
-    
-    // Read 工具
-    String read(String filePath) {
-        String realPath = containerRoot + filePath;
-        return "proot --root-id --rootfs=" + containerRoot + 
-               " --mount=/system --mount=/apex --mount=/proc --mount=/dev \
-               --mount=/proc/self/fd:/dev/fd --mount=/dev/urandom:/dev/random \
-               --mount=/dev/null:/proc/sys/kernel/cap_last_cap \
-               --sysvipc -L --link2symlink --kill-on-exit \
-               /usr/bin/env -i HOSTNAME=localhost HOME=/root USER=root \
-               TERM=xterm-256color LANG=en_US.UTF-8 \
-               PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin \
-               SHELL=/bin/bash -c \"cat '${realPath}'\""
-    }
-    
-    // Write 工具
-    String write(String filePath, String content) {
-        String realPath = containerRoot + filePath;
-        return "proot --root-id --rootfs=" + containerRoot + 
-               " --mount=/system --mount=/apex --mount=/proc --mount=/dev \
-               --mount=/proc/self/fd:/dev/fd --mount=/dev/urandom:/dev/random \
-               --mount=/dev/null:/proc/sys/kernel/cap_last_cap \
-               --sysvipc -L --link2symlink --kill-on-exit \
-               /usr/bin/env -i HOSTNAME=localhost HOME=/root USER=root \
-               TERM=xterm-256color LANG=en_US.UTF-8 \
-               PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin \
-               SHELL=/bin/bash -c \"echo '${content}' > '${realPath}'\""
-    }
-    
-    // Execute 工具
-    String execute(String command) {
-        // AI 命令已经在容器内，路径自动解析
-        return "proot --root-id --rootfs=" + containerRoot + 
-               " --mount=/system --mount=/apex --mount=/proc --mount=/dev \
-               --mount=/proc/self/fd:/dev/fd --mount=/dev/urandom:/dev/random \
-               --mount=/dev/null:/proc/sys/kernel/cap_last_cap \
-               --sysvipc -L --link2symlink --kill-on-exit \
-               /usr/bin/env -i HOSTNAME=localhost HOME=/root USER=root \
-               TERM=xterm-256color LANG=en_US.UTF-8 \
-               PATH=/usr/local/sbin:/usr/local/bin:/bin:/usr/bin \
-               SHELL=/bin/bash -c '${command}'"
-    }
-}
-
-// AI 调用示例：
-// AI: "请帮我编辑 /etc/apt/sources.list，把镜像源换成 BFSU"
-// AI 输出: {"tool": "edit", "filePath": "/etc/apt/sources.list", "content": "deb https://mirrors.nju.edu.cn/ubuntu/ noble main..."}
-// App: 解析 filePath -> /data/data/.../ubuntu_24/etc/apt/sources.list
-// App: 执行: proot ... -c "echo 'deb https://mirrors.nju.edu.cn/ubuntu/ noble main...' > '/data/data/.../ubuntu_24/etc/apt/sources.list'"
+```bash
+proot \
+  --change-id=1001:1001 \
+  --pwd=/home/he \
+  --rootfs=/data/data/com.termux/files/home/.local/share/tmoe-linux/containers/proot/ubuntu-noble_arm64 \
+  --mount=/system \
+  --mount=/apex \
+  --kill-on-exit \
+  --mount=/storage \
+  --mount=/data/data/com.termux/files/home:/media/termux \
+  --sysvipc \
+  -L \
+  --link2symlink \
+  --mount=/proc \
+  --mount=/dev \
+  --mount=${ROOTFS}/tmp:/dev/shm \
+  --mount=/dev/urandom:/dev/random \
+  --mount=/proc/self/fd:/dev/fd \
+  --mount=/proc/self/fd/0:/dev/stdin \
+  --mount=/proc/self/fd/1:/dev/stdout \
+  --mount=/proc/self/fd/2:/dev/stderr \
+  --mount=/dev/null:/dev/tty0 \
+  --mount=${CONFIG_FOLDER}/gitstatus:/root/.cache/gitstatus \
+  --mount=/dev/null:/proc/sys/kernel/cap_last_cap \
+  `# ↓ 以下来自 FAKE_PROOT_PROC，本机大量启用` \
+  --mount=${ROOTFS}/usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.stat:/proc/stat \
+  --mount=${ROOTFS}/usr/local/etc/tmoe-linux/proot_proc/.tmoe-container.version:/proc/version \
+  --mount=.../proot_proc/bus:/proc/bus \
+  --mount=.../proot_proc/uptime:/proc/uptime \
+  `# ... 约 30+ 项` \
+  /usr/bin/env -i \
+    HOSTNAME=PJE110 \
+    HOME=/home/he \
+    USER=he \
+    TERM=xterm-256color \
+    SDL_IM_MODULE=fcitx XMODIFIERS=@im=fcitx QT_IM_MODULE=fcitx GTK_IM_MODULE=fcitx \
+    TMOE_CHROOT=false TMOE_PROOT=true \
+    TMPDIR=/tmp DISPLAY=:2 PULSE_SERVER=tcp:127.0.0.1:4713 \
+    LANG=zh_CN.UTF-8 \
+    SHELL=/bin/bash \
+    PATH=/usr/local/bin:/bin:/usr/bin:/usr/games:/usr/local/games \
+    /bin/bash -l
 ```
 
-### 10.4 路径规则总结
+要点：
 
-| AI 输出路径 | App 解析路径 | 说明 |
-|-------------|--------------|------|
-| `/etc/hostname` | `/data/data/.../ubuntu_24/etc/hostname` | 容器内绝对路径 |
-| `/usr/bin/python3` | `/data/data/.../ubuntu_24/usr/bin/python3` | 容器内绝对路径 |
-| `/home/ubuntu` | `/data/data/.../ubuntu_24/home/ubuntu` | 容器内绝对路径 |
-| `/storage` | `/data/data/.../ubuntu_24/storage` | 用户挂载点 |
+- **不是 `--root-id`**：因为 `PROOT_USER=he`，走 `--change-id`。
+- `--mount=/proc` 与 proot_proc 伪文件**同时存在**：整体 `/proc` 先挂，伪文件覆盖单个条目。
+- `/dev/shm` 指向 rootfs 自己的 `tmp` 目录（`MOUNT_SHM_TO_TMP=true`）。
+- 兼容 loader **默认完全不出现**（`PROOT_LOADER` 为空 → 最终没有 `env PROOT_LOADER=...`）。
 
-**AI 永远输出 `/` 开头的路径，App 永远在前面拼接容器根目录。**```
+### 4.3 收尾 exec 的三分支
 
+```bash
+set -- "${PROOT_PROGRAM}" "${@}"
+if   [[ -n ${PROOT_LOADER} && -z ${TMOE_LD_LIB_PATH} ]]; then
+     set -- "env" "PROOT_LOADER=${PROOT_LOADER}" "${@}"
+elif [[ -z ${PROOT_LOADER} && -n ${TMOE_LD_LIB_PATH} ]]; then
+     set -- "env" "LD_LIBRARY_PATH=${TMOE_LD_LIB_PATH}" "${@}"
+elif [[ -n ${PROOT_LOADER} && -n ${TMOE_LD_LIB_PATH} ]]; then
+     set -- "env" "LD_LIBRARY_PATH=${TMOE_LD_LIB_PATH}" \
+         "PROOT_LOADER=${PROOT_LOADER}" "${@}"
+fi
+exec "${@}"
+```
+
+→ 只有**兼容模式**才会给 proot 进程设置 `PROOT_LOADER` / `LD_LIBRARY_PATH`。
+
+---
+
+## 五、兼容模式与 proot loader 的真相
+
+旧文档把这套机制说成「tmoe 的核心优势」，这是**严重误导**。源码事实：
+
+```bash
+DOT_NET_6_COMPATIBLE_MODE=false      # 默认关闭
+PROOT_BIN="default"                  # 默认走普通 proot
+SHARE_PROOT_LOADER=false             # 默认不共享 loader
+```
+
+只有当目标发行版是 `dotnet*` 时，`install: enable_dotnet_comp_mode()` 才会：
+
+```bash
+sed -E -e "s@^(DOT_NET_6_COMPATIBLE_MODE=).*@\1true@g" \
+       -e "s@^(PROOT_BIN=).*@\1\"compatibility\"@g" \
+       -e "s@^(SHARE_PROOT_LOADER=).*@\1true@g" -i "${TMOE_STARTUP_SCRIPT}"
+```
+
+兼容模式的路径（**注意与旧文档不同**）：
+
+```bash
+PROOT_COMPATIBLE_MODE_BIN="${TMOE_LINUX_DIR}/lib/data/data/com.termux/files/usr/bin/proot"
+COMPATIBLE_MODE_LOADER="${TMOE_LINUX_DIR}/lib/data/data/com.termux/files/usr/libexec/proot/loader"
+COMPATIBLE_MODE_LD_LIB_PATH="${TMOE_LINUX_DIR}/lib/data/data/com.termux/files/usr/lib"
+```
+
+- 这些文件**默认不存在**（本机 `~/.local/share/tmoe-linux/lib` 目录都没有）。
+- 需要时由 `get_proot_comp_mode_deb()` 现下载现解包：
+
+```bash
+cd "${TMOE_LINUX_DIR}/lib/"
+curl -Lo proot.deb l.tmoe.me/proot-aarch64      # 一个 Termux 结构的 proot deb 包
+apt-get download libtalloc
+dpkg-deb -X ./proot*.deb ./ ; dpkg-deb -X ./libtalloc*.deb ./
+```
+
+- loader 的作用仅是修复 **.NET 6** 在 proot 下 `csc.dll exited with code 139` / loader not found；
+  .NET 7 无此问题，源码注释明确写着 "In general, you should not enable this mode!!!"。
+
+> **结论**：普通 Ubuntu 容器根本不用 loader。AlinOs 不需要复刻它，除非将来要跑 .NET 6。
+> proot 本体就是 Termux 的 `$PREFIX/bin/proot`（本机 `command -v proot` 指向它）。
+
+---
+
+## 六、AlinOs 可借鉴的最小方案
+
+### 6.1 必须保留的（真正让 LXC 裸镜像跑起来的部分）
+
+1. **LXC 官方裸镜像**：`mirrors.nju.edu.cn/lxc-images/images/<distro>/<codename>/<arch>/default/<DATE>rootfs.tar.xz`。
+2. **Android 专用解压**：`pv rootfs.tar.xz | proot --link2symlink tar -pJx`（处理硬链接/权限）。
+3. **proot_proc 伪文件**：解决 `/proc/stat`、`/proc/version` 等宿主不可读问题；
+   本项目应直接在打包资源里内置 `proc.tar.xz`，**不要**在用户机联网 `git clone`。
+4. **固定挂载集**：`/system`、`/apex`、`/proc`、`/dev` 及 `/dev/{fd,random,shm,stdin,stdout,stderr}`。
+5. **启动参数**：`--rootfs`、`--pwd`、`--sysvipc`、`-L`、`--link2symlink`、`--kill-on-exit`。
+6. **`env -i` 白名单环境变量**：`HOME/USER/TERM/LANG/SHELL/PATH/HOSTNAME/TMOE_PROOT`。
+7. **hostname 取设备型号**、**容器内补齐 `/etc/hosts`**。
+
+### 6.2 应当丢弃的（对 AlinOs 无价值的 tmoe 特性）
+
+| tmoe 特性 | 处理 | 原因 |
+|-----------|------|------|
+| TUI/whiptail 菜单、`tmoe`/`debian-i` | 丢弃 | AlinOs 用 Java UI |
+| 多发行版 / QEMU 跨架构 | 丢弃（只留 arm64 同架构） | 降低复杂度 |
+| VNC / XSDL / x11 / novnc 包装器 | 丢弃 | AI 终端无需图形 |
+| zsh / neofetch / 字体 / PPA | 丢弃 | 与能力无关 |
+| 兼容模式 + loader | 不实现 | 仅 .NET 6 需要 |
+| 容器内再克隆一份 tmoe `git/` | 丢弃 | 冗余 |
+| 宿主与容器双侧 `/usr/local/etc/tmoe-linux` | 只留容器侧或只留宿主侧 | 冗余 |
+| `mount_sd` / `mount_tf` / `gitstatus` | 按需 | AlinOs 不一定需要 |
+
+### 6.3 ⚠️ 本机环境的硬约束：禁止嵌套 proot
+
+当前 AlinOs 的调试 shell 本身就运行在第三方 App 的 proot 里。在 proot 内再 `proot` 启动
+tmoe 容器会形成**嵌套 proot**，路径转换层会叠加，极易出现 `faccessat`/`statx` 解析异常、
+`--link2symlink` 失效、进程卡死等问题。
+
+因此：
+
+- **开发期**：只做静态分析 + 读取已安装容器，不要在本 shell 里执行 `proot`/`debian`/`tmoe pr`。
+- **产品期**：proot 必须由 **Android 原生层（真实 Termux host 或 App 直接 fork/exec）** 拉
+  起，不能从已有的 proot 会话里再套一层。
+- 若必须做验证，应在真实 Termux（非 proot）中进行。
+
+### 6.4 建议的 AlinOs 落地形态
+
+```
+安装（一次性，Java/Kotlin 控制）
+  1. 选架构/发行版 → 拼 LXC 镜像 URL
+  2. 下载 rootfs.tar.xz（OkHttp/aria2）
+  3. 解压到 filesDir/containers/proot/<distro>_<arch>/
+     （APK 内嵌 libtar.so 或调用 Termux tar + --link2symlink 辅助）
+  4. 解压内置 proot_proc/proc.tar.xz
+  5. 写 /etc/environment、/etc/hostname、/etc/hosts、/etc/resolv.conf
+  6. 按宿主 /proc 可读性生成伪文件挂载列表（移植 §3.7 的检测逻辑）
+
+启动（每次 AI 调用）
+  Java 直接拼 proot 参数数组 → ProcessBuilder 执行
+  （不复刻 tmoe 的 shell 启动脚本，避免二次解释）
+```
+
+> 旧文档提的「Java 拼 proot 命令」方向是对的；错误在于它抄了 proot-distro 的路径与
+> `--root-id`，且把 loader 当默认项。
+
+---
+
+## 七、旧文档幻觉纠正表
+
+| 旧文档说法 | 事实 | 证据 |
+|-----------|------|------|
+| rootfs 在 `.../usr/var/lib/proot-distro/containers/ubuntu/rootfs` | 在 `~/.local/share/tmoe-linux/containers/proot/<distro>_<arch>` | `install: tmoe_manager_env` |
+| `--root-id` | 本机是 `--change-id=1001:1001`（`PROOT_USER=he`） | 生成的启动脚本第 8 行 |
+| 「tmoe 核心优势 = proot loader 注入」 | loader 仅 .NET 6 兼容模式使用，默认关闭且文件不存在 | `startup` 默认值 + `enable_dotnet_comp_mode` |
+| loader 路径 `${TMOE_LINUX_DIR}/libexec/proot/loader` | `${TMOE_LINUX_DIR}/lib/data/data/com.termux/files/usr/bin/proot`（及对应 loader） | `startup` 变量定义 |
+| 「首次安装写入 `mirrors.nju.edu.cn/ubuntu` 作为 apt 源」 | 本机 `sources.list` 是 LXC 官方 `ports.ubuntu.com`，未被改写 | `$ROOTFS/etc/apt/sources.list` |
+| 「proot_proc 从 gitee 克隆，每次启动注入」 | 仅**安装时**克隆并解压；启动时按宿主权限决定是否 mount | `install` + `check_proot_proc_permissions` |
+| 「AlinOs 不在容器内生成 shell 启动脚本」 | tmoe 恰恰必须生成 `tmoe-linux-container` 才能启动 | `create_proot_startup_script` |
+| `/dev/shm` 来自 `containers/.../shm` | 来自 `$ROOTFS/tmp`（`MOUNT_SHM_TO_TMP=true`） | `startup` |
+| `--mount=/data/data/com.termux/files:/media/termux`（旧写出 `/media/termux` 映射整个 files） | 本机 `mount_termux.conf` 把 `TERMUX_DIR` 覆写为 `.../files/home` | `mount_termux.conf` |
+| 「容器内 `/data/data/alin.android.alinos/` 空」等 | 未在源码或实测中出现，属推测 | — |
+| 章节「六、修复脚本注入：getprop / Android group / .NET」 | getprop 注入存在；Android group 注入**仅 chroot 模式**执行（`install:1170` 有 `TMOE_CHROOT=true` 前置条件），proot 模式跳过；.NET 仅兼容模式 | `install:1170-1200` 全文 grep |
+
+---
+
+## 八、关键文件索引（按重要性）
+
+| 文件 | 作用 |
+|------|------|
+| `debian.sh` | 新版入口：下载 `2moe/tmoe` 的 `2/2.awk`；否则回退旧版 |
+| `share/old-version/share/app/manager` | 旧版主程序（TUI） |
+| `share/old-version/share/container/install` | **debian 安装模板**（各发行版 sed 打补丁后执行） |
+| `share/old-version/share/container/list` | 发行版菜单、镜像 URL 拼装、调用 install |
+| `share/old-version/share/container/proot/startup` | **生成容器启动脚本的模板（核心）** |
+| `share/old-version/share/container/proot/management` | 启动/管理已装容器 |
+| `share/old-version/share/container/debian/debian` | `debian` 命令本体 |
+| `share/old-version/share/environment/manager_environment` | `check_proot_proc_permissions` 等 |
+| `~/.local/share/tmoe-linux/git/...` | 本机仓库实例 |
+| `~/.local/share/tmoe-linux/containers/proot/ubuntu-noble_arm64/...` | 本机实测容器 |
+| `~/.config/tmoe-linux/{linux_container_distro,across_architecture_container,locale}.txt` | 全局配置 |
+| `~/.config/tmoe-linux/rootless/mount_{sd,termux}.conf` | 挂载开关 |
+| `/sdcard/Download/backup/rootfs/*.tar.xz` | 镜像缓存 |
+
+---
+
+## 九、待确认事项（避免再次臆测）
+
+1. 新版 `2moe/tmoe` 的 `2/2.awk` 是否仍采用同一套 proot 启动模型 —— **未验证**（需联网取该文件）。
+2. 本机容器由哪条命令/菜单路径安装（`debian-i` 还是 `tmoe pr`）——**未从 shell history 确认**。
+3. `PROOT_USER=he` 是安装时自动取宿主用户名，还是用户手动填写 —— 需查 `management` 的用户配置入口。
+4. LXC 镜像站 `mirrors.nju.edu.cn` 当前是否仍在线、目录结构与 `TTIME` 抓取是否可用 —— 需联网实测。
+5. `/proc` 伪文件在当前 Android 版本下的实际可读性矩阵 —— 需在真实 Termux（非 proot）中复测。
+
+> 以上未确认项在动手实现前应逐条落实，不要再基于推测写死参数。

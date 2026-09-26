@@ -69,6 +69,9 @@ public class ChatStreamEventBus {
         private int totalTokens;
         private String toolCallsJson; // 工具调用数据（JSON数组）
         private boolean thinkFinish; // 标记仅为 think 完成事件（后续可能还有 tool_calls）
+        private boolean isUsage;     // 标记这是用量/费用事件
+        private double costTotal;    // 本次请求费用（美元）
+        private String usageJson;    // 完整用量 JSON（含 cost 明细）
 
         // 快速构建增量消息
         public static StreamEventData buildChunk(int sessionId, String chunkContent) {
@@ -101,11 +104,20 @@ public class ChatStreamEventBus {
 
         // 快速构建Usage消息
         public static StreamEventData buildUsage(int sessionId, int promptTokens, int completionTokens, int totalTokens) {
+            return buildUsage(sessionId, promptTokens, completionTokens, totalTokens, 0, null);
+        }
+
+        // 快速构建Usage消息（含费用）
+        public static StreamEventData buildUsage(int sessionId, int promptTokens, int completionTokens,
+                                                 int totalTokens, double costTotal, String usageJson) {
             StreamEventData data = new StreamEventData();
             data.sessionId = sessionId;
             data.promptTokens = promptTokens;
             data.completionTokens = completionTokens;
             data.totalTokens = totalTokens;
+            data.costTotal = costTotal;
+            data.usageJson = usageJson;
+            data.isUsage = true;
             data.isFinish = false;
             data.isError = false;
             return data;
@@ -154,5 +166,8 @@ public class ChatStreamEventBus {
         public int getTotalTokens() { return totalTokens; }
         public String getToolCallsJson() { return toolCallsJson; }
         public boolean isThinkFinish() { return thinkFinish; }
+        public boolean isUsage() { return isUsage; }
+        public double getCostTotal() { return costTotal; }
+        public String getUsageJson() { return usageJson; }
     }
 }

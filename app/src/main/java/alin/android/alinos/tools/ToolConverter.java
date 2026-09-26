@@ -130,6 +130,10 @@ public class ToolConverter {
                         prop.put("enum", enumArr);
                     }
                     break;
+                case "array":
+                    prop.put("type", "array");
+                    prop.put("items", new JSONObject().put("type", "object"));
+                    break;
                 default:
                     prop.put("type", "string");
                     break;

@@ -176,6 +176,10 @@
             android:name="alin.android.alinos.AiConfigActivity"
             android:exported="false" />
         <activity
+            android:name="alin.android.alinos.AiConfigEditActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name="alin.android.alinos.SettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
@@ -200,6 +204,12 @@
 
         <activity
             android:name="alin.android.alinos.dev.SshTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+
+        <activity
+            android:name="alin.android.alinos.dev.ProotContainerTestActivity"
             android:exported="true"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"
             android:windowSoftInputMode="adjustResize|stateHidden" />

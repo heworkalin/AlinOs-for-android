@@ -33,3 +33,15 @@ AGENTS.md
 # 本地调试日志与数据库副本（含敏感信息：SSH 私钥/口令，禁止提交）
 /log/
 *.bak
+
+# ===== 本地构建 / 测试临时物（不入 git）=====
+/.repo_rootfs/
+/.bootstrap*/
+/.termux_pkgs/
+/.extract.*
+/.repack*
+/files.default.*.tar.gz.so
+/files.default.*.tar.gz.so.orig
+/ubuntu-noble_*.tar.xz
+/ubuntu-noble_*.tar.xz.sha256
+/run.log

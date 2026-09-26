@@ -216,12 +216,22 @@ public class OpenAIStreamNetHelper {
         int chunkCount = 0;
         while ((line = source.readUtf8Line()) != null && mIsStreamRunning) {
             if (TextUtils.isEmpty(line)) continue;
-            if (!line.startsWith("data: ")) {
+
+            // 兼容三种常见流式格式：
+            //   1. 标准 SSE：   "data: {...}"
+            //   2. 无空格 SSE： "data:{...}"
+            //   3. 裸 JSON 行： "{...}"（llama.cpp 等实现的 JSONL）
+            String dataStr;
+            if (line.startsWith("data:")) {
+                dataStr = line.substring(5).trim();
+            } else if (line.startsWith("{")) {
+                dataStr = line.trim();
+            } else {
                 Log.d(TAG, "忽略非数据行: " + line);
                 continue;
             }
 
-            String dataStr = line.substring(6).trim();
+            if (dataStr.isEmpty()) continue;
             if ("[DONE]".equals(dataStr)) break;
 
             chunkCount++;
@@ -688,12 +698,20 @@ public class OpenAIStreamNetHelper {
         }
         String baseUrl = mConfig.getServerUrl().trim();
         if (!baseUrl.startsWith("http")) baseUrl = "http://" + baseUrl;
-        if (!baseUrl.endsWith("/v1/chat/completions")) {
-            baseUrl = baseUrl.endsWith("/")
-                    ? baseUrl + "v1/chat/completions"
-                    : baseUrl + "/v1/chat/completions";
+        // 去掉末尾多余的 "/"
+        while (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
-        return baseUrl;
+        // 已写全完整路径：直接使用
+        if (baseUrl.endsWith("/chat/completions")) {
+            return baseUrl;
+        }
+        // 已写到 /v1（或 /v1/... 版本前缀）：只补 /chat/completions
+        if (baseUrl.endsWith("/v1")) {
+            return baseUrl + "/chat/completions";
+        }
+        // 只给了 host:port 或其他前缀：补完整 /v1/chat/completions
+        return baseUrl + "/v1/chat/completions";
     }
 
     /** 获取请求用的模型名 */

@@ -5,8 +5,6 @@ import android.util.Log;
 
 import alin.android.alinos.bean.SshConfigBean;
 import alin.android.alinos.db.SshDbHelper;
-import alin.android.alinos.tools.ToolMeta;
-import alin.android.alinos.tools.ToolRegistry;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -15,8 +13,11 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * SSH localhost 工具集。
+ * SSH localhost 连接逻辑（当前<strong>不注册给 AI</strong>，计划重新设计）。
  * 提供两个能力：列出配置（安全脱敏）、通过 UUID 连接并创建终端会话，支持自定义会话ID。
+ * <p>
+ * 说明：SSH 的 UI（SshTestActivity）自行实现连接流程，不依赖本类；
+ * 本类原有的 ssh_list_configs / ssh_connect 工具注册已移除。
  * <p>
  * AI 可见字段：uuid、name、description（密码/密钥/主机地址全部内部隐藏）。
  * 连接流程：临时会话验证全部交互 → 销毁临时会话 → 新建干净正式会话
@@ -268,35 +269,6 @@ public class SshLocalhost {
      */
     public static JSONObject connectByUuid(Context context, String uuid) {
         return connectByUuid(context, uuid, null);
-    }
-
-    /**
-     * 将两个工具注册到 ToolRegistry（由 ToolRegistry.init 调用）。
-     */
-    public static void registerTools(Context context) {
-        // 1. 列出配置（安全脱敏）
-        ToolRegistry.register("ssh_list_configs",
-                "列出所有 SSH 连接配置。返回 uuid、名称和描述，不包含密码/主机等敏感信息。",
-                new ToolMeta.Param[0],
-                p -> {
-                    JSONObject result = new JSONObject();
-                    result.put("status", "success");
-                    result.put("configs", listConfigs(context));
-                    return result;
-                });
-
-        // 2. 通过 UUID 连接，支持自定义 sessionId
-        ToolRegistry.register("ssh_connect",
-                "通过配置 UUID 建立 SSH 干净终端会话。内部流程：临时会话完成登录校验 → 销毁临时会话 → "
-                        + "新建正式终端并执行 clear 清空冗余输出，自动补输密码。"
-                        + "可选传入 customSessionId 自定义会话 ID，ID 规范与 localshell_create_session 一致：仅字母数字下划线短线，1~64 字符；不传则自动生成。"
-                        + "成功返回可用 sessionId，后续必须使用 localshell_* 系列工具（shell_exec/shell_read/shell_send_key 等）操作该终端。"
-                        + "出错会返回明确脱敏故障原因，不会泄露主机、账号、密码信息。",
-                ToolMeta.params(
-                        ToolMeta.param("uuid", "string", true, "", "SSH 配置的 UUID（从 ssh_list_configs 获取）"),
-                        ToolMeta.param("customSessionId", "string", false, "", "自定义正式会话 ID，格式同 localshell_create_session，留空自动生成")
-                ),
-                p -> connectByUuid(context, p.getString("uuid"), p.optString("customSessionId", "")));
     }
 
     /**

@@ -14,6 +14,8 @@ public class ChatMessage {
     public String content;                  // 消息内容（工具卡片时为JSON）
     public int type;                        // 消息类型
     public boolean isLoading;               // AI是否加载中 / 工具是否执行中
+    /** 消息元信息（token 数 / 费用），显在气泡下方。 */
+    public String meta;
 
     public ChatMessage(String content, int type, boolean isLoading) {
         this.content = content;

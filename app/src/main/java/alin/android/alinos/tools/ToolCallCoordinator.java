@@ -16,7 +16,7 @@ import alin.android.alinos.bean.ConfigBean;
 import alin.android.alinos.bean.ToolCallLogBean;
 import alin.android.alinos.db.ToolCallDbHelper;
 import alin.android.alinos.manager.ChatStreamEventBus;
-import alin.android.alinos.net.OpenAIStreamNetHelper;
+import alin.android.alinos.net.AiStreamEngine;
 
 /**
  * 工具调用协调器 —— Tool Calling 循环引擎。
@@ -46,7 +46,7 @@ public class ToolCallCoordinator {
     private JSONArray mMessages; // 完整消息历史（含 system + user + assistant + tool）
     private int mLoopCount = 0;
     private volatile boolean mStopped = false; // 用户触发停止
-    private OpenAIStreamNetHelper mHelper; // 复用 LLM 连接（避免每轮 new OkHttpClient）
+    private AiStreamEngine mHelper; // 复用引擎（避免每轮 new OkHttpClient）
     private String[] mToolUuids; // 当前批次工具对应的 UUID 数组
     private int mNextIndex = 0;  // 累加的消息索引（跨递归调用递增）
     private int[] mCurrentIndices; // 当前批次每个工具在 UI 中的索引（相对于 capturedStartPos）
@@ -167,15 +167,15 @@ public class ToolCallCoordinator {
                 ToolMeta tool = ToolRegistry.findToolByFunctionName(toolName);
                 if (tool == null) {
                     Log.w(TAG, "│  工具未注册: " + toolName);
-                    emitToolCallResult(toolName, argumentsStr, "{}", "error", "工具未注册", 0, mCurrentIndices[i]);
+                    emitToolCallResult(toolName, argumentsStr, "{}", "error", "tool not registered", 0, mCurrentIndices[i]);
                     toolResults.put(buildToolResultMessage(toolCallId, toolName,
-                            new JSONObject().put("error", "工具未注册: " + toolName)));
+                            new JSONObject().put("error", "tool not registered: " + toolName)));
                     // 记录失败日志
                     ToolCallLogBean failBean = new ToolCallLogBean(
                             uuid, mSessionId, toolName, toolCallId, argumentsStr, System.currentTimeMillis());
                     failBean.setResult("{}");
                     failBean.setStatus("error");
-                    failBean.setErrorMessage("工具未注册: " + toolName);
+                    failBean.setErrorMessage("tool not registered: " + toolName);
                     mDbHelper.insert(failBean);
                     continue;
                 }
@@ -263,7 +263,7 @@ public class ToolCallCoordinator {
 
         // 复用 LLM 连接（不每轮 new，减少 OkHttpClient 堆积）
         JSONArray toolsPayload = buildToolsPayload();
-        if (mHelper == null) mHelper = new OpenAIStreamNetHelper(mContext, mConfig);
+        if (mHelper == null) mHelper = new AiStreamEngine(mContext, mConfig);
         mHelper.sendStreamMessageWithMessages(mSessionId, finalMessages, toolsPayload, (eventType, data) -> {
             if (data.isError()) {
                 emitError(data.getErrorMsg());
