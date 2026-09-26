@@ -1,8 +1,8 @@
 # AlinOs-for-Android
 
-基于 Android 平台的云端 AI 接口专属客户端。核心架构为 **安卓应用壳 ＋ 内置 proot 的用户态 Linux 执行层（files.default rootfs，四架构）**。
+基于 Android 平台的云端 AI 接口专属客户端。核心架构为 **安卓应用壳 ＋ 自编译 proot 的用户态 Linux 执行层（Ubuntu 24.04 rootfs，四架构）**。
 
-> 本环境**不标榜“轻量/精简”**：它随 proot 虚拟化运行，体积、依赖都偏厚重；之所以选择 proot，是为了在无 root 的第三方应用权限下拿到一个**真正可执行、可被脚本 / CLI / AI 工具驱动的近乎完整 Linux 用户态**，而不是为了“小而美”。执行侧早期以 Termux 精简辅助层为主，现已把重心放到 proot-root 之上。
+> 本环境**不标榜“轻量/精简”**：它随 proot 虚拟化运行，体积、依赖都偏厚重；之所以选择 proot，是为了在无 root 的第三方应用权限下拿到一个**真正可执行、可被脚本 / CLI / AI 工具驱动的近乎完整 Linux 用户态**，而不是为了“小而美”。
 
 **EN（English）**: [English README](README.en.md) — 中文为权威主档。
 
@@ -12,8 +12,8 @@
 
 - **个人评估 / 学习 / 测试用途**；代码 **由 AI 辅助产出**，由项目主导者（个人）负责需求拆解、Bug 定位与真机验证。
 - **暂不发布编译版本 / 发行版 / 不上架**；仓库仅公开托管源码与演进记录。
-- 仍处 **方向探索中，且短期可能遥遥无期 / 搁置**：技术路线（执行层 / proot / 音频 / MCP / Agent 形态）尚未定型，主导者短期忙于其他事务，想清楚了再推进。
-- 交互与架构思路上**参考了 [pi.dev](https://pi.dev) 等开源哲学**（无后台常驻、可观测的单次命令执行、提示词/上下文压缩思路等）；若确有代码级复用，相应许可会随之生效，见 LICENSE / THIRD_PARTY_NOTICES。
+- 仍处 **方向探索中**：执行层已确定走 proot 容器路线（不再折腾 PTY 长会话），多协议 AI 接入已落地；音频 / MCP 形态尚未定型。
+- 交互与架构思路上**参考了 [pi.dev](https://pi.dev) 等开源哲学**（无后台常驻、可观测的单次命令执行、提示词/上下文压缩、多协议 provider 抽象等）；若确有代码级复用，相应许可会随之生效，见 LICENSE / THIRD_PARTY_NOTICES。
 - 若未来转为发行，会先单独评审许可兼容性并补齐合规流程。
 
 ---
@@ -22,6 +22,7 @@
 
 - Gradle 发行版：gradle-8.14；Gradle JDK：JDK 21
 - Android Studio：[Android Studio](https://developer.android.google.cn/studio)
+- proot / loader 为**预编译产物**，随仓库提交；如需自行重建见「预编译来源」一节。
 
 ## 项目地址
 
@@ -30,36 +31,60 @@
 
 ## 一线执行的现状（如实）
 
-- **运行/依赖前置**：clone 后先执行 `bash scripts/fetch_deps.sh` 拉取被移出 git 的最小编译引擎（`sherpa-onnx-1.13.5.aar` → `app/libs/`）；四架构 `files.default.*`（内含 proot / unzip / libtalloc / libbz2）随仓库保留。
+- **运行/依赖前置**：clone 后先执行 `bash scripts/fetch_deps.sh` 拉取被移出 git 的最小编译引擎（`sherpa-onnx-1.13.5.aar` → `app/libs/`）。
+- **proot 工具链**已转为**自编译静态版本**（四架构），不再依赖 `files.default.*` 内的旧 proot 与 `libtalloc.so.2`。
 
-### 已实现的模块（曾完成，按当前真实状态标注）
+### 执行层（当前主力，已跑通）
+
+| 能力 | 说明 | 状态 |
+|------|------|:----:|
+| proot 容器部署页 | 12 镜像源可切换、断点续传、SHA256 固化校验、伪 200 校验 × 解压 | ✅ 在用 |
+| 容器解压 | `proot --link2symlink <libtar.so> -xJf`，硬链接自动降级为符号链接 | ✅ 真机验证 |
+| 容器启动 | Ubuntu 24.04.5 LTS / `uid=0(root)` / aarch64，`--root-id` + `env -i` | ✅ 真机验证 |
+| 伪造 `/proc` | 内置 `proot_proc.tar.xz` + 运行时抓取宿主数据（默认启用，兼容 LXC 用户态） | ✅ 在用 |
+| AI 工具 | **bash / read / write / edit / ls / grep / find**（原生命名，描述不暴露底层） | ✅ 在用 |
+| 路径沙箱 | AI 只见容器内路径；补全 → symlink 写穿 → rootfs 拼接；宿主路径不可达 | ✅ 在用 |
+| 符号链接语义 | 读写**链接指向的真实文件**，链接本身保留，并回传 `link_warning` | ✅ 在用 |
+
+### AI 接入（多协议 / 多 provider）
+
+| 能力 | 说明 | 状态 |
+|------|------|:----:|
+| 协议方言 | `openai-completions` / `openai-responses` / `anthropic-messages`（覆盖约 82% 模型） | ✅ 在用 |
+| 模型注册表 | **39 家 provider / 1312 个模型**，含定价、上下文窗口、最大输出 | ✅ 在用 |
+| 动态模型发现 | 轮询 OpenAI 兼容 / Anthropic / Google 的模型端点，与静态基线合并并持久化 | ✅ 在用 |
+| 费用计算 | 与 pi 同源公式：输入/输出/缓存读写 + 阶梯定价 + Anthropic 1h 缓存 2 倍 | ✅ 在用 |
+| 配置编辑页 | 独立 Activity：基础 + 高级参数（默认收起）+ **动态自定义参数**，默认 128K 上下文 | ✅ 在用 |
+| 用量落库 | `usage_json` / `cost_total` / 缓存 token 写入 `chat_record`，消息下方显示 token 与费用 | ✅ 在用 |
+
+### 其他模块（沿用 / 搁置）
 
 | 模块 | 说明 | 状态 |
 |------|------|:----:|
 | AI 对流对话 | 流式 SSE，多会话 + 历史 | ✅ 在用 |
-| Tool Calling | FT 解析→执行→回注→递归循环 | ✅ 在用（工具将随执行层精简） |
-| Agent 工具集 | 若干已注册工具（含元工具 search_tools） | ✅ 在用，将在重构中收敛 |
+| Tool Calling | 解析 → 执行 → 回注 → 递归循环 | ✅ 在用 |
 | Think / 工具日志 | 思考块展示 / 调用记录入库 | ✅ 在用 |
-| 配置管理 | 多 AI 服务（OpenAI / DeepSeek） | ✅ 在用 |
-| 终端执行/远端 SSH | 本地 Shell(PTY) + JSch 远端 | 🟡 **遗留** — 因 PTY 长会话难维护，正改向 proot 单次 CLI |
-| 音频（ASR/TTS/KWS/声纹） | sherpa-onnx / vosk 离线端侧八大能力 | ⏸️ **短期搁置** |
-| MCP 服务端 | 早前实验 HttpServer 实现 | 🟡 **可能撤/收回内部** — 改用 MCP 客户端（mcp-cli）接入远端 |
-
-> 说明：上表是当前“能跑/曾跑”的真实盘点。短期不会新增功能；后续若推进，重点是**精简工具与执行层到 proot 单次 CLI 三大件（读写/修改/执行）**。
+| 终端执行/远端 SSH | 本地 Shell(PTY) + JSch 远端 | 🟡 遗留（AI 侧已不再暴露 PTY 工具） |
+| 音频（ASR/TTS/KWS/声纹） | sherpa-onnx / vosk 离线端侧能力 | ⏸️ 短期搁置 |
+| MCP 服务端 | HttpServer 实现 | 🟡 可能收回内部，或改用 MCP 客户端 |
 
 ### 后端预置环境
 
-`app/src/{arm,arm64,x86_64,i686}/assets/files.default.*.tar.gz.so` —— 四架构非官方精简 rootfs（内含 openssh/bash/coreutils 等），并内置 proot/unzip 等，供执行层容器化调用；无外部重建源，故随仓库保留。
+- `app/src/{arm,arm64,x86_64,i686}/assets/files.default.*.tar.gz.so` —— 四架构 rootfs 引导包，随仓库保留。
+- `app/src/main/assets/proot_proc.tar.xz` —— 伪造 `/proc` 数据包（来自 `proot_proc` 项目）。
+- `app/src/main/assets/models.json` —— 模型与定价注册表（由 pi 的 provider 数据转译）。
+- `app/src/main/jniLibs/<abi>/libproot.so` + `libproot-loader.so` —— **自编译静态 proot 与 loader**（每个架构一份）。
 
 ---
 
-## 后续方向（收敛后的候选，非承诺）
+## 后续方向（候选，非承诺）
 
-- **执行层**：PTY 会话 → proot 内的 **CLI / bash 单次执行**（无状态、可观测），把工具收敛为读写 / 修改 / 执行等基础原语。
-- **MCP**：优先以**客户端**形态，或直接调用 `mcp-cli` 接入远端，而非自维护服务端。
-- **Agent**：提示词组装 / 相对路径 / 上下文压缩等，参考 pi.dev 思路做轻量实现；区分“给 AI 的能力”与“工具内部用”的能力，避免外放一堆旁支。
-- **API 多路由（可选）**：OpenAI Responses / Vertex / Anthropic 等，按需再议。
-- **音频（搁置）**：短期不深度更新；如推进再评估 VAD/KWS 悬浮监听、SDK/AAR 等低频候选。
+- **执行层收尾**：容器内工具的错误恢复、超时策略、输出截断、只读模式等细化。
+- **AI 接入扩展**：补齐其余协议方言（Google Generative AI / Vertex、Bedrock、Mistral）与对应 provider。
+- **费用与统计**：会话/全局累计费用视图；历史消息重进会话显示价格。
+- **配置能力**：模型名搜索、Provider 自定义端点模板、配置导入导出。
+- **MCP**：优先以客户端形态接入远端，或直接调用 `mcp-cli`。
+- **音频（搁置）**：短期不深度更新；如推进再评估 VAD/KWS 悬浮监听、SDK/AAR 等候选。
 
 ## 文档归档（docs/）
 
@@ -76,24 +101,29 @@
 
 **文档约定**：先看本 README；找不到再翻 `docs/_archive_*`。
 
+---
+
+## 现在对接了哪些 AI
+
+客户端内置 **39 家 provider / 1312 个模型**的元数据与定价，主流可直接选用的包括：OpenAI、Anthropic、DeepSeek、Google Gemini、xAI Grok、Qwen 通义千问、Moonshot Kimi、Z.ai GLM、MiniMax、Mistral、Groq、Cerebras、Together、Fireworks、OpenRouter、Vercel AI Gateway、Cloudflare Workers AI、Hugging Face、NVIDIA、Baseten、Amazon Bedrock、Azure OpenAI、GitHub Copilot、Cline/OpenCode 等；同时兼容任何 OpenAI 风格的**自建 / 本地端点**（Ollama、llama.cpp、one-api / new-api 网关等）。协议上已实现 Chat Completions、Responses、Anthropic Messages 三种方言，其余方言（Google / Bedrock / Mistral 等）的数据已就位，待接入。
+
+---
+
 ## 致谢
 
-开发中参考 / 借鉴了 [Termux](https://github.com/termux/termux-app)、[Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)、[TMOE](https://github.com/2moe/tmoe) 及 k2-fsa/sherpa 等开源项目的用法 / 思路；可能引入的部分已归并说明，**具体以各上游自身许可为准**，代码复用请核对其 LICENSE。
+### 开源项目
 
-同时感谢一路参与开发、调试、资料与代码协作的 **AI 工具（绝大多数为网页端）**：
+开发中参考 / 借鉴 / 直接使用了许多开源项目：**[Termux](https://github.com/termux/termux-app)**（Android 终端仿真与 `termux-shared` 思路）、**[termux/termux-packages](https://github.com/termux/termux-packages)**（Android 用户态工具链与补丁的上游源头）、**[termux/proot](https://github.com/termux/proot)**（proot 及 loader 源码）、**[Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)**（终端视图与仿真）、**[TMOE](https://github.com/2moe/tmoe)**（proot 容器安装/启动流程的重要参考）、**[Android-Proot-Builder](https://github.com/wuxianggujun/Android-Proot-Builder)**（proot 交叉编译流程参考，本项目在其基础上扩展了 32 位架构支持）、**[proot_proc](https://gitee.com/ak2/proot_proc)**（伪造 `/proc` 数据包）、**[talloc](https://talloc.samba.org/)**（proot 依赖的内存库，现已静态链接）、**[k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)** 与 **[onnxruntime](https://github.com/microsoft/onnxruntime)**（离线语音）、**[alphacep/vosk-api](https://github.com/alphacep/vosk-api)**（语音识别）、**[pi.dev](https://pi.dev)**（Agent 工具设计与多协议 provider 抽象的参考）、以及 AndroidX / OkHttp / Gson / JSch / Media3 / Lottie / Markwon 等 Gradle 依赖。**各项目许可与版权归其各自所有者**，具体以各上游 LICENSE 为准。
 
-| AI 工具 | 网页地址 | 用在哪 |
-|---|---|---|
-| **pi** | https://pi.dev | 近期的方向梳理与代码协作、大文件/仓库整理 |
-| **DeepSeek** | https://chat.deepseek.com | 早期代码生成、接口对接与云端 API 调试 |
-| **Kimi** | https://www.kimi.com | 早期代码拼接、长文阅读 |
-| **Claude** | https://claude.ai | 复杂逻辑排查、代码审查 |
-| **通义千问** | https://www.tongyi.com | 资料查询 / 汇总 |
-| **豆包** | https://www.doubao.com | 早期代码生成与资料查询 |
+### 预编译来源
 
-> 以上均为 Web 端入口（个别功能也可能有桌面 / 移动端）。此处只作开发历程致谢，不构成任何推广或担保。仍以你实际使用方式为准。
+`app/src/main/jniLibs/` 下的四架构 `libproot.so` 与 `libproot-loader.so`，是用 **Android NDK r28c**（`aarch64-linux-android28` / `armv7a-linux-androideabi28` / `i686-linux-android28` / `x86_64-linux-android28` 交叉工具链）从 **[termux/proot](https://github.com/termux/proot)** 源码编译的，`talloc` 以**静态链接**并入，最终产物仅依赖 `libc.so` 与 `libdl.so`；编译流程参考 **[Android-Proot-Builder](https://github.com/wuxianggujun/Android-Proot-Builder)** 并扩展了 32 位目标。`libtar.so` 为静态 GNU tar，随 jniLibs 提供，用于容器解压。
 
-> 坦白记录：这个项目历经很久、做了很多探索，但在“轻量精简”上反复折腾、结果往往越叠越重、重复造轮子。现已按现实收敛写入本 README，后续是否还能持续由主导者评估决定。
+### AI 工具
+
+感谢一路参与开发、调试、资料与代码协作的 AI 工具（绝大多数为网页端）：**pi**（https://pi.dev ，近期方向梳理、大规模代码协作与仓库整理）、**DeepSeek**（https://chat.deepseek.com ，早期代码生成、接口对接与云端 API 调试）、**Kimi**（https://www.kimi.com ，早期代码拼接与长文阅读）、**Claude**（https://claude.ai ，复杂逻辑排查与代码审查）、**通义千问**（https://www.tongyi.com ，资料查询与汇总）、**豆包**（https://www.doubao.com ，早期代码生成与资料查询），以及其它在排查、翻译、文档整理过程中提供过帮助的模型。此处只作开发历程致谢，不构成任何推广或担保，仍以实际使用方式为准。
+
+> 坦白记录：这个项目历经很久、做了很多探索；早期在“轻量精简”上反复折腾、结果往往越叠越重。现已按现实收敛写入本 README。
 
 ---
 
@@ -106,10 +136,13 @@ Copyright © 2026 heworkalin. All rights reserved.
 本项目基于 / 嵌入了多个第三方开源组件，版权归各所有者；**使用本项目即代表接受这些上游许可约束**。完整清单见 [`LICENSE`](LICENSE) 与 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。摘要：
 
 - `com.termux.*` / `termux-shared` / 原生环境 — [Termux (termux-app)](https://github.com/termux/termux-app)：主体 GPLv3，个别 MIT / Apache-2.0 / GPLv2+Classpath。
-- **本地运行环境工具链（bash / ssh / coreutils / proot 等）— [termux/termux-packages](https://github.com/termux/termux-packages)**：构建脚本 + Android 适配补丁的上游源头；各包许以其中各自声明为准。
+- **本地运行环境工具链（bash / ssh / coreutils 等）— [termux/termux-packages](https://github.com/termux/termux-packages)**：构建脚本 + Android 适配补丁的上游源头；各包许以其中各自声明为准。
+- **proot / proot-loader（自编译）— [termux/proot](https://github.com/termux/proot)：GPLv2**；`loader` 同源。以静态链接方式并入的 `talloc` — LGPL-2.1+。
+- `libtar.so` — GNU tar，GPLv3。
+- 伪造 `/proc` 数据包 — [proot_proc](https://gitee.com/ak2/proot_proc)，许以该仓库声明为准。
+- 模型与定价元数据（`assets/models.json`）— 转译自 [pi](https://pi.dev) 的 provider 数据，许以该上游声明为准。
 - `com.termux.terminal` / `view` — [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator)：Apache-2.0。
 - 音频引擎 — [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)（含 [onnxruntime](https://github.com/microsoft/onnxruntime)）、[alphacep/vosk-api](https://github.com/alphacep/vosk-api)：Apache-2.0 / MIT（模型许以各原始声明为准）。
-- 预编译 proot / unzip / libtalloc / libbz2（内置于 `files.default.*`）— proot 上游 GPLv2、unzip(Info-ZIP) BSD 类、libtalloc LGPL-2.1+、libbz2 BSD-like。
 - `alin.android.alinos` 原创代码及 Gradle 三方（AndroidX / JNA / okhttp / gson / media3 / lottie / markwon-prism 等）— Apache-2.0 / MIT / LGPL，细节见 NOTICE。
 
 第三方组件协议以其原始声明为准。
