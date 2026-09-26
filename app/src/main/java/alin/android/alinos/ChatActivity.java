@@ -685,7 +685,7 @@ public class ChatActivity extends AppCompatActivity {
         setSendButtonState(false);
         mThinkMessagePosition = -1; // 重置 Think 块位置
         mToolCallStartPosition = -1; // 重置工具卡片起始位置
-        // 超时检测任务已由OpenAIStreamNetHelper管理
+        // 超时检测任务已由 AiStreamEngine 管理
 
         // 核心修复：直接调用适配器，强制隐藏转圈
         if (mAiMessagePosition != -1) {

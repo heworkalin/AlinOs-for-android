@@ -15,14 +15,14 @@ import java.nio.charset.StandardCharsets;
 
 import alin.android.alinos.bean.ConfigBean;
 import alin.android.alinos.manager.ChatStreamEventBus;
-import alin.android.alinos.net.OpenAIStreamNetHelper;
+import alin.android.alinos.net.AiStreamEngine;
 import alin.android.alinos.net.openai.model.*;
 
 /**
  * OpenAI API 客户端实现。
  *
  * 当前状态：
- *   ✅ Chat 流式 — 委托给 OpenAIStreamNetHelper
+ *   ✅ Chat 流式 — 委托给 AiStreamEngine（多协议）
  *   🔶 Chat 同步、Audio、Embeddings、Images、Models、Moderation、Files — 骨架已建
  *   ⬜ Conversations、Responses、Realtime — 接口已声明，待实现
  */
@@ -33,7 +33,7 @@ public class OpenAIClient implements OpenAIApi {
     private final ConfigBean mConfig;
     private final String mBaseUrl;
     private final String mApiKey;
-    private OpenAIStreamNetHelper mStreamHelper;
+    private AiStreamEngine mStreamHelper;
 
     public OpenAIClient(Context context, ConfigBean config) {
         this.mContext = context;
@@ -60,7 +60,7 @@ public class OpenAIClient implements OpenAIApi {
     public void createChatCompletionStream(ChatRequest request, int sessionId,
                                            ChatStreamEventBus.StreamEventListener listener) {
         if (mStreamHelper == null) {
-            mStreamHelper = new OpenAIStreamNetHelper(mContext, mConfig);
+            mStreamHelper = new AiStreamEngine(mContext, mConfig);
         }
         // 直接委托给现有流式助手
         mStreamHelper.sendStreamMessageWithMessages(sessionId, buildMessagesJson(request), listener);
