@@ -78,11 +78,11 @@ execution layer on self-compiled *proot* (Ubuntu 24.04 rootfs, 4 ABIs)**.
 
 ### Bundled environment
 
-- `app/src/{arm,arm64,x86_64,i686}/assets/files.default.*.tar.gz.so` — four-ABI rootfs bootstrap, kept in-repo.
+- **`files.default.*.tar.gz.so` (4 ABIs)** — packages the Termux `$PREFIX` (`files/default/`, i.e. Termux's `usr/`): a **Termux bootstrap rootfs** containing `bash` / coreutils / `curl` / `ssh` / `apt` / `dpkg` / `tar` / `proot` / `unzip`, sourced from the build artifacts and download sources of **[termux/termux-packages](https://github.com/termux/termux-packages)**; rebuild it by compiling the corresponding packages through that repo's (Docker) build flow and repacking.
+- **`libproot.so` / `libproot-loader.so` (jniLibs, 4 ABIs)** — self-compiled static proot and loader, see “Prebuilt sources” below.
+- **`libtar.so` (jniLibs, 4 ABIs)** — same origin as the rootfs (GNU tar from the Termux ecosystem), statically linked and overlaid into `jniLibs` so proot can `execve` it directly from `nativeLibraryDir` to extract containers (the `bin/tar` inside the rootfs is dynamically linked and lives in a private directory where Android refuses execution).
 - `app/src/main/assets/proot_proc.tar.xz` — fake `/proc` data pack (from the `proot_proc` project).
 - `app/src/main/assets/models.json` — model & pricing registry (translated from pi's provider data).
-- `app/src/main/jniLibs/<abi>/libproot.so` + `libproot-loader.so` — **self-compiled static proot and loader**
-  (one per ABI).
 
 ---
 
@@ -149,7 +149,12 @@ The four-ABI `libproot.so` and `libproot-loader.so` under `app/src/main/jniLibs/
 `x86_64-linux-android28` toolchains) from the **[termux/proot](https://github.com/termux/proot)** sources, with
 `talloc` **statically linked** so the result only needs `libc.so` and `libdl.so`. The build flow references
 **[Android-Proot-Builder](https://github.com/wuxianggujun/Android-Proot-Builder)** and extends it with 32-bit
-targets. `libtar.so` is a static GNU tar shipped in jniLibs for container extraction.
+targets.
+
+The four-ABI `libtar.so` and `files.default.*.tar.gz.so` (rootfs) share the
+**[termux/termux-packages](https://github.com/termux/termux-packages)** ecosystem: the former is a static GNU tar
+overlaid into `jniLibs` for proot to execute directly; the latter is the Termux bootstrap user-space, which can
+be rebuilt through that repo's build flow and repacked.
 
 ### AI tools
 
