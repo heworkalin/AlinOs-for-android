@@ -72,7 +72,7 @@
 
 - **`files.default.*.tar.gz.so`（四架构）** —— 打包内容为 Termux 的 `$PREFIX`（`files/default/` 即 Termux 的 `usr/`），也就是 **Termux bootstrap rootfs**：内含 `bash` / coreutils / `curl` / `ssh` / `apt` / `dpkg` / `tar` / `proot` / `unzip` 等，来源为 **[termux/termux-packages](https://github.com/termux/termux-packages)** 的构建产物与下载源；如需自建，可按其构建流程（Docker）编译对应包后重新打包。
 - **`libproot.so` / `libproot-loader.so`（jniLibs，四架构）** —— 自编译静态 proot 与 loader，见下方「预编译来源」。
-- **`libtar.so`（jniLibs，四架构）** —— 与 rootfs 同源（Termux 生态的 GNU tar），静态化后单独叠加进 `jniLibs`，使 proot 能在 `nativeLibraryDir` 内直接 `execve` 它完成容器解压（rootfs 内的 `bin/tar` 为动态链接版，位于私有目录会被 Android 拒绝执行）。
+- **`libtar.so`（jniLibs，四架构）** —— 与 rootfs 同源的 **GNU tar 静态编译版**：只为一个零依赖的解压工具（rootfs 内的 `bin/tar` 依赖 Termux 动态库环境），叠加进 `jniLibs` 供解压流程直接调用；与执行权限无关。
 - `app/src/main/assets/proot_proc.tar.xz` —— 伪造 `/proc` 数据包（来自 `proot_proc` 项目）。
 - `app/src/main/assets/models.json` —— 模型与定价注册表（由 pi 的 provider 数据转译）。
 
@@ -120,7 +120,7 @@
 
 `app/src/main/jniLibs/` 下的四架构 `libproot.so` 与 `libproot-loader.so`，是用 **Android NDK r28c**（`aarch64-linux-android28` / `armv7a-linux-androideabi28` / `i686-linux-android28` / `x86_64-linux-android28` 交叉工具链）从 **[termux/proot](https://github.com/termux/proot)** 源码编译的，`talloc` 以**静态链接**并入，最终产物仅依赖 `libc.so` 与 `libdl.so`；编译流程参考 **[Android-Proot-Builder](https://github.com/wuxianggujun/Android-Proot-Builder)** 并扩展了 32 位目标。
 
-四架构 `libtar.so` 与 `files.default.*.tar.gz.so`（rootfs）同源于 **[termux/termux-packages](https://github.com/termux/termux-packages)** 生态：前者为静态 GNU tar，叠加进 `jniLibs` 供 proot 直接执行；后者为 Termux bootstrap 用户态，可按该仓库的构建流程自行编译后重新打包。
+四架构 `libtar.so` 与 `files.default.*.tar.gz.so`（rootfs）同源于 **[termux/termux-packages](https://github.com/termux/termux-packages)** 生态：前者为 **静态编译的 GNU tar**，作为一个零依赖的解包工具叠加进 `jniLibs` 供解压流程直接调用；后者为 Termux bootstrap 用户态，可按该仓库的构建流程自行编译后重新打包。
 
 ### AI 工具
 

@@ -80,7 +80,7 @@ execution layer on self-compiled *proot* (Ubuntu 24.04 rootfs, 4 ABIs)**.
 
 - **`files.default.*.tar.gz.so` (4 ABIs)** — packages the Termux `$PREFIX` (`files/default/`, i.e. Termux's `usr/`): a **Termux bootstrap rootfs** containing `bash` / coreutils / `curl` / `ssh` / `apt` / `dpkg` / `tar` / `proot` / `unzip`, sourced from the build artifacts and download sources of **[termux/termux-packages](https://github.com/termux/termux-packages)**; rebuild it by compiling the corresponding packages through that repo's (Docker) build flow and repacking.
 - **`libproot.so` / `libproot-loader.so` (jniLibs, 4 ABIs)** — self-compiled static proot and loader, see “Prebuilt sources” below.
-- **`libtar.so` (jniLibs, 4 ABIs)** — same origin as the rootfs (GNU tar from the Termux ecosystem), statically linked and overlaid into `jniLibs` so proot can `execve` it directly from `nativeLibraryDir` to extract containers (the `bin/tar` inside the rootfs is dynamically linked and lives in a private directory where Android refuses execution).
+- **`libtar.so` (jniLibs, 4 ABIs)** — a **statically compiled GNU tar** sharing the rootfs's origin: it exists simply as a zero-dependency extraction tool (the rootfs's `bin/tar` relies on the Termux dynamic-library environment) and is overlaid into `jniLibs` for the extraction flow to call directly. Unrelated to execution permissions.
 - `app/src/main/assets/proot_proc.tar.xz` — fake `/proc` data pack (from the `proot_proc` project).
 - `app/src/main/assets/models.json` — model & pricing registry (translated from pi's provider data).
 
@@ -152,9 +152,10 @@ The four-ABI `libproot.so` and `libproot-loader.so` under `app/src/main/jniLibs/
 targets.
 
 The four-ABI `libtar.so` and `files.default.*.tar.gz.so` (rootfs) share the
-**[termux/termux-packages](https://github.com/termux/termux-packages)** ecosystem: the former is a static GNU tar
-overlaid into `jniLibs` for proot to execute directly; the latter is the Termux bootstrap user-space, which can
-be rebuilt through that repo's build flow and repacked.
+**[termux/termux-packages](https://github.com/termux/termux-packages)** ecosystem: the former is a
+**statically compiled GNU tar** overlaid into `jniLibs` purely as a zero-dependency extraction tool for the
+extraction flow; the latter is the Termux bootstrap user-space, which can be rebuilt through that repo's build
+flow and repacked.
 
 ### AI tools
 
