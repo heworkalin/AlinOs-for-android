@@ -80,13 +80,23 @@ bash、openssl、coreutils 等。
   本项目仅做裁剪、聚合打包与运行时集成，不重新实现这些工具。
   没有 termux-packages，就没有在 Android 上可用的上述工具。
 
-  【构建方式：本项目自行编译，非下载官方 bootstrap】
+  【构建方式：本项目自行编译，但归属不变】
+    声明口径：无论是“直接下载”还是“源码编译生成”，只要出现在产物里，
+    就属于引入了该上游资源；构建方式不改变归属与许可证义务。
+
     构建脚本位于 scripts/rootfs/：
       · build-rootfs.sh    总调度（改造 properties.sh → Docker 编译 → 打包 → 清理）
       · pack-rootfs.sh     解包 deb → 路径替换 → 硬链接转软链 → tar 打包
       · replace-paths.sh   硬编码路径批量替换
       · README.md          环境要求、分步手册、自检与排错
     详见 THIRD_PARTY_NOTICES.md 第 3.1 节。
+
+    依赖连锁：脚本只显式构建 bash / openssh，但官方依赖图会连锁引入
+    termux-tools 及其依赖（bzip2/coreutils/curl/dash/diffutils/findutils/
+    gawk/grep/gzip/less/procps/psmisc/sed/tar/util-linux/xz-utils/dialog/
+    termux-am/termux-core/termux-exec 等），故产物包含全部基础命令
+    （实测 arm64 包 bin/ 下约 416 个）。这些同样是引入的第三方资源，
+    归属见第三节与 THIRD_PARTY_NOTICES.md 第七节。
 
     路径重定位（与官方 Termux 布局不同）：
       应用包名：com.termux          → alin.android.alinos
@@ -99,7 +109,7 @@ bash、openssl、coreutils 等。
     待办：libtar.so 静态编译流程尚未实现（需修改多个 termux-packages
     包体才能完成静态链接），暂沿用既有产物。
 
-  本环境由 Termux 官方 .deb 经魔改裁剪合并而成，非官方 bootstrap，
+  本环境由 Termux 官方 .deb 的内容经魔改裁剪合并而成（非官方发布的 bootstrap），
   并已内置 proot 虚拟化工具链（见下节）。
 
   新版：app/src/{arm,arm64,x86_64,i686}/assets/files.default.{arm,aarch64,x86_64,i686}.tar.gz.so

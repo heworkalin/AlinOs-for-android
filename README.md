@@ -33,7 +33,7 @@
 
 - **运行/依赖前置**：clone 后先执行 `bash scripts/fetch_deps.sh` 拉取被移出 git 的最小编译引擎（`sherpa-onnx-1.13.5.aar` → `app/libs/`）。
 - **proot 工具链**已转为**自编译静态版本**（四架构），不再依赖 `files.default.*` 内的旧 proot 与 `libtalloc.so.2`。
-- **rootfs 可自行构建**：`files.default.*.tar.gz.so`（四架构）由 `scripts/rootfs/` 从源码编译生成，非下载官方 bootstrap；详见 `scripts/rootfs/README.md`。
+- **rootfs 可自行构建**：`files.default.*.tar.gz.so`（四架构）由 `scripts/rootfs/` 从源码编译生成；详见 `scripts/rootfs/README.md`。
 
 ### 执行层（当前主力，已跑通）
 
@@ -122,7 +122,7 @@
 `app/src/main/jniLibs/` 下的四架构 `libproot.so` 与 `libproot-loader.so`，是用 **Android NDK r28c**（`aarch64-linux-android28` / `armv7a-linux-androideabi28` / `i686-linux-android28` / `x86_64-linux-android28` 交叉工具链）从 **[termux/proot](https://github.com/termux/proot)** 源码编译的，`talloc` 以**静态链接**并入，最终产物仅依赖 `libc.so` 与 `libdl.so`；编译流程参考 **[Android-Proot-Builder](https://github.com/wuxianggujun/Android-Proot-Builder)** 并扩展了 32 位目标。
 
 四架构 `files.default.*.tar.gz.so`（rootfs）来自 **[termux/termux-packages](https://github.com/termux/termux-packages)**：由本项目用 `scripts/rootfs/` 下的脚本**自行编译**（仅 `bash` + `openssh` 及其依赖），
-经**路径重定位**（`com.termux`→`alin.android.alinos`、`files/usr`→`files/default`）与**硬链接→软链接**转换后打包，**非下载官方 bootstrap**。
+经**路径重定位**（`com.termux`→`alin.android.alinos`、`files/usr`→`files/default`）与**硬链接→软链接**转换后打包。
 
 ### rootfs 构建（scripts/rootfs/）
 
@@ -155,7 +155,7 @@ Copyright © 2026 heworkalin. All rights reserved.
 本项目基于 / 嵌入了多个第三方开源组件，版权归各所有者；**使用本项目即代表接受这些上游许可约束**。完整清单见 [`LICENSE`](LICENSE) 与 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。摘要：
 
 - `com.termux.*` / `termux-shared` / 原生环境 — [Termux (termux-app)](https://github.com/termux/termux-app)：主体 GPLv3，个别 MIT / Apache-2.0 / GPLv2+Classpath。
-- **本地运行环境工具链（bash / ssh / coreutils 等）— [termux/termux-packages](https://github.com/termux/termux-packages)**：构建脚本 + Android 适配补丁的上游源头；各包许以其中各自声明为准。**rootfs 由本项目自行编译**（`scripts/rootfs/`），非下载官方 bootstrap。
+- **本地运行环境工具链（bash / ssh / coreutils 等）— [termux/termux-packages](https://github.com/termux/termux-packages)**：构建脚本 + Android 适配补丁的上游源头；各包许以其中各自声明为准。**rootfs 由本项目自行编译**（`scripts/rootfs/`），归属与许可证义务不因构建方式而改变。
 - **proot / proot-loader（自编译）— [termux/proot](https://github.com/termux/proot)：GPLv2**；`loader` 同源。以静态链接方式并入的 `talloc` — LGPL-2.1+。
 - `libtar.so` — GNU tar，GPLv3。
 - 伪造 `/proc` 数据包 — [proot_proc](https://gitee.com/ak2/proot_proc)，许以该仓库声明为准。

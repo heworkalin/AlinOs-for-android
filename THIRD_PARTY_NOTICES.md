@@ -66,6 +66,11 @@
 
 ### 3.1 构建工具链（本项目自建，非 Termux 官方发布）
 
+> **声明口径**：无论产物是“直接下载”还是“源码编译生成”，
+> **只要它出现在 APK / 仓库产物里，就属于引入了该上游资源**，
+> 归属与许可证义务**不因构建方式而改变**。本节说明的是**构建方式**，
+> 而非归属声明。（产物内各组件的归属见第三节表格与第七节总表。）
+
 > 本仓库的 `files.default.*.tar.gz.so` **不是**直接下载 Termux 官方 bootstrap，
 > 而是由本项目用下述脚本从 `termux/termux-packages` 源码自行编译、
 > 裁剪（仅 `bash` + `openssh` 及其依赖）、重定位打包而成。
@@ -88,6 +93,23 @@
 
 打包形态：包体内**只有软链接、无硬链接**（打包前硬链接统一降级为相对软链接）；
 `tar` 打包时**未使用** `-h`（否则软链接会被展开为实体副本）。
+
+**依赖连锁（为何“只编译两个包”却得到 400+ 命令）**：
+
+脚本只显式构建 `bash` 与 `openssh`，但官方依赖图会连锁引入：
+
+```
+bash / openssh
+  └→ termux-tools
+       └→ bzip2, coreutils, curl, dash, diffutils, findutils, gawk,
+          grep, gzip, less, procps, psmisc, sed, tar, termux-am,
+          termux-am-socket, termux-core, termux-exec, util-linux,
+          xz-utils, dialog
+```
+
+因此产物自然包含 coreutils / curl / tar / gzip / sed / grep 等全部基础命令
+（实测 arm64 包 `bin/` 下约 416 个命令）。这些同样是**引入的第三方资源**，
+归属见第三节与第七节——**不因“自动依赖”而免除记录义务**。
 
 **待办（尚未完成）**：`libtar.so` 的静态编译（需修改多个 termux-packages 包体
 才能完成静态链接），当前仍沿用既有产物。详见 `THIRD_PARTY_NOTICES.md` 备注。
@@ -136,12 +158,15 @@
 
 ## 六、备注 / 义务摘要
 
-- **工具链归属**：`files.default.*.tar.gz.so` 内的所有可执行文件（bash/ssh/proot/coreutils 等）
+- **工具链归属**：`files.default.*.tar.gz.so` 内的所有可执行文件（bash/ssh/coreutils 等）
   均由 [termux/termux-packages](https://github.com/termux/termux-packages) 构建，
   本项目仅作裁剪打包与运行时集成。
-- **构建方式**：本项目**自行编译**而非下载 Termux 官方 bootstrap；
-  构建脚本见 `scripts/rootfs/`，产物经路径重定位（`com.termux`→`alin.android.alinos`、
-  `usr`→`default`）与硬链接→软链接转换后打包。
+- **引入口径**：无论产物是“直接下载”还是“源码编译生成”，只要出现在仓库/APK 产物里，
+  即视为引入该上游资源——归属与许可证义务不因构建方式而改变。
+- **依赖连锁**：脚本只显式构建 `bash` + `openssh`，但依赖图会连锁引入 `termux-tools`
+  及其全部依赖（coreutils/curl/tar/gzip/sed/grep 等），实测 arm64 包约 416 个基础命令。
+- **构建方式**：本项目自行编译；构建脚本见 `scripts/rootfs/`，产物经路径重定位
+  （`com.termux`→`alin.android.alinos`、`usr`→`default`）与硬链接→软链接转换后打包。
 - **待办**：`libtar.so` 静态编译流程尚未实现（需修改多个 termux-packages 包体），
   暂沿用既有产物；完成后需同步更新本节与 `LICENSE`。
 - GPLv3 传染（来自 termux-app）：**分发本项目必须提供完整源码且以 GPLv3 授权**；

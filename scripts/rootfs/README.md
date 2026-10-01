@@ -101,6 +101,11 @@ ARCHS="aarch64 x86_64" bash scripts/rootfs/build-rootfs.sh
 
 ### `build-rootfs.sh` — 总调度
 
+> **依赖连锁说明**：脚本只显式构建 `bash` 与 `openssh`，但官方依赖图会自动引入
+> `termux-tools` 及其全部依赖，因此产物仍包含完整基础命令（coreutils / curl /
+> tar / gzip / sed / grep 等，实测 arm64 包 `bin/` 下约 416 个）。
+> 这是**预期行为**，无需额外指定包名。
+
 1. 环境检查（Docker / x86_64 / 必要工具）。
 2. 克隆 termux-packages（浅克隆）到 `$WORKDIR/termux-packages`。
 3. **改造 `scripts/properties.sh`（三处，均为硬赋值，无法用环境变量覆盖）**：
