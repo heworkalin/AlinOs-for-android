@@ -91,6 +91,23 @@ public final class ProotContainerManager {
             + "fi\n"
             + "unset i\n";
 
+    /** 标记：用于判断 /root/.profile 是不是我们写的。 */
+    private static final String ROOT_PROFILE_MARKER = "# AlinOs profile";
+
+    /**
+     * 写入 /root/.profile 的内容（仅当文件不存在时）。
+     *
+     * <p>很多精简 rootfs 根本没有 /root/.profile，login shell 就不会加载
+     * ~/.bashrc。环境变量与永久脚本已经挂在 /etc/profile.d/ 上（由 /etc/profile
+     * 读取），所以这里只需负责把 ~/.bashrc 接上，不重复 source profile.d。
+     */
+    private static final String DEFAULT_ROOT_PROFILE =
+            ROOT_PROFILE_MARKER + "\n"
+            + "# 由 AlinOs 写入：精简 rootfs 缺少 ~/.profile 时，保证 login shell 加载 ~/.bashrc\n"
+            + "if [ -n \"$BASH_VERSION\" ] && [ -f \"$HOME/.bashrc\" ]; then\n"
+            + "    . \"$HOME/.bashrc\"\n"
+            + "fi\n";
+
     /**
      * 把容器环境写入给定环境表：解析环境文件 + 关键变量兜底 + 清掉宿主专有变量。
      *
@@ -400,6 +417,30 @@ public final class ProotContainerManager {
             }
             script.setReadable(true, false);
         }
+
+        ensureRootProfile(rootfs);
+    }
+
+    /**
+     * 保证 {@code /root/.profile} 存在。
+     *
+     * <p>缺失时写一份标准内容（只负责加载 {@code ~/.bashrc}）；已存在则不动。
+     * 环境变量/永久脚本由 {@code /etc/profile.d/} 负责，不在这里重复 source。
+     */
+    private static void ensureRootProfile(File rootfs) {
+        File home = new File(rootfs, "root");
+        if (!home.isDirectory() && !home.mkdirs()) return;
+
+        File profile = new File(home, ".profile");
+        if (profile.exists()) return;
+
+        try (FileOutputStream out = new FileOutputStream(profile)) {
+            out.write(DEFAULT_ROOT_PROFILE.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            Log.w("ProotContainerManager", "write root .profile failed: " + e);
+            return;
+        }
+        profile.setReadable(true, false);
     }
 
     /** 确保环境文件存在（不存在才写入默认内容，不覆盖用户改动）。 */
