@@ -64,9 +64,39 @@
 净说明：本环境为**非官方魔改精简构建**（原 Termux 官方 .deb 裁剪合并），
 用于个人本地 CLI/SSH 用途；聚合 tar 仅作分发载体，**单软件许可以各上游为准**。
 
+### 3.1 构建工具链（本项目自建，非 Termux 官方发布）
+
+> 本仓库的 `files.default.*.tar.gz.so` **不是**直接下载 Termux 官方 bootstrap，
+> 而是由本项目用下述脚本从 `termux/termux-packages` 源码自行编译、
+> 裁剪（仅 `bash` + `openssh` 及其依赖）、重定位打包而成。
+
+| 工具 | 用途 | 说明 |
+|------|------|------|
+| `scripts/rootfs/build-rootfs.sh` | 总调度 | 改造 properties.sh → Docker 编译 → 打包 → 清理 |
+| `scripts/rootfs/pack-rootfs.sh` | 解包 + 后处理 + 打包 | deb → `files/default/` → 路径替换 → 硬链接转软链 → tar |
+| `scripts/rootfs/replace-paths.sh` | 路径批量替换 | `com.termux` → `alin.android.alinos` 等 |
+| `scripts/rootfs/README.md` | 构建说明 | 环境要求、分步手册、自检与排错 |
+| `scripts/fetch_deps.sh` | 编译依赖拉取 | `sherpa-onnx-1.13.5.aar`（不入 git） |
+
+**路径重定位**（与官方 Termux 布局不同）：
+
+| 项目 | Termux 官方 | 本项目 |
+|------|------------|--------|
+| 应用包名 | `com.termux` | `alin.android.alinos` |
+| PREFIX 子目录 | `usr` | `default` |
+| PREFIX | `/data/data/com.termux/files/usr` | `/data/data/alin.android.alinos/files/default` |
+
+打包形态：包体内**只有软链接、无硬链接**（打包前硬链接统一降级为相对软链接）；
+`tar` 打包时**未使用** `-h`（否则软链接会被展开为实体副本）。
+
+**待办（尚未完成）**：`libtar.so` 的静态编译（需修改多个 termux-packages 包体
+才能完成静态链接），当前仍沿用既有产物。详见 `THIRD_PARTY_NOTICES.md` 备注。
+
 ---
 
 ## 四、Android 三方依赖（Gradle 引入）
+
+> 以下为 `app/build.gradle` 实际启用的依赖（与 Gradle 版本目录 `gradle/libs.versions.toml`）。
 
 | 坐标 | 用途 | 许可证 |
 |------|------|:------:|
@@ -74,17 +104,28 @@
 | `files('libs/sherpa-onnx-1.13.5.aar')` | ASR/TTS/KWS/声纹 引擎 | Apache-2.0（[k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)） |
 | sherpa aar 内置 `onnxruntime` | 推理运行时 | MIT（[microsoft/onnxruntime](https://github.com/microsoft/onnxruntime)） |
 | `com.jcraft:jsch:0.1.55` | SSH 客户端 | BSD-style |
-| `dev.rikka.shizuku:*` | ADB 权限代理 | Apache-2.0 |
-| `org.lsposed.hiddenapibypass:6.1` | 隐藏 API 绕过 | Apache-2.0 |
-| `com.squareup.okhttp3:okhttp` | HTTP 客户端 | Apache-2.0 |
-| `com.google.code.gson:gson` | JSON | Apache-2.0 |
-| `commons-io:commons-io` | IO 工具 | Apache-2.0 |
-| AndroidX 系列（core/recyclerview/cardview/preference/constraintlayout…） | Android 支持库 | Apache-2.0 |
-| `androidx.media3:*`（media3-exoplayer/extractor/datasource-okhttp） | 音视频/数据源 | Apache-2.0 |
-| `net.java.dev.jna:jna` | Java 本地访问 | LGPL-2.1（JNA） |
-| `com.airbnb.android:lottie` | 动画 | Apache-2.0 |
-| `io.noties.markwon:*` / `io.noties:prism4j` | Markdown 渲染/高亮 | Apache-2.0 |
-| `com.github.L-JINBIN:MTDataFilesProvider` | 数据文件共享 | Apache-2.0（见该仓库 LICENSE） |
+| `dev.rikka.shizuku:api` / `:provider` | ADB 权限代理 | Apache-2.0 |
+| `org.lsposed.hiddenapibypass:hiddenapibypass:6.1` | 隐藏 API 绕过 | Apache-2.0 |
+| `com.google.code.gson:gson:2.10.1` | JSON | Apache-2.0 |
+| `commons-io:commons-io:2.15.1` | IO 工具 | Apache-2.0 |
+| `com.github.L-JINBIN:MTDataFilesProvider:v1.0.0` | 数据文件共享 | 见该仓库 LICENSE |
+| `com.airbnb.android:lottie:6.1.0` | 动画 | Apache-2.0 |
+| `io.noties.markwon:*:4.6.2`（core / inline-parser / linkify / recycler / ext-latex / ext-strikethrough / ext-tables / ext-tasklist / syntax-highlight） | Markdown 渲染与高亮 | Apache-2.0 |
+| `androidx.appcompat:appcompat:1.7.1` | 兼容库 | Apache-2.0 |
+| `com.google.android.material:material:1.13.0` | Material 组件 | Apache-2.0 |
+| `com.google.firebase:firebase-crashlytics-buildtools:3.0.7` | Crashlytics 构建工具 | Apache-2.0 |
+| `androidx.core:core:1.17.0` | 核心扩展 | Apache-2.0 |
+| `androidx.cardview:cardview:1.0.0` | 卡片视图 | Apache-2.0 |
+| `androidx.recyclerview:recyclerview:1.3.2` | 列表视图 | Apache-2.0 |
+| `androidx.constraintlayout:constraintlayout:2.1.4` | 布局 | Apache-2.0 |
+| `androidx.preference:preference:1.2.0` | 设置页 | Apache-2.0 |
+| `androidx.window:window:1.2.0` | 窗口适配 | Apache-2.0 |
+| `androidx.media3:*`（exoplayer / extractor / datasource-okhttp 1.2.0） | 音视频/数据源 | Apache-2.0 |
+| `com.squareup.okhttp3:okhttp`（媒体传递依赖） | HTTP 客户端 | Apache-2.0 |
+| `junit` / `androidx.test.ext:junit` / `espresso-core`（测试专用） | 单元/仪器测试 | EPL-1.0 / Apache-2.0 |
+
+**已声明但未启用**（代码中已注释，不作为当前依赖）：`io.noties:prism4j`、`net.java.dev.jna:jna`。
+若后续重新启用，需回写本表。
 
 ## 五、运行时按需下载的语音模型（不随 APK/Git 打包）
 
@@ -98,6 +139,39 @@
 - **工具链归属**：`files.default.*.tar.gz.so` 内的所有可执行文件（bash/ssh/proot/coreutils 等）
   均由 [termux/termux-packages](https://github.com/termux/termux-packages) 构建，
   本项目仅作裁剪打包与运行时集成。
+- **构建方式**：本项目**自行编译**而非下载 Termux 官方 bootstrap；
+  构建脚本见 `scripts/rootfs/`，产物经路径重定位（`com.termux`→`alin.android.alinos`、
+  `usr`→`default`）与硬链接→软链接转换后打包。
+- **待办**：`libtar.so` 静态编译流程尚未实现（需修改多个 termux-packages 包体），
+  暂沿用既有产物；完成后需同步更新本节与 `LICENSE`。
 - GPLv3 传染（来自 termux-app）：**分发本项目必须提供完整源码且以 GPLv3 授权**；
   个人本地评估/不发行 stage 不触发对外分发义务，但源码开放存在于 Gitee/GitHub。
 - 保留上游版权与协议文本；协议仅作技术参考，不构成法律建议。
+
+---
+
+## 七、上游仓库总表（审计索引）
+
+> 本项目实际引入/参考的全部上游仓库汇总，便于审计核对。
+
+| 上游仓库 | 引入方式 | 对应产物 / 路径 | 许可证 |
+|---------|---------|----------------|:------:|
+| [termux/termux-app](https://github.com/termux/termux-app) | 源码 | `com.termux.app/**`、`com.termux.shared/**`、`com.termux.terminal/**`、`com.termux.view/**`、`jniLibs/liblocal-socket.so` `libtermux.so` `librmt.so` | GPLv3 / 部分 MIT·Apache-2.0 |
+| [termux/termux-packages](https://github.com/termux/termux-packages) | 源码编译 | `files.default.*.tar.gz.so`（bash/openssh/openssl/coreutils 等） | GPLv3 / 各包上游 |
+| [termux/proot](https://github.com/termux/proot)（上游 [proot-me/PRoot](https://github.com/proot-me/PRoot)） | 源码编译 | `jniLibs/libproot.so`、`libproot-loader.so`、`libproot-loader32.so` | GPLv2 |
+| [jackpal/Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator) | 源码 | `com.termux.terminal/**`、`com.termux.view/**` | Apache-2.0 |
+| [wuxianggujun/Android-Proot-Builder](https://github.com/wuxianggujun/Android-Proot-Builder) | 流程参考 | proot 交叉编译流程 | 以该仓库为准 |
+| [2moe/tmoe](https://github.com/2moe/tmoe) | 流程参考 | proot 容器安装/启动流程 | 以该仓库为准 |
+| [proot_proc](https://gitee.com/ak2/proot_proc) | 数据包 | `assets/proot_proc.tar.xz` | 以该仓库为准 |
+| [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | AAR / 模型 | `libs/sherpa-onnx-1.13.5.aar`、语音模型 | Apache-2.0 |
+| [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | 传递依赖 | sherpa aar 内置 `libonnxruntime` | MIT |
+| [alphacep/vosk-api](https://github.com/alphacep/vosk-api) | Maven | `com.alphacephei:vosk-android`、vosk 模型 | Apache-2.0 |
+| [snakers4/silero-vad](https://github.com/snakers4/silero-vad) | 模型 | `assets/silero_vad.onnx` | MIT |
+| [termux/termux-am](https://github.com/termux/termux-am) | 构建产物 | `assets/TermuxAm-debug.apk` | Apache-2.0 |
+| [Chainfire/libsuperuser](https://github.com/Chainfire/libsuperuser) | 代码片段 | `com.termux.shared.shell.StreamGobbler` | Apache-2.0 |
+| [pi](https://pi.dev) | 数据参考 | `assets/models.json`（provider/定价元数据） | 以该上游声明为准 |
+| [L-JINBIN/MTDataFilesProvider](https://github.com/L-JINBIN/MTDataFilesProvider) | Maven | 数据文件共享 | 以该仓库 LICENSE 为准 |
+| junit / AndroidX Test | Maven（测试） | 单元/仪器测试 | EPL-1.0 / Apache-2.0 |
+| AndroidX / Material / Lottie / Markwon / Gson / JSch / Shizuku / HiddenApiBypass / commons-io / media3 | Maven | 见第四节明细 | Apache-2.0 / BSD-style |
+
+> 若新增或删减依赖，请同步更新本表、第四节明细与 `LICENSE`。
