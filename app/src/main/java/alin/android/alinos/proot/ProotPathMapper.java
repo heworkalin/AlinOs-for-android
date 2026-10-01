@@ -105,17 +105,17 @@ public final class ProotPathMapper {
      */
     public Resolved resolve(String input, String cwd) throws IOException {
         String abs = toContainerAbsolute(input, cwd);
-        String resolved = resolveSymlinks(abs);
-        File host = hostFile(resolved);
-        boolean via = !resolved.equals(abs);
-        String display = resolved;
-        // proot --link2symlink 的伪硬链接：/tmp/x -> /.l2s/.l2s.x0001 -> ...0002。
-        // 这是 proot 内部备份，对 AI 来说就是一个普通文件：
-        //   * 不报 link_warning
-        //   * real_path 回显为原路径，不暴露 /.l2s/... 内部路径
-        // hostFile 仍指向真实 backing file，读写依然写穿到它。
-        if (via && isProotL2sPath(resolved)) {
-            via = false;
+        SymlinkResolution sr = resolveSymlinksDetailed(abs);
+        File host = hostFile(sr.realPath);
+
+        // 链上出现过【用户可见】的符号链接（如 /tmp/z -> y）才提示；
+        // 若路径本身就是 proot 伪硬链接（/tmp/y -> /.l2s/...），对 AI 就是普通文件，
+        // 不提示、也不暴露 /.l2s/... 内部 backing。
+        boolean via = sr.userSymlink;
+        String display;
+        if (via) {
+            display = sr.visiblePath != null ? sr.visiblePath : sr.realPath;
+        } else {
             display = abs;
         }
         return new Resolved(input, abs, display, host, via);
@@ -168,11 +168,26 @@ public final class ProotPathMapper {
     // ② 容器语义 symlink 解析（写穿链接）
     // ---------------------------------------------------------------------
 
-    /**
-     * 逐级解析容器内符号链接，返回容器内的真实路径。
-     * 绝对链接按「容器内绝对路径」处理（不会逃逸到宿主）。
-     */
+    /** symlink 解析的附加信息。 */
+    public static final class SymlinkResolution {
+        /** 最终容器路径（可能落在 .l2s backing 内）。 */
+        public String realPath;
+        /** 链上是否出现过用户可见的符号链接（目标不是 .l2s backing）。 */
+        public boolean userSymlink;
+        /** 若最终落在伪硬链接上，这里记录它的可见路径（如 /tmp/y）。 */
+        public String visiblePath;
+    }
+
     public String resolveSymlinks(String absPath) throws IOException {
+        return resolveSymlinksDetailed(absPath).realPath;
+    }
+
+    /**
+     * 逐级解析容器内符号链接，返回真实路径，并区分“用户可见符号链接”
+     * 与 proot 伪硬链接（目标 basename 以 {@code .l2s.} 开头）。
+     */
+    public SymlinkResolution resolveSymlinksDetailed(String absPath) throws IOException {
+        SymlinkResolution out = new SymlinkResolution();
         String path = normalize(absPath);
         for (int guard = 0; guard < MAX_SYMLINK_DEPTH; guard++) {
             String[] parts = path.split("/");
@@ -189,9 +204,7 @@ public final class ProotPathMapper {
                 String target = Files.readSymbolicLink(host.toPath()).toString();
 
                 // proot --link2symlink 写出的目标可能是「宿主绝对路径」，
-                // 例如 <rootfs>/.l2s/.l2s.x0001（伪硬链接的 backing file）。
-                // 必须先剥掉 rootfs 前缀转成容器路径，否则会被当成容器绝对
-                // 路径再拼一次 rootfs，导致 file not found。
+                // 例如 <rootfs>/.l2s/.l2s.x0001。必须先剥掉 rootfs 前缀。
                 target = hostTargetToContainer(target);
 
                 int slash = cur.lastIndexOf("/");
@@ -199,6 +212,16 @@ public final class ProotPathMapper {
                 String resolved = target.startsWith("/")
                         ? normalize(target)
                         : normalize(base + "/" + target);
+
+                String targetName = resolved.substring(resolved.lastIndexOf('/') + 1);
+                if (targetName.startsWith(".l2s.")) {
+                    // proot 伪硬链接的一跳：仅当当前路径本身不是内部文件时才记为可见
+                    if (!isProotL2sPath(cur.toString())) {
+                        out.visiblePath = cur.toString();
+                    }
+                } else {
+                    out.userSymlink = true;
+                }
 
                 StringBuilder rest = new StringBuilder();
                 for (int j = i + 1; j < parts.length; j++) rest.append('/').append(parts[j]);
@@ -208,7 +231,10 @@ public final class ProotPathMapper {
                 break;
             }
 
-            if (!hit) return path;
+            if (!hit) {
+                out.realPath = path;
+                return out;
+            }
         }
         throw new IOException("too many levels of symbolic links (possible loop): " + absPath);
     }
