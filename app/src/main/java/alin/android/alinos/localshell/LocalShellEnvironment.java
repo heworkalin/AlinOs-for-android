@@ -91,19 +91,23 @@ public class LocalShellEnvironment extends UnixShellEnvironment implements IShel
                 environment.put("PROOT_LOADER", loader.getAbsolutePath());
             }
 
-            File tmp = new File(context.getCacheDir(), "proot_tmp");
+            File tmp = new File(context.getFilesDir(), "proot_tmp");
             tmp.mkdirs();
-            environment.put("PROOT_TMP_DIR", tmp.getAbsolutePath());
+            environment.put("PROOT_TMP_DIR", canonicalPath(tmp));
 
-            File l2s = new File(context.getCacheDir(), "proot_l2s");
+            // l2s 必须位于 rootfs 内部（proot 官方测试用 ${ROOTFS}/.l2s）；
+            // 放 rootfs 外会让伪硬链接在 canonicalize 阶段被判成 ENOENT。
+            File l2s = alin.android.alinos.proot.ProotContainerManager.l2sDir(context);
             l2s.mkdirs();
-            environment.put("PROOT_L2S_DIR", l2s.getAbsolutePath());
+            environment.put("PROOT_L2S_DIR", canonicalPath(l2s));
+            // 关闭 f2fs workaround，原因见 ProotContainerManager。
+            environment.put("PROOT_F2FS_WORKAROUND", "0");
 
             // 容器内环境：统一从 ProotContainerManager.CONTAINER_ENV 引入，
             // 单一数据源，避免两处维护不一致。
             // 否则 PATH 还是宿主路径，login shell 的 /etc/profile 里连 `id` 都找不到，
             // PATH 无法被修正，导致 ls/id/groups 全部 command not found。
-            alin.android.alinos.proot.ProotContainerManager.applyContainerEnv(environment);
+            alin.android.alinos.proot.ProotContainerManager.applyContainerEnv(context, environment);
         }
 
         return environment;
@@ -130,6 +134,15 @@ public class LocalShellEnvironment extends UnixShellEnvironment implements IShel
     @Override
     public String getDefaultBinPath() {
         return LocalShellConstants.BIN_DIR_PATH;
+    }
+
+    /** 解析软链接，返回真实路径；失败则退回绝对路径。 */
+    private static String canonicalPath(File f) {
+        try {
+            return f.getCanonicalPath();
+        } catch (Exception e) {
+            return f.getAbsolutePath();
+        }
     }
 
     public static void init(Context context) {

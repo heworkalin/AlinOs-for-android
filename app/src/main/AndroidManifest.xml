@@ -1,341 +1,154 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:installLocation="internalOnly"
-    android:sharedUserLabel="@string/shared_user_label">
-
-    <!-- ========== 权限整合（Termux + AlinOs 所有必要权限） ========== -->
-    <!-- Termux 核心权限 -->
-    <uses-feature
-        android:name="android.hardware.touchscreen"
-        android:required="false" />
-    <uses-feature
-        android:name="android.software.leanback"
-        android:required="false" />
-
-    <permission
-        android:name="${applicationId}.permission.RUN_COMMAND"
-        android:description="@string/permission_run_command_description"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/permission_run_command_label"
-        android:protectionLevel="dangerous" />
-
-    <permission
-        android:name="${applicationId}.TERMUX_INTERNAL"
-        android:label="@string/permission_termux_internal_label"
-        android:description="@string/permission_termux_internal_description"
-        android:icon="@mipmap/ic_launcher"
-        android:protectionLevel="signature" />
-
-    <!-- AlinOs 核心权限 + Termux 扩展权限 -->
-    <!-- 计算应用存储空间 -->
-    <uses-permission android:name="android.permission.GET_PACKAGE_SIZE" />
-    <!-- 查看网络连接 -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- 拥有完全的网络访问权限 -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <!-- 修改或删除您共享存储空间中的内容 -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <!-- 防止手机休眠 -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- 控制振动 -->
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- 运行前台服务 -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- 请求忽略电池优化 -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <!-- 此应用可显示在其他应用上方 -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- 读取系统日志 -->
-    <uses-permission android:name="android.permission.READ_LOGS" />
-    <!-- 转存系统信息 -->
-    <uses-permission android:name="android.permission.DUMP" />
-    <!-- 读写系统敏感设置 -->
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
-    <!-- 请求安装文件包 -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- 读取短信 -->
-    <uses-permission android:name="android.permission.READ_SMS" />
-    <!-- 挂载文件系统 -->
-    <uses-permission android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS" />
-    <!-- 修改或删除您共享存储空间中的内容 -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <!-- 读取您共享存储空间中的内容 -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <!-- 查看网络连接 -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- 请求安装文件包 -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- 请求删除文件包 -->
-    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
-    <!-- 读取联系人 -->
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <!-- 所有文件访问权限 -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-    <!-- 允许应用收集应用使用统计信息 -->
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
-    <!-- 拍摄照片和视频 -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <!-- 使用闪光灯 -->
-    <uses-permission android:name="android.permission.FLASHLIGHT" />
-    <uses-feature
-        android:name="android.hardware.camera.autofocus"
-        android:required="false" />
-    <uses-feature
-        android:name="android.hardware.camera.flash"
-        android:required="false" />
-    <!-- 显示通知 -->
-    <!-- 读取您共享存储空间中的内容 -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-
-    <!-- 修改或删除您共享存储空间中的内容 -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-
-    <!-- 访问所有文件权限 -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-
-    <!-- 读取设备中的图片 -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-
-    <!-- 读取设备中的视频 -->
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-
-    <!-- 读取设备中的音频 -->
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <queries>
-        <package android:name="com.termux" />
-    </queries>
-    <!-- 使用指纹硬件 -->
-    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
-    <!-- 使用生物特征硬件 -->
-    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-    <!-- 读取手机状态和身份 -->
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <!-- 查看WLAN连接 -->
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <!-- 连接WLAN网络和断开连接 -->
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.READ_LOGS" />
-    <uses-permission android:name="android.permission.DUMP" />
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
-    
-    <!-- AlinOs 专属权限 -->
-    <uses-permission android:name="android.permission.READ_FRAME_BUFFER" />
-    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.USE_TTS_SERVICE" />
-
-    <application
-        android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="false"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
-        android:extractNativeLibs="true"
-        android:requestLegacyExternalStorage="true"
-        android:usesCleartextTraffic="true"
-        tools:targetApi="36">
-
-        <!-- ========== AlinOs 核心页面（设为唯一启动页） ========== -->
-        <activity
-            android:name="alin.android.alinos.ChatActivity"
-            android:launchMode="singleTask"
-            android:exported="true"
-            android:windowSoftInputMode="adjustResize|stateHidden"
-            android:theme="@style/ChatActivityTheme">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-
-        <!-- AlinOs 其他页面（均设为非导出） -->
-        <activity
-            android:name="alin.android.alinos.AiConfigActivity"
-            android:exported="false" />
-        <activity
-            android:name="alin.android.alinos.AiConfigEditActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
-        <activity
-            android:name="alin.android.alinos.SettingsActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-        <activity
-            android:name="alin.android.alinos.McpServerActivity"
-            android:exported="false" />
-        <activity
-            android:name="alin.android.alinos.dev.DevToolsActivity"
-            android:exported="true"
-            android:windowSoftInputMode="adjustResize|stateHidden" />
-
-        <activity
-            android:name="alin.android.alinos.dev.LocalShellTestActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|keyboard|keyboardHidden|navigation"
-            android:label="@string/application_name"
-            android:launchMode="singleTask"
-            android:resizeableActivity="true"
-            android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.TermuxActivity.DayNight.NoActionBar"
-            tools:targetApi="n" />
-
-        <activity
-            android:name="alin.android.alinos.dev.SshTestActivity"
-            android:exported="true"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
-            android:windowSoftInputMode="adjustResize|stateHidden" />
-
-        <activity
-            android:name="alin.android.alinos.dev.ProotContainerTestActivity"
-            android:exported="true"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
-            android:windowSoftInputMode="adjustResize|stateHidden" />
-
-        <!-- ========== 语音测试页 ========== -->
-        <activity
-            android:name="alin.android.alinos.AsrTestActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-        <activity
-            android:name="alin.android.alinos.TtsTestActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-        <activity
-            android:name="alin.android.alinos.KwsTestActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-        <activity
-            android:name="alin.android.alinos.AudioModelManagerActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-
-        <!-- TermuxActivity 已裁剪为 LocalShellTestActivity 的基类，不再作为独立入口 -->
-        <!-- shortcuts.xml 已随 TermuxActivity 一并移除 -->
-
-        <activity
-            android:name="com.termux.shared.activities.ReportActivity"
-            android:theme="@style/Theme.MarkdownViewActivity.DayNight"
-            android:documentLaunchMode="intoExisting" />
-
-        <!-- ========== Termux 提供者/接收器/服务 ========== -->
-
-<receiver
-            android:name="com.termux.app.event.SystemEventReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name="com.termux.shared.activities.ReportActivity$ReportActivityBroadcastReceiver"
-            android:exported="false" />
-
-        <!-- Termux 核心服务  用于提供localhost shell他的 pty终端能力-->
-        <service
-            android:name="com.termux.app.TermuxService"
-            android:foregroundServiceType="specialUse"
-            android:exported="true"
-            android:permission="${applicationId}.permission.TERMUX_INTERNAL">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="As a Linux environment Termux needs to ensure that running tasks are not killed or paused while the app is in the background.
-                For example, a user might start a web server that serves HTML pages and then interact with that from the browser app while the Termux
-                app is in the background. If the system were to interrupt or defer the Termux app while it is in the background the user
-                experience would be negatively affected since the above described use case would be broken." />
-        </service>
-
-        <!-- ========== AlinOs 核心服务 ========== -->
-        <service
-            android:name="alin.android.alinos.localshell.LocalShellService"
-            android:foregroundServiceType="specialUse"
-            android:exported="false">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="LocalShell provides persistent PTY terminal sessions for shell command execution." />
-        </service>
-
-        <!-- ========== MCP 工具服务（前台服务，常驻通知保活） ========== -->
-        <service
-            android:name="alin.android.alinos.McpServerService"
-            android:foregroundServiceType="specialUse"
-            android:exported="true">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="MCP server bridges local device tools to MCP clients over HTTP, requiring persistent foreground operation." />
-        </service>
-
-        <service
-            android:name="alin.android.alinos.service.DeviceAccessibilityService"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
-
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku"
-            android:multiprocess="false"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
-
-        <!-- ========== 兼容性配置（保留 Termux 原有适配） ========== -->
-        <meta-data
-            android:name="android.max_aspect"
-            android:value="10.0" />
-
-        <meta-data
-            android:name="com.samsung.android.keepalive.density"
-            android:value="true" />
-
-        <meta-data
-            android:name="com.samsung.android.multidisplay.keep_process_alive"
-            android:value="true" />
-
-        <meta-data
-            android:name="com.sec.android.support.multiwindow"
-            android:value="true" />
-    </application>
-
-    <!-- ========== 查询权限（AlinOs Shizuku 依赖） ========== -->
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-            <category android:name="android.intent.category.BROWSABLE" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE" />
-        </intent>
-        <package android:name="rikka.shizuku" />
-        <package android:name="moe.shizuku.privileged.api" />
-    </queries>
-
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" android:installLocation="internalOnly" android:sharedUserLabel="@string/shared_user_label">
+  <!-- ========== 权限整合（Termux + AlinOs 所有必要权限） ========== -->
+  <!-- Termux 核心权限 -->
+  <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+  <uses-feature android:name="android.software.leanback" android:required="false"/>
+  <permission android:name="${applicationId}.permission.RUN_COMMAND" android:description="@string/permission_run_command_description" android:icon="@mipmap/ic_launcher" android:label="@string/permission_run_command_label" android:protectionLevel="dangerous"/>
+  <permission android:name="${applicationId}.TERMUX_INTERNAL" android:label="@string/permission_termux_internal_label" android:description="@string/permission_termux_internal_description" android:icon="@mipmap/ic_launcher" android:protectionLevel="signature"/>
+  <!-- AlinOs 核心权限 + Termux 扩展权限 -->
+  <!-- 计算应用存储空间 -->
+  <uses-permission android:name="android.permission.GET_PACKAGE_SIZE"/>
+  <!-- 查看网络连接 -->
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <!-- 拥有完全的网络访问权限 -->
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <!-- ========== 存储权限（Android 8~15 全版本覆盖） ========== -->
+  <!-- 兼容Android8‑9老式存储 -->
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <!-- Android13+媒体文件访问 -->
+  <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+  <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+  <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+  <!-- Android11+全盘外置存储访问，核心，无动态申请API -->
+  <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage"/>
+  <!-- 防止手机休眠 -->
+  <uses-permission android:name="android.permission.WAKE_LOCK"/>
+  <!-- 控制振动 -->
+  <uses-permission android:name="android.permission.VIBRATE"/>
+  <!-- 运行前台服务 -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <!-- 请求忽略电池优化 -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+  <!-- 此应用可显示在其他应用上方 -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <!-- 读取系统日志 -->
+  <uses-permission android:name="android.permission.READ_LOGS"/>
+  <!-- 转存系统信息 -->
+  <uses-permission android:name="android.permission.DUMP"/>
+  <!-- 读写系统敏感设置 -->
+  <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"/>
+  <!-- 请求安装文件包 -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+  <!-- 读取短信 -->
+  <uses-permission android:name="android.permission.READ_SMS"/>
+  <!-- 挂载文件系统 -->
+  <uses-permission android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS"/>
+  <!-- 请求删除文件包 -->
+  <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
+  <!-- 读取联系人 -->
+  <uses-permission android:name="android.permission.READ_CONTACTS"/>
+  <!-- 允许应用收集应用使用统计信息 -->
+  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions"/>
+  <!-- 拍摄照片和视频 -->
+  <uses-permission android:name="android.permission.CAMERA"/>
+  <!-- 使用闪光灯 -->
+  <uses-permission android:name="android.permission.FLASHLIGHT"/>
+  <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+  <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
+  <!-- 显示通知 -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <queries>
+    <package android:name="com.termux"/>
+  </queries>
+  <!-- 使用指纹硬件 -->
+  <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
+  <!-- 使用生物特征硬件 -->
+  <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+  <!-- 读取手机状态和身份 -->
+  <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+  <!-- 查看WLAN连接 -->
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+  <!-- 连接WLAN网络和断开连接 -->
+  <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+  <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
+  <!-- AlinOs 专属权限 -->
+  <uses-permission android:name="android.permission.READ_FRAME_BUFFER"/>
+  <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <uses-permission android:name="android.permission.USE_TTS_SERVICE"/>
+  <application android:allowBackup="true" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:roundIcon="@mipmap/ic_launcher_round" android:supportsRtl="false" android:theme="@style/Theme.AppCompat.Light.DarkActionBar" android:extractNativeLibs="true" android:requestLegacyExternalStorage="true" android:usesCleartextTraffic="true" tools:targetApi="36">
+    <!-- ========== AlinOs 核心页面（设为唯一启动页） ========== -->
+    <activity android:name="alin.android.alinos.ChatActivity" android:launchMode="singleTask" android:exported="true" android:windowSoftInputMode="adjustResize|stateHidden" android:theme="@style/ChatActivityTheme">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+    <!-- AlinOs 其他页面（均设为非导出） -->
+    <activity android:name="alin.android.alinos.AiConfigActivity" android:exported="false"/>
+    <activity android:name="alin.android.alinos.AiConfigEditActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
+    <activity android:name="alin.android.alinos.SettingsActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+    <activity android:name="alin.android.alinos.McpServerActivity" android:exported="false"/>
+    <activity android:name="alin.android.alinos.dev.DevToolsActivity" android:exported="true" android:windowSoftInputMode="adjustResize|stateHidden"/>
+    <activity android:name="alin.android.alinos.dev.LocalShellTestActivity" android:exported="true" android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|keyboard|keyboardHidden|navigation" android:label="@string/application_name" android:launchMode="singleTask" android:resizeableActivity="true" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.TermuxActivity.DayNight.NoActionBar" tools:targetApi="n"/>
+    <activity android:name="alin.android.alinos.dev.SshTestActivity" android:exported="true" android:theme="@style/Theme.AppCompat.Light.NoActionBar" android:windowSoftInputMode="adjustResize|stateHidden"/>
+    <activity android:name="alin.android.alinos.dev.ProotContainerTestActivity" android:exported="true" android:theme="@style/Theme.AppCompat.Light.NoActionBar" android:windowSoftInputMode="adjustResize|stateHidden"/>
+    <!-- ========== 语音测试页 ========== -->
+    <activity android:name="alin.android.alinos.AsrTestActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+    <activity android:name="alin.android.alinos.TtsTestActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+    <activity android:name="alin.android.alinos.KwsTestActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+    <activity android:name="alin.android.alinos.AudioModelManagerActivity" android:exported="false" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+    <!-- TermuxActivity 已裁剪为 LocalShellTestActivity 的基类，不再作为独立入口 -->
+    <!-- shortcuts.xml 已随 TermuxActivity 一并移除 -->
+    <activity android:name="com.termux.shared.activities.ReportActivity" android:theme="@style/Theme.MarkdownViewActivity.DayNight" android:documentLaunchMode="intoExisting"/>
+    <!-- ========== Termux 提供者/接收器/服务 ========== -->
+    <receiver android:name="com.termux.app.event.SystemEventReceiver" android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED"/>
+      </intent-filter>
+    </receiver>
+    <receiver android:name="com.termux.shared.activities.ReportActivity$ReportActivityBroadcastReceiver" android:exported="false"/>
+    <!-- Termux 核心服务  用于提供localhost shell他的 pty终端能力-->
+    <service android:name="com.termux.app.TermuxService" android:foregroundServiceType="specialUse" android:exported="true" android:permission="${applicationId}.permission.TERMUX_INTERNAL">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="As a Linux environment Termux needs to ensure that running tasks are not killed or paused while the app is in the background.                 For example, a user might start a web server that serves HTML pages and then interact with that from the browser app while the Termux                 app is in the background. If the system were to interrupt or defer the Termux app while it is in the background the user                 experience would be negatively affected since the above described use case would be broken."/>
+    </service>
+    <!-- ========== AlinOs 核心服务 ========== -->
+    <service android:name="alin.android.alinos.localshell.LocalShellService" android:foregroundServiceType="specialUse" android:exported="false">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="LocalShell provides persistent PTY terminal sessions for shell command execution."/>
+    </service>
+    <!-- ========== MCP 工具服务（前台服务，常驻通知保活） ========== -->
+    <service android:name="alin.android.alinos.McpServerService" android:foregroundServiceType="specialUse" android:exported="true">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="MCP server bridges local device tools to MCP clients over HTTP, requiring persistent foreground operation."/>
+    </service>
+    <service android:name="alin.android.alinos.service.DeviceAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="false">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService"/>
+      </intent-filter>
+      <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config"/>
+    </service>
+    <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="${applicationId}.shizuku" android:multiprocess="false" android:enabled="true" android:exported="true" android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"/>
+    <!-- ========== 兼容性配置（保留 Termux 原有适配） ========== -->
+    <meta-data android:name="android.max_aspect" android:value="10.0"/>
+    <meta-data android:name="com.samsung.android.keepalive.density" android:value="true"/>
+    <meta-data android:name="com.samsung.android.multidisplay.keep_process_alive" android:value="true"/>
+    <meta-data android:name="com.sec.android.support.multiwindow" android:value="true"/>
+  </application>
+  <!-- ========== 查询权限（AlinOs Shizuku 依赖） ========== -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="https"/>
+      <category android:name="android.intent.category.BROWSABLE"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.TTS_SERVICE"/>
+    </intent>
+    <package android:name="rikka.shizuku"/>
+    <package android:name="moe.shizuku.privileged.api"/>
+  </queries>
 </manifest>

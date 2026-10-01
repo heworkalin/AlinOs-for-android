@@ -40,6 +40,7 @@ import alin.android.alinos.adapter.SshConfigAdapter;
 import alin.android.alinos.bean.SshConfigBean;
 import alin.android.alinos.db.SshDbHelper;
 import alin.android.alinos.localshell.LocalShellExecutor;
+import alin.android.alinos.localshell.SshExec;
 
 /**
  * SSH 配置管理界面。
@@ -812,20 +813,20 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
     private void doSshVerifyWithId(SshConfigBean config, String sid) {
         LocalShellExecutor exec = LocalShellExecutor.getInstance();
 
-        // 验证用 SSH 命令：ConnectTimeout 只约束握手阶段（不会打断密码交互）
-        String sshCmd = "ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "
+        // 验证用 SSH 命令：-t 强制分配伪终端；-p 放在 host 前（规范写法）
+        String sshCmd = "ssh -t -p " + config.getPort()
+                + " -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "
                 + "-o ServerAliveInterval=15 -o ServerAliveCountMax=3 "
-                + config.getUsername() + "@" + config.getHost()
-                + " -p " + config.getPort();
+                + config.getUsername() + "@" + config.getHost();
         // 正式连接命令：不带 ConnectTimeout（跨域/DNS 慢时握手可能超 5 秒，带上会误断）
         // 带保活参数：避免 app 切后台/息屏后被系统或中间设备断开会话
         //   ServerAliveInterval=15  每 15 秒发一次保活包
         //   ServerAliveCountMax=3   连续 3 次无响应才断开（容忍短暂卡顿）
         //   TCPKeepAlive=yes        启用 TCP 层保活
-        String realSshCmd = "ssh -o StrictHostKeyChecking=accept-new "
+        String realSshCmd = "ssh -t -p " + config.getPort()
+                + " -o StrictHostKeyChecking=accept-new "
                 + "-o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o TCPKeepAlive=yes "
-                + config.getUsername() + "@" + config.getHost()
-                + " -p " + config.getPort();
+                + config.getUsername() + "@" + config.getHost();
         String password = config.getPassword() != null ? config.getPassword() : "";
         boolean useKey = "key".equals(config.getAuthType());
         String keyContent = config.getKeyContent() != null ? config.getKeyContent() : "";
@@ -843,122 +844,12 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
             return;
         }
 
-        // 1. 创建会话
-        updateConnectingMessage("正在创建终端会话...");
-        exec.create_session(sid, "SSH验证");
-
-        // 密钥模式：先加载私钥到 ssh-agent（有密码则先解密），之后 ssh 无需密码
-        if (useKey) {
-            updateConnectingMessage("正在加载私钥...");
-            String err = loadKeyToAgent(exec, sid, config, keyPassphrase);
-            if (err != null) {
-                exec.destroy_session(sid);
-                dismissConnectingDialog();
-                final String msg = err;
-                runOnUiThread(() -> showKeyErrorDialog(config, msg));
-                return;
-            }
-        }
-
-        // 2. 启动 SSH 并轮询等待关键提示（密码提示/主机密钥/错误/退出），最多 8 秒
-        updateConnectingMessage("正在连接 " + config.getHost() + ":" + config.getPort() + " ...");
-        String output = sshConnectAndWait(exec, sid, sshCmd, 8000);
-
-        // 3a. 主机密钥冲突 → 清理后重试
-        // 注意：默认端口 22 时 known_hosts 存的是纯 host（不带端口）；非标准端口才是 [host]:port
-        if (output.contains("WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED")
-                || output.contains("Host key verification failed")
-                || output.contains("has changed and you have requested strict checking")) {
-            updateConnectingMessage("检测到主机密钥变更，正在清理...");
-            exec.shell_send_key(sid, "CTRL_C");
-            sleep(400);
-            // 两种格式都清：带端口的 [host]:port 与纯 host
-            exec.shell_exec(sid, "ssh-keygen -R \"[" + config.getHost() + "]:" + config.getPort()
-                    + "\" >/dev/null 2>&1 ; ssh-keygen -R \"" + config.getHost() + "\" >/dev/null 2>&1"
-                    + " ; echo HOSTKEY_CLEANED", 1200);
-            sleep(300);
-            output = sshConnectAndWait(exec, sid, sshCmd, 8000);
-        }
-
-        // 3b. 首次连接 → yes
-        if (output.contains("continue connecting (yes/no")) {
-            updateConnectingMessage("首次连接，正在确认主机密钥...");
-            exec.shell_write(sid, "yes\r");
-            output = sshConnectAndWait(exec, sid, null, 6000);
-        }
-
-        // 3c. 输入密码（两次性的第一次：验证阶段）
-        // 密钥模式：若 agent 加载成功，SSH 不应再索要密码；若仍提示则说明密钥未生效
-        boolean passwordVerified = false;
-        if (output.contains("assword:")) {
-            if (useKey) {
-                // 密钥已加载但仍要求密码 → 认证失败
-                exec.shell_send_key(sid, "CTRL_C");
-                exec.destroy_session(sid);
-                dismissConnectingDialog();
-                runOnUiThread(() -> showKeyErrorDialog(config, "私钥认证失败：服务器仍要求密码，请检查私钥是否与服务器 authorized_keys 匹配"));
-                return;
-            }
-            updateConnectingMessage("正在验证密码...");
-            int beforeCount = countKeyword(output, "assword:");
-            exec.shell_write(sid, password + "\r");
-
-            // 轮询等待验证结果（最多 5 秒）：密码正确进入 shell 或再次提示密码
-            long pwdStart = System.currentTimeMillis();
-            while (System.currentTimeMillis() - pwdStart < 5000) {
-                sleep(600);
-                output = execResult(exec.shell_read(sid, "all", 100, false, false, false));
-                if (countKeyword(output, "assword:") > beforeCount
-                        || output.contains("Permission denied")
-                        || output.contains("try again")
-                        || output.contains("SSH_EXIT_CODE:")) {
-                    break;
-                }
-            }
-
-            int afterCount = countKeyword(output, "assword:");
-            if (afterCount > beforeCount
-                    || output.contains("Permission denied")
-                    || output.contains("try again")) {
-                exec.shell_send_key(sid, "CTRL_C");
-                exec.destroy_session(sid);
-                dismissConnectingDialog();
-                runOnUiThread(() -> Toast.makeText(this, "密码可能存在错误，需修改配置", Toast.LENGTH_SHORT).show());
-                return;
-            }
-            passwordVerified = true;
-        }
-
-        // 3c-2. 密钥模式：无密码提示即视为公钥认证成功（加载 agent 后无需交互）
-        if (useKey && !passwordVerified
-                && !output.contains("Permission denied")
-                && !output.contains("Connection refused")
-                && !output.contains("Connection timed out")) {
-            passwordVerified = true;
-        }
-
-        // 3d. 检查 SSH 返回值（仅在密码未验证通过时判断）
-        // 密码已验证通过后，SSH 退出/被 timeout 强杀的返回值（124/130/137 等）不代表连接失败，
-        // 必须跳过，否则会把成功的连接误判为失败。
-        String exitCodeMatch = null;
-        int idx = output.indexOf("SSH_EXIT_CODE:");
-        if (idx != -1) {
-            exitCodeMatch = output.substring(idx + "SSH_EXIT_CODE:".length()).trim();
-        }
-
-        if (!passwordVerified && exitCodeMatch != null && !"0".equals(exitCodeMatch)) {
-            exec.destroy_session(sid);
+        // 1. 非 PTY 验证（JSch）：直接拿到认证结果，不再靠 PTY 猜提示符
+        updateConnectingMessage("正在验证连接 " + config.getHost() + ":" + config.getPort() + " ...");
+        SshExec.Result verifyResult = SshExec.verify(this, config, 10000);
+        if (!verifyResult.ok) {
             dismissConnectingDialog();
-            final String displayMsg;
-            if ("124".equals(exitCodeMatch)) {
-                displayMsg = "连接超时：主机不可达或 DNS 解析过慢，请检查网络环境";
-            } else if ("255".equals(exitCodeMatch)) {
-                displayMsg = "连接失败：目标主机拒绝连接或端口未开放";
-            } else if ("1".equals(exitCodeMatch)) {
-                displayMsg = "认证失败：用户名/密码错误";
-            } else {
-                displayMsg = "连接失败，SSH 返回码 " + exitCodeMatch;
-            }
+            final String displayMsg = verifyResult.message;
             runOnUiThread(() -> {
                 Toast.makeText(this, displayMsg, Toast.LENGTH_LONG).show();
                 if ("local_termux".equals(config.getConfigType())) {
@@ -967,20 +858,9 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
             });
             return;
         }
-        
-        // 3e. 兼容旧关键词判断（仅密码未验证通过时；避免历史输出误伤）
-        if (!passwordVerified
-                && (output.contains("Connection refused") || output.contains("Connection timed out"))) {
-            exec.destroy_session(sid);
-            dismissConnectingDialog();
-            runOnUiThread(() -> {
-                Toast.makeText(this, "连接失败，端口未开放或服务未启动", Toast.LENGTH_SHORT).show();
-                if ("local_termux".equals(config.getConfigType())) {
-                    showInstallHelpDialog(password);
-                }
-            });
-            return;
-        }
+
+        String output = "";
+
         // 4. 验证成功 → 销毁临时验证会话，重建干净的 SSH 连接会话
         // 目的：清除验证过程中的 "yes/no"、密码提示等残留输出，给用户一个干净的终端
         // （LocalShellService 已修复：removeTermuxSession 不再 stopSelf，服务不会崩溃）

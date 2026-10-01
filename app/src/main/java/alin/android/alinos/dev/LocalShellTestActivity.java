@@ -15,6 +15,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Looper;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.Gravity;
@@ -683,7 +684,14 @@ public class LocalShellTestActivity extends AppCompatActivity implements Service
     public float getTerminalToolbarDefaultHeight() { return mTerminalToolbarDefaultHeight; }
     public boolean isTerminalViewSelected() { return getTerminalToolbarViewPager().getCurrentItem() == 0; }
     public boolean isTerminalToolbarTextInputViewSelected() { return getTerminalToolbarViewPager().getCurrentItem() == 1; }
-    public void termuxSessionListNotifyUpdated() { mTermuxSessionListViewController.notifyDataSetChanged(); }
+    public void termuxSessionListNotifyUpdated() {
+        // 防御：adapter 的数据是真实列表，任何非主线程调用都必须回主线程。
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            mTermuxSessionListViewController.notifyDataSetChanged();
+        } else {
+            runOnUiThread(() -> mTermuxSessionListViewController.notifyDataSetChanged());
+        }
+    }
     public boolean isVisible() { return mIsVisible; }
     public boolean isOnResumeAfterOnCreate() { return mIsOnResumeAfterOnCreate; }
     public boolean isActivityRecreated() { return mIsActivityRecreated; }

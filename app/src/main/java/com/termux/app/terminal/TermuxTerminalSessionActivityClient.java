@@ -168,6 +168,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Do NOT auto-remove permanent sessions — they must be closed manually from
         // TermuxShellTestActivity
         if (termuxSession != null && termuxSession.getExecutionCommand().isPermanent) {
+            // 进程已退出但会话保留：刷新列表，让已结束会话显示删除线/颜色。
+            // 原版非 permanent 分支靠 removeFinishedSession → remove → notify 实现刷新，
+            // 这里 permanent 直接 return 会跳过刷新，删除线因此不出现。
+            termuxSessionListNotifyUpdated();
             return;
         }
 

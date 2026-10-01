@@ -1,5 +1,6 @@
 package alin.android.alinos.dev;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -11,6 +12,8 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
+
+import alin.android.alinos.proot.ProotContainerManager;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -125,6 +128,18 @@ public class ProotContainerTestActivity extends AppCompatActivity {
     private Button btnAll;
     private Button btnInit;
     private Button btnStart;
+    private Button btnRepair;
+    private Button btnMirror;
+
+    /** 下载源（arm64/arm 走 ubuntu-ports）。 */
+    private static final String[][] APT_MIRRORS = {
+            {"官方源 (ports.ubuntu.com)", "http://ports.ubuntu.com/ubuntu-ports"},
+            {"中科大 (USTC)", "https://mirrors.ustc.edu.cn/ubuntu-ports"},
+            {"清华 (TUNA)", "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"},
+            {"阿里云", "https://mirrors.aliyun.com/ubuntu-ports"},
+            {"华为云", "https://mirrors.huaweicloud.com/ubuntu-ports"},
+            {"BFSU", "https://mirrors.bfsu.edu.cn/ubuntu-ports"},
+    };
 
     private volatile boolean busy = false;
 
@@ -147,6 +162,8 @@ public class ProotContainerTestActivity extends AppCompatActivity {
         btnAll = findViewById(R.id.btn_all);
         btnInit = findViewById(R.id.btn_init);
         btnStart = findViewById(R.id.btn_start);
+        btnRepair = findViewById(R.id.btn_repair);
+        btnMirror = findViewById(R.id.btn_mirror);
 
         tvLog.setTextIsSelectable(true);
 
@@ -175,6 +192,8 @@ public class ProotContainerTestActivity extends AppCompatActivity {
         }));
         btnInit.setOnClickListener(v -> runAsync("初始化", this::initContainerTask));
         btnStart.setOnClickListener(v -> runAsync("启动", this::startProotTask));
+        btnRepair.setOnClickListener(v -> runAsync("启动修复", this::runRepairTask));
+        btnMirror.setOnClickListener(v -> showMirrorDialog());
 
         log("就绪：Ubuntu 24.04 (noble) / " + arch);
         log("共 " + MIRRORS.length + " 个镜像源，默认自动依次尝试");
@@ -500,8 +519,8 @@ public class ProotContainerTestActivity extends AppCompatActivity {
         // 旧版 proot 的 loader 在私有目录 libexec/proot/loader，作为回退。
         File loader = new File(nativeDir, "libproot-loader.so");
         if (!loader.exists()) loader = new File(prefix, "libexec/proot/loader");
-        File tmp = new File(getCacheDir(), "proot_tmp");
-        File l2s = new File(getCacheDir(), "proot_l2s");
+        File tmp = alin.android.alinos.proot.ProotContainerManager.tmpDir(this);
+        File l2s = alin.android.alinos.proot.ProotContainerManager.l2sDir(this);
         tmp.mkdirs();
         l2s.mkdirs();
 
@@ -522,16 +541,25 @@ public class ProotContainerTestActivity extends AppCompatActivity {
        
 
         java.util.List<String> env = new java.util.ArrayList<>();
-        env.add("PROOT_TMP_DIR=" + tmp.getAbsolutePath());
-        env.add("PROOT_L2S_DIR=" + l2s.getAbsolutePath());
+        env.add("PROOT_TMP_DIR=" + alin.android.alinos.proot.ProotContainerManager.canonicalPath(tmp));
+        env.add("PROOT_L2S_DIR=" + alin.android.alinos.proot.ProotContainerManager.canonicalPath(l2s));
         if (loader.exists()) env.add("PROOT_LOADER=" + loader.getAbsolutePath());
 
         log("proot 命令: " + cmd);
+        log("proot 环境: " + env);
         try {
-            Process p = Runtime.getRuntime().exec(
-                    cmd.toArray(new String[0]),
-                    env.toArray(new String[0]),
-                    dest);
+            // 关键：用 ProcessBuilder.environment() 叠加，而不是 Runtime.exec 的 envp。
+            // Runtime.exec(cmd, envp, dir) 的 envp 会“替换整个环境”，proot 拿不到
+            // 父进程环境时会退回它自己的默认（缓存）路径；这里只覆盖 PROOT_*。
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.directory(dest);
+            for (String e : env) {
+                int eq = e.indexOf('=');
+                if (eq > 0) pb.environment().put(e.substring(0, eq), e.substring(eq + 1));
+            }
+            log("实际环境 PROOT_L2S_DIR=" + pb.environment().get("PROOT_L2S_DIR")
+                    + " PROOT_TMP_DIR=" + pb.environment().get("PROOT_TMP_DIR"));
+            Process p = pb.start();
 
             final StringBuilder out = new StringBuilder();
             Thread tOut = new Thread(() -> drain(p.getInputStream(), out));
@@ -609,6 +637,9 @@ public class ProotContainerTestActivity extends AppCompatActivity {
         // 5. 伪造 /proc
         unpackProotProc(rootfs);
         log("初始化完成 ✓");
+
+        // 5.1 首次部署自动执行启动修复（参考 tmoe 首次安装修复流程）
+        runRepairTask();
     }
 
     /** 把 assets 里的 proot_proc.tar.xz 解包到 rootfs，并补上从宿主 /proc 读到的动态数据。 */
@@ -686,6 +717,78 @@ public class ProotContainerTestActivity extends AppCompatActivity {
     // 启动容器（proot）
     // ---------------------------------------------------------------------
 
+    /**
+     * 启动修复：对齐 tmoe 首次安装末尾的修复流程。
+     *
+     * <p>成因：rootfs 用 {@code proot --link2symlink} 解压，硬链接被降级为符号链接，
+     * dpkg 之后安装同组链接（如 perl 的 /usr/bin/perlbug）会报
+     * "error setting ownership ... No such file or directory"。
+     * tmoe 的对策：eatmydata 禁用 fsync + 重装 perl-base/perl + dpkg --configure -a。
+     */
+    private void runRepairTask() {
+        log("=== 启动修复（eatmydata + perl 重装 + dpkg --configure -a）===");
+        if (!ProotContainerManager.isReady(this)) {
+            log("容器未就绪，跳过修复");
+            return;
+        }
+        String script = ""
+                + "set +e\n"
+                + "echo REPAIR_START\n"
+                + "apt-get update 2>&1 | tail -6\n"
+                + "DEBIAN_FRONTEND=noninteractive apt-get install -y eatmydata 2>&1 | tail -6\n"
+                + "if command -v eatmydata >/dev/null 2>&1; then APT='eatmydata apt-get'; else APT='apt-get'; fi\n"
+                + "echo APT=$APT\n"
+                + "$APT install --reinstall -y perl-base 2>&1 | tail -6\n"
+                + "for i in perlbug unzip pigz; do "
+                + "if [ -L /usr/bin/$i ]; then echo \"symlink: /usr/bin/$i\"; "
+                + "$APT install --reinstall -y perl 2>&1 | tail -6; break; fi; done\n"
+                + "dpkg --configure -a 2>&1 | tail -6\n"
+                + "echo REPAIR_DONE\n";
+        ProotContainerManager.Result r = ProotContainerManager.exec(this, script, 900000L);
+        if (!r.stdout.isEmpty()) log(r.stdout.trim());
+        if (!r.stderr.isEmpty()) log(r.stderr.trim());
+        log("启动修复结束，exit=" + r.exitCode);
+    }
+
+    /** 弹出下载源选择，选定后写入容器 /etc/apt/sources.list。 */
+    private void showMirrorDialog() {
+        String[] names = new String[APT_MIRRORS.length];
+        for (int i = 0; i < APT_MIRRORS.length; i++) names[i] = APT_MIRRORS[i][0];
+        new AlertDialog.Builder(this)
+                .setTitle("切换下载源")
+                .setItems(names, (d, which) -> {
+                    String url = APT_MIRRORS[which][1];
+                    runAsync("切换下载源", () -> switchMirrorTask(url));
+                })
+                .show();
+    }
+
+    private void switchMirrorTask(String baseUrl) {
+        log("=== 切换下载源: " + baseUrl + " ===");
+        if (!ProotContainerManager.isReady(this)) {
+            log("容器未就绪，跳过");
+            return;
+        }
+        String script = ""
+                + "set +e\n"
+                + "CODENAME=$(grep VERSION_CODENAME /etc/os-release | cut -d= -f2)\n"
+                + "echo CODENAME=$CODENAME\n"
+                + "[ -f /etc/apt/sources.list ] && cp -f /etc/apt/sources.list /etc/apt/sources.list.bak\n"
+                + "cat > /etc/apt/sources.list <<EOF\n"
+                + "deb " + baseUrl + " $CODENAME main restricted universe multiverse\n"
+                + "deb " + baseUrl + " $CODENAME-updates main restricted universe multiverse\n"
+                + "deb " + baseUrl + " $CODENAME-backports main restricted universe multiverse\n"
+                + "deb " + baseUrl + " $CODENAME-security main restricted universe multiverse\n"
+                + "EOF\n"
+                + "cat /etc/apt/sources.list\n"
+                + "apt-get update 2>&1 | tail -10\n"
+                + "echo MIRROR_DONE\n";
+        ProotContainerManager.Result r = ProotContainerManager.exec(this, script, 180000L);
+        if (!r.stdout.isEmpty()) log(r.stdout.trim());
+        if (!r.stderr.isEmpty()) log(r.stderr.trim());
+        log("源切换完成，exit=" + r.exitCode);
+    }
+
     /** 拼接 proot 启动命令并执行一次测试命令（/proc 默认走伪造）。 */
     private void startProotTask() {
         File rootfs = containerDir();
@@ -696,8 +799,8 @@ public class ProotContainerTestActivity extends AppCompatActivity {
         File nativeDir = new File(getApplicationInfo().nativeLibraryDir);
         File proot = new File(nativeDir, "libproot.so");
         File loader = new File(nativeDir, "libproot-loader.so");
-        File tmp = new File(getCacheDir(), "proot_tmp");
-        File l2s = new File(getCacheDir(), "proot_l2s");
+        File tmp = alin.android.alinos.proot.ProotContainerManager.tmpDir(this);
+        File l2s = alin.android.alinos.proot.ProotContainerManager.l2sDir(this);
         tmp.mkdirs();
         l2s.mkdirs();
 
@@ -748,8 +851,8 @@ public class ProotContainerTestActivity extends AppCompatActivity {
 
         List<String> env = new ArrayList<>();
         if (loader.exists()) env.add("PROOT_LOADER=" + loader.getAbsolutePath());
-        env.add("PROOT_TMP_DIR=" + tmp.getAbsolutePath());
-        env.add("PROOT_L2S_DIR=" + l2s.getAbsolutePath());
+        env.add("PROOT_TMP_DIR=" + alin.android.alinos.proot.ProotContainerManager.canonicalPath(tmp));
+        env.add("PROOT_L2S_DIR=" + alin.android.alinos.proot.ProotContainerManager.canonicalPath(l2s));
 
         log("启动命令: " + cmd);
         try {
@@ -802,11 +905,33 @@ public class ProotContainerTestActivity extends AppCompatActivity {
             log("libtar.so 不存在: " + libTar);
             return;
         }
+        // 回退分支也必须走 proot --link2symlink + 持久 l2s/tmp：
+        // 否则硬链接只能靠 repairHardLinks 复制，且 proot 会落到默认缓存位置。
+        File nativeDir = new File(getApplicationInfo().nativeLibraryDir);
+        File proot = new File(nativeDir, "libproot.so");
+        File loader = new File(nativeDir, "libproot-loader.so");
+        File tmp = alin.android.alinos.proot.ProotContainerManager.tmpDir(this);
+        File l2s = alin.android.alinos.proot.ProotContainerManager.l2sDir(this);
+        tmp.mkdirs();
+        l2s.mkdirs();
+
+        List<String> cmd = new ArrayList<>();
+        if (proot.exists()) {
+            cmd.add(proot.getAbsolutePath());
+            cmd.add("--link2symlink");
+        }
+        cmd.add(libTar.getAbsolutePath());
+        cmd.add("-xJf");
+        cmd.add(archive.getAbsolutePath());
+        cmd.add("-C");
+        cmd.add(dest.getAbsolutePath());
+
         try {
-            ProcessBuilder pb = new ProcessBuilder(
-                    libTar.getAbsolutePath(),
-                    "-xJf", archive.getAbsolutePath(),
-                    "-C", dest.getAbsolutePath());
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.environment().put("PROOT_TMP_DIR", alin.android.alinos.proot.ProotContainerManager.canonicalPath(tmp));
+            pb.environment().put("PROOT_L2S_DIR", alin.android.alinos.proot.ProotContainerManager.canonicalPath(l2s));
+            if (loader.exists()) pb.environment().put("PROOT_LOADER", loader.getAbsolutePath());
+            log("回退解压命令: " + cmd);
             pb.redirectErrorStream(true);
             Process p = pb.start();
 

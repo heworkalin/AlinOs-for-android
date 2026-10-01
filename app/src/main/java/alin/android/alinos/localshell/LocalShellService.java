@@ -8,7 +8,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.wifi.WifiManager;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
 
@@ -42,9 +44,58 @@ public class LocalShellService extends TermuxService {
     private final LocalBinder mBinder = new LocalBinder();
     private com.termux.terminal.TerminalSessionClient mSessionClient;
 
+    /**
+     * 所有 {@link #mOwnSessions} 的变更都必须封送到主线程执行。
+     *
+     * <p>原因：{@code TermuxSessionsListViewController} 直接观察这个真实列表，
+     * 而 {@code LocalShellExecutor} 会从后台线程调用 create/remove。
+     * 若在后台线程改动列表或 notify，ListView 会在 layoutChildren 时抛
+     * {@code IllegalStateException: The content of the adapter has changed ...}。
+     */
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+
     // 保活锁：防止 app 切后台/息屏后 WiFi 休眠、CPU 深度睡眠导致 SSH 连接被断
     private PowerManager.WakeLock mWakeLock;
     private WifiManager.WifiLock mWifiLock;
+
+    /** 把 session 列表相关操作封送到主线程执行（已在主线程则直接执行）。 */
+    private <T> T runOnMainSync(java.util.concurrent.Callable<T> action) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            try {
+                return action.call();
+            } catch (RuntimeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+        final java.util.concurrent.atomic.AtomicReference<T> result =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.concurrent.atomic.AtomicReference<Throwable> error =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        mMainHandler.post(() -> {
+            try {
+                result.set(action.call());
+            } catch (Throwable t) {
+                error.set(t);
+            } finally {
+                latch.countDown();
+            }
+        });
+        boolean interrupted = false;
+        while (true) {
+            try {
+                latch.await();
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt();
+        if (error.get() != null) throw new RuntimeException(error.get());
+        return result.get();
+    }
 
     /** 确保服务处于前台模式（幂等）。
      * 场景：销毁旧会话后 stopForeground(false)，重建新会话时必须重新进入前台，
@@ -159,6 +210,7 @@ public class LocalShellService extends TermuxService {
             if (ts != null && ts.isRunning()) ts.finishIfRunning();
         }
         mOwnSessions.clear();
+        notifySessionList();   // 列表已清空，通知 adapter，避免残留 ListView 下次 layout 崩溃
         releaseKeepAliveLocks();
         stopForeground(true);
         // 不调 super.onDestroy() —— 父类的 killAllTermuxExecutionCommands() 会访问
@@ -213,7 +265,12 @@ public class LocalShellService extends TermuxService {
         return null;
     }
 
-    public synchronized int removeTermuxSession(TerminalSession ts) {
+    public int removeTermuxSession(TerminalSession ts) {
+        // 同样封送主线程：LocalShellExecutor.destroy_session 在后台调用。
+        return runOnMainSync(() -> removeTermuxSessionOnMain(ts));
+    }
+
+    private synchronized int removeTermuxSessionOnMain(TerminalSession ts) {
         int idx = getIndexOfSession(ts);
         if (idx >= 0) {
             mOwnSessions.get(idx).finish(); // triggers TermuxSessionClient which may remove from list
@@ -222,6 +279,8 @@ public class LocalShellService extends TermuxService {
             if (newIdx >= 0) mOwnSessions.remove(newIdx);
         }
         updateNotification();
+        // 关键：列表已变更，必须通知 ListView adapter（原版在 onTermuxSessionExited 里有这一步）
+        notifySessionList();
         // 不再有 session 时仅退出前台模式，不停止服务
         // （stopSelf 会导致正在进行的 SSH 连接中断和其他客户端黑屏）
         if (mOwnSessions.isEmpty()) {
@@ -232,9 +291,24 @@ public class LocalShellService extends TermuxService {
     }
 
     @Nullable
-    public synchronized TermuxSession createTermuxSession(String executablePath, String[] arguments,
-                                                           String stdin, String workingDirectory,
-                                                           boolean isFailSafe, String sessionName) {
+    public TermuxSession createTermuxSession(String executablePath, String[] arguments,
+                                             String stdin, String workingDirectory,
+                                             boolean isFailSafe, String sessionName) {
+        // 封送到主线程：后台线程（LocalShellExecutor.createViaService）会调用这里，
+        // 而 mOwnSessions 的变更与 adapter 通知必须在主线程。
+        final String fExecutablePath = executablePath;
+        final String[] fArguments = arguments;
+        final String fStdin = stdin;
+        final String fWorkingDirectory = workingDirectory;
+        final boolean fIsFailSafe = isFailSafe;
+        final String fSessionName = sessionName;
+        return runOnMainSync(() -> createTermuxSessionOnMain(
+                fExecutablePath, fArguments, fStdin, fWorkingDirectory, fIsFailSafe, fSessionName));
+    }
+
+    private synchronized TermuxSession createTermuxSessionOnMain(String executablePath, String[] arguments,
+                                                                 String stdin, String workingDirectory,
+                                                                 boolean isFailSafe, String sessionName) {
         String shellPath = executablePath != null ? executablePath : "/system/bin/sh";
         ExecutionCommand cmd = new ExecutionCommand(TermuxShellManager.getNextShellId(),
             shellPath, arguments, stdin, workingDirectory, Runner.TERMINAL_SESSION.getName(), isFailSafe);
@@ -248,17 +322,28 @@ public class LocalShellService extends TermuxService {
                     + ", exitCode=" + termuxSession.getTerminalSession().getExitStatus()
                     + ", running=" + termuxSession.getTerminalSession().isRunning());
                 updateNotification();
+                // 会话进程已结束但会话仍在列表：刷新 adapter，让 getView 打上删除线
+                notifySessionList();
             }, new LocalShellEnvironment(getApplicationContext()), null, false);
         if (session != null) {
             mOwnSessions.add(session);
             ensureForeground();        // 重新进入前台（之前可能因会话清空而 stopForeground）
             acquireKeepAliveLocks();   // 有会话时持有保活锁，防后台断连
             updateNotification();
-            // Notify session list
-            com.termux.app.terminal.TermuxTerminalSessionActivityClient activityClient = getTermuxTerminalSessionActivityClient();
-            if (activityClient != null) activityClient.termuxSessionListNotifyUpdated();
+            notifySessionList();       // 通知 ListView adapter
         }
         return session;
+    }
+
+    /** 通知侧边栏会话列表刷新（必须在主线程调用）。 */
+    private void notifySessionList() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mMainHandler.post(this::notifySessionList);
+            return;
+        }
+        com.termux.app.terminal.TermuxTerminalSessionActivityClient activityClient =
+                getTermuxTerminalSessionActivityClient();
+        if (activityClient != null) activityClient.termuxSessionListNotifyUpdated();
     }
 
     @Override
