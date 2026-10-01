@@ -24,6 +24,9 @@ public final class ProotFs {
     /** 单次读取的最大行数，防止把上下文撑爆。 */
     public static final int MAX_READ_LINES = 2000;
 
+    /** 单次读取的最大字节数（对齐 pi 的 50KB）。 */
+    public static final int MAX_READ_BYTES = 50 * 1024;
+
     private final ProotPathMapper mapper;
 
     public ProotFs(File rootfs) {
@@ -50,6 +53,8 @@ public final class ProotFs {
         public int totalLines;
         public int startLine;
         public boolean truncated;
+        /** 截断时的续读起始行（1 基）；未截断时为最后一行 + 1。 */
+        public int nextOffset;
     }
 
     /** 读取文本文件；offset 为起始行号（1 基），limit 为最多行数。
@@ -77,16 +82,33 @@ public final class ProotFs {
         }
 
         // 原始字节按行切分，保留行终止符：content 就是磁盘原始内容。
-        String raw = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+        byte[] rawBytes = Files.readAllBytes(f.toPath());
+        String raw = new String(rawBytes, StandardCharsets.UTF_8);
         List<String> segs = splitKeepEnds(raw);
         int total = segs.size();
         int start = Math.max(1, offset);
         int max = limit <= 0 ? MAX_READ_LINES : Math.min(limit, MAX_READ_LINES);
         int end = Math.min(total, start - 1 + max);
-        if (start > total) start = total + 1;
 
         StringBuilder sb = new StringBuilder();
-        for (int i = start; i <= end; i++) sb.append(segs.get(i - 1));
+        int bytes = 0;
+        int lastIncluded = start - 1;
+        boolean firstLineOverLimit = false;
+        for (int i = start; i <= end; i++) {
+            String seg = segs.get(i - 1);
+            int segBytes = seg.getBytes(StandardCharsets.UTF_8).length;
+            if (bytes + segBytes > MAX_READ_BYTES) {
+                if (bytes == 0) {
+                    sb.append(truncateUtf8(seg, MAX_READ_BYTES));
+                    lastIncluded = i;
+                    firstLineOverLimit = true;
+                }
+                break;
+            }
+            sb.append(seg);
+            bytes += segBytes;
+            lastIncluded = i;
+        }
 
         ReadResult out = new ReadResult();
         out.containerPath = r.containerPath;
@@ -94,15 +116,31 @@ public final class ProotFs {
         out.linkWarning = r.linkWarning();
         out.content = sb.toString();
         out.totalLines = total;
-        out.startLine = start;
-        out.truncated = end < total;
+        out.startLine = start > total ? total + 1 : start;
+        out.nextOffset = lastIncluded + 1;
+        out.truncated = lastIncluded < total;
         if (total == 0) {
             out.warning = "Note: this file is empty (0 bytes); there is no content to display.";
         } else if (sb.length() == 0) {
             out.warning = "Note: no content in the requested line range (the file has "
                     + total + " line(s)).";
+        } else if (firstLineOverLimit) {
+            out.warning = "Note: line " + start + " exceeds the " + MAX_READ_BYTES
+                    + "-byte read limit and was truncated.";
+        } else if (out.truncated) {
+            out.warning = "Note: output truncated at " + MAX_READ_BYTES
+                    + " bytes. Use offset=" + out.nextOffset + " to continue.";
         }
         return out;
+    }
+
+    /** 按 UTF-8 字符边界截断到至多 maxBytes。 */
+    private static String truncateUtf8(String s, int maxBytes) {
+        byte[] b = s.getBytes(StandardCharsets.UTF_8);
+        if (b.length <= maxBytes) return s;
+        int end = maxBytes;
+        while (end > 0 && (b[end] & 0xC0) == 0x80) end--;
+        return new String(b, 0, end, StandardCharsets.UTF_8);
     }
 
     /** 按 {@code \n} 切分并保留每段末尾的换行符（原始内容保真）。 */
@@ -151,8 +189,18 @@ public final class ProotFs {
         }
 
         byte[] data = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
-        try (FileOutputStream out = new FileOutputStream(f, append)) {
-            out.write(data);
+        try {
+            // 按文件串行化，避免并发写的读-改-写互相覆盖。
+            FileMutationQueue.run(f, () -> {
+                try (FileOutputStream out = new FileOutputStream(f, append)) {
+                    out.write(data);
+                }
+                return null;
+            });
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(String.valueOf(e.getMessage()), e);
         }
 
         WriteResult w = new WriteResult();
@@ -175,58 +223,31 @@ public final class ProotFs {
         public String linkWarning;
         public int replacements;
         public int newBytes;
+        public boolean usedFuzzyMatch;
+        public String diff;
+        public int firstChangedLine;
     }
 
     /**
-     * 精确文本替换。
+     * 单个编辑：语义与 {@link #editMany} 完全一致（精确优先，失败 fuzzy）。
      *
-     * @param replaceAll false 时要求 oldText 在文件中唯一出现，否则报错（避免误改）
+     * @param replaceAll false 时要求 oldText 唯一，否则报错；true 时替换全部出现
      */
     public EditResult edit(String path, String oldText, String newText, boolean replaceAll)
             throws IOException {
-        if (oldText == null || oldText.isEmpty()) {
-            throw new IOException("old_text must not be empty");
-        }
-        ProotPathMapper.Resolved r = mapper.resolve(path);
-        File f = r.hostFile;
-        if (!f.exists()) throw new IOException("file not found: " + r.containerPath);
-
-        String content = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
-        int first = content.indexOf(oldText);
-        if (first < 0) {
-            throw new IOException("old_text not found (it must match the file content exactly, "
-                    + "including indentation)");
-        }
-
-        int count = 0;
-        if (replaceAll) {
-            int idx = 0;
-            while ((idx = content.indexOf(oldText, idx)) >= 0) {
-                count++;
-                idx += oldText.length();
-            }
-        } else {
-            if (content.indexOf(oldText, first + oldText.length()) >= 0) {
-                throw new IOException("old_text occurs multiple times; provide a longer unique snippet, "
-                        + "or set replace_all=true");
-            }
-            count = 1;
-        }
-
-        String updated = replaceAll
-                ? content.replace(oldText, newText == null ? "" : newText)
-                : content.substring(0, first)
-                        + (newText == null ? "" : newText)
-                        + content.substring(first + oldText.length());
-
-        Files.write(f.toPath(), updated.getBytes(StandardCharsets.UTF_8));
+        List<String[]> edits = new ArrayList<>();
+        edits.add(new String[]{oldText, newText});
+        MultiEditResult m = editMany(path, edits, replaceAll);
 
         EditResult e = new EditResult();
-        e.containerPath = r.containerPath;
-        e.realContainerPath = r.realContainerPath;
-        e.linkWarning = r.linkWarning();
-        e.replacements = count;
-        e.newBytes = updated.getBytes(StandardCharsets.UTF_8).length;
+        e.containerPath = m.containerPath;
+        e.realContainerPath = m.realContainerPath;
+        e.linkWarning = m.linkWarning;
+        e.replacements = m.editCount;
+        e.newBytes = m.newBytes;
+        e.usedFuzzyMatch = m.usedFuzzyMatch;
+        e.diff = m.diff;
+        e.firstChangedLine = m.firstChangedLine;
         return e;
     }
 
@@ -384,11 +405,16 @@ public final class ProotFs {
         public String linkWarning;
         public int editCount;
         public int newBytes;
+        public boolean usedFuzzyMatch;
+        public String diff;
+        public int firstChangedLine;
     }
 
     /**
-     * 多编辑：每个 oldText 都相对<b>原始文件</b>匹配（与执行顺序无关），
-     * 必须唯一且互不重叠。
+     * 多编辑：每个 oldText 都相对<b>原始文件</b>匹配（与执行顺序无关）。
+     *
+     * <p>语义对齐 pi：精确匹配优先，失败回退 fuzzy 匹配；每个 oldText 必须唯一；
+     * BOM / 行尾在匹配前归一、写回时还原；替换后无变化则报错。
      *
      * @param edits 每项为 {oldText, newText}
      */
@@ -400,68 +426,51 @@ public final class ProotFs {
         ProotPathMapper.Resolved r = mapper.resolve(path);
         File f = r.hostFile;
         if (!f.exists()) throw new IOException("file not found: " + r.containerPath);
+        try {
+            return FileMutationQueue.run(f, () -> editManyLocked(r, f, edits, replaceAll));
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(String.valueOf(e.getMessage()), e);
+        }
+    }
 
-        String content = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+    private MultiEditResult editManyLocked(ProotPathMapper.Resolved r, File f,
+                                           List<String[]> edits, boolean replaceAll)
+            throws IOException {
+        String raw = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
 
-        List<int[]> spans = new ArrayList<>();
-        List<String> news = new ArrayList<>();
+        // BOM 在匹配前剥离，写回时恢复（模型不会把不可见 BOM 写进 oldText）。
+        String bom = "";
+        if (!raw.isEmpty() && raw.charAt(0) == '\uFEFF') {
+            bom = "\uFEFF";
+            raw = raw.substring(1);
+        }
+        String ending = EditEngine.detectLineEnding(raw);
+        String normalized = EditEngine.normalizeToLF(raw);
 
+        List<String[]> normEdits = new ArrayList<>();
         for (String[] e : edits) {
-            String oldText = e[0];
-            String newText = e[1] == null ? "" : e[1];
-            if (oldText == null || oldText.isEmpty()) {
-                throw new IOException("oldText must not be empty");
-            }
-            int first = content.indexOf(oldText);
-            if (first < 0) {
-                throw new IOException("oldText not found: " + preview(oldText));
-            }
-            if (replaceAll) {
-                int idx = 0;
-                while ((idx = content.indexOf(oldText, idx)) >= 0) {
-                    spans.add(new int[]{idx, idx + oldText.length()});
-                    news.add(newText);
-                    idx += oldText.length();
-                }
-            } else {
-                if (content.indexOf(oldText, first + oldText.length()) >= 0) {
-                    throw new IOException("oldText is not unique, provide a longer snippet: "
-                            + preview(oldText));
-                }
-                spans.add(new int[]{first, first + oldText.length()});
-                news.add(newText);
-            }
+            normEdits.add(new String[]{
+                    EditEngine.normalizeToLF(e[0]),
+                    EditEngine.normalizeToLF(e[1] == null ? "" : e[1])});
         }
 
-        // 排序并检查重叠
-        List<Integer> order = new ArrayList<>();
-        for (int i = 0; i < spans.size(); i++) order.add(i);
-        order.sort((a, b) -> Integer.compare(spans.get(a)[0], spans.get(b)[0]));
-        for (int i = 1; i < order.size(); i++) {
-            int[] prev = spans.get(order.get(i - 1));
-            int[] cur = spans.get(order.get(i));
-            if (cur[0] < prev[1]) {
-                throw new IOException("edits overlap; merge them into one edit");
-            }
-        }
+        EditEngine.Result res = EditEngine.apply(normalized, normEdits, r.containerPath, replaceAll);
 
-        // 从后往前替换，避免偏移
-        StringBuilder sb = new StringBuilder(content);
-        for (int i = order.size() - 1; i >= 0; i--) {
-            int idx = order.get(i);
-            int[] sp = spans.get(idx);
-            sb.replace(sp[0], sp[1], news.get(idx));
-        }
-
-        String updated = sb.toString();
-        Files.write(f.toPath(), updated.getBytes(StandardCharsets.UTF_8));
+        String finalContent = bom + EditEngine.restoreLineEndings(res.newContent, ending);
+        byte[] outBytes = finalContent.getBytes(StandardCharsets.UTF_8);
+        Files.write(f.toPath(), outBytes);
 
         MultiEditResult out = new MultiEditResult();
         out.containerPath = r.containerPath;
         out.realContainerPath = r.realContainerPath;
         out.linkWarning = r.linkWarning();
-        out.editCount = spans.size();
-        out.newBytes = updated.getBytes(StandardCharsets.UTF_8).length;
+        out.editCount = res.editCount;
+        out.newBytes = outBytes.length;
+        out.usedFuzzyMatch = res.usedFuzzyMatch;
+        out.diff = res.diff;
+        out.firstChangedLine = res.firstChangedLine;
         return out;
     }
 

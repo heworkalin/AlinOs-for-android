@@ -96,6 +96,7 @@ public class ContainerToolSet {
                     o.put("total_lines", r.totalLines);
                     o.put("start_line", r.startLine);
                     o.put("truncated", r.truncated);
+                    o.put("next_offset", r.nextOffset);
                     o.put("content", r.content);
                     return o;
                 });
@@ -103,7 +104,8 @@ public class ContainerToolSet {
 
     private static void registerWrite(Context ctx) {
         ToolRegistry.register("write",
-                "Create or overwrite files.",
+                "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. "
+                + "Automatically creates parent directories.",
                 ToolMeta.params(
                         ToolMeta.param("path", "string", true, "",
                                 "Path to the file to write (relative or absolute)"),
@@ -156,6 +158,9 @@ public class ContainerToolSet {
                     putLinkWarning(o, r.linkWarning);
                     o.put("edits_applied", r.editCount);
                     o.put("new_bytes", r.newBytes);
+                    o.put("used_fuzzy_match", r.usedFuzzyMatch);
+                    o.put("first_changed_line", r.firstChangedLine);
+                    o.put("diff", r.diff);
                     return o;
                 });
     }
