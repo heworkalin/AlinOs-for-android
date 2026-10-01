@@ -72,7 +72,9 @@ public class ContainerToolSet {
 
     private static void registerRead(Context ctx) {
         ToolRegistry.register("read",
-                "Read the contents of a file.",
+                "Read the contents of a file. Content is the raw file text (no line-number prefix). "
+                + "Reading a directory does not fail: it returns is_directory=true with a warning; "
+                + "use the ls tool to list directory contents.",
                 ToolMeta.params(
                         ToolMeta.param("path", "string", true, "",
                                 "Path to the file to read (relative or absolute)"),
@@ -90,6 +92,7 @@ public class ContainerToolSet {
                     o.put("real_path", r.realContainerPath);
                     putLinkWarning(o, r.linkWarning);
                     if (r.warning != null) o.put("warning", r.warning);
+                    o.put("is_directory", r.isDirectory);
                     o.put("total_lines", r.totalLines);
                     o.put("start_line", r.startLine);
                     o.put("truncated", r.truncated);

@@ -44,30 +44,49 @@ public final class ProotFs {
         public String linkWarning;
         /** 空内容/空行区间等提示，英文。 */
         public String warning;
+        /** true 表示路径是目录，不可作为文件读取。 */
+        public boolean isDirectory;
         public String content;
         public int totalLines;
         public int startLine;
         public boolean truncated;
     }
 
-    /** 读取文本文件；offset 为起始行号（1 基），limit 为最多行数。 */
+    /** 读取文本文件；offset 为起始行号（1 基），limit 为最多行数。
+     *
+     * <p>{@code content} 为磁盘原始内容（保留原行终止符，不加行号前缀）。
+     * 路径是目录时不抛异常，而是返回 {@code isDirectory=true} + 英文警告。 */
     public ReadResult read(String path, int offset, int limit) throws IOException {
         ProotPathMapper.Resolved r = mapper.resolve(path);
         File f = r.hostFile;
         if (!f.exists()) throw new IOException("file not found: " + r.containerPath);
-        if (f.isDirectory()) throw new IOException("is a directory, use proot_ls instead: " + r.containerPath);
 
-        List<String> lines = readLines(f);
-        int total = lines.size();
+        if (f.isDirectory()) {
+            ReadResult out = new ReadResult();
+            out.containerPath = r.containerPath;
+            out.realContainerPath = r.realContainerPath;
+            out.linkWarning = r.linkWarning();
+            out.isDirectory = true;
+            out.content = "";
+            out.totalLines = 0;
+            out.startLine = 1;
+            out.truncated = false;
+            out.warning = "Note: this path is a directory, not a file; it cannot be read as a file. "
+                    + "Use the ls tool to list its contents.";
+            return out;
+        }
+
+        // 原始字节按行切分，保留行终止符：content 就是磁盘原始内容。
+        String raw = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+        List<String> segs = splitKeepEnds(raw);
+        int total = segs.size();
         int start = Math.max(1, offset);
         int max = limit <= 0 ? MAX_READ_LINES : Math.min(limit, MAX_READ_LINES);
         int end = Math.min(total, start - 1 + max);
         if (start > total) start = total + 1;
 
         StringBuilder sb = new StringBuilder();
-        for (int i = start; i <= end; i++) {
-            sb.append(String.format("%6d\t%s%n", i, lines.get(i - 1)));
-        }
+        for (int i = start; i <= end; i++) sb.append(segs.get(i - 1));
 
         ReadResult out = new ReadResult();
         out.containerPath = r.containerPath;
@@ -84,6 +103,22 @@ public final class ProotFs {
                     + total + " line(s)).";
         }
         return out;
+    }
+
+    /** 按 {@code \n} 切分并保留每段末尾的换行符（原始内容保真）。 */
+    private static List<String> splitKeepEnds(String raw) {
+        List<String> segs = new ArrayList<>();
+        int i = 0, n = raw.length();
+        while (i < n) {
+            int j = raw.indexOf('\n', i);
+            if (j < 0) {
+                segs.add(raw.substring(i));
+                break;
+            }
+            segs.add(raw.substring(i, j + 1));
+            i = j + 1;
+        }
+        return segs;
     }
 
     // =====================================================================
