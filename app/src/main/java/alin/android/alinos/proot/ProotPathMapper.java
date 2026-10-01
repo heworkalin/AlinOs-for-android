@@ -107,7 +107,13 @@ public final class ProotPathMapper {
         String abs = toContainerAbsolute(input, cwd);
         String real = resolveSymlinks(abs);
         File host = hostFile(real);
-        return new Resolved(input, abs, real, host, !real.equals(abs));
+        boolean via = !real.equals(abs);
+        // proot --link2symlink 的伪硬链接：/tmp/x -> /.l2s/.l2s.x0001 -> ...0002。
+        // 这是 proot 内部的备份文件，不是用户可见的符号链接，不报 link_warning。
+        if (via && isProotL2sPath(real)) {
+            via = false;
+        }
+        return new Resolved(input, abs, real, host, via);
     }
 
     /** 解析出宿主文件（不保证存在）。 */
@@ -222,6 +228,18 @@ public final class ProotPathMapper {
         if (target.startsWith(abs + "/")) return target.substring(abs.length());
         if (target.startsWith(rootfsCanonical + "/")) return target.substring(rootfsCanonical.length());
         return target;
+    }
+
+    /**
+     * 判断容器路径是不是 proot 伪硬链接的内部备份文件（任一组件以 {@code .l2s.} 开头，
+     * 即 link2symlink 的 PREFIX）。这类路径对用户不可见，不应作为普通符号链接提示。
+     */
+    public static boolean isProotL2sPath(String containerPath) {
+        if (containerPath == null) return false;
+        for (String seg : containerPath.split("/")) {
+            if (seg.startsWith(".l2s.")) return true;
+        }
+        return false;
     }
 
     /** 把宿主文件转回容器内路径，供工具回显。 */
