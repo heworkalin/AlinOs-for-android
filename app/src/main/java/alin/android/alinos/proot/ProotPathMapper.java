@@ -40,9 +40,18 @@ public final class ProotPathMapper {
     public static final String DEFAULT_CWD = "/root";
 
     private final File rootfs;
+    /** rootfs 的规范化路径（/data/data/...）；proot 写链接目标时用的是这个形式。 */
+    private final String rootfsCanonical;
 
     public ProotPathMapper(File rootfs) {
         this.rootfs = rootfs;
+        String c = rootfs.getAbsolutePath();
+        try {
+            c = rootfs.getCanonicalPath();
+        } catch (Exception ignored) {
+            // 保底用绝对路径
+        }
+        this.rootfsCanonical = c;
     }
 
     public File rootfs() {
@@ -167,6 +176,13 @@ public final class ProotPathMapper {
                 if (!Files.isSymbolicLink(host.toPath())) continue;
 
                 String target = Files.readSymbolicLink(host.toPath()).toString();
+
+                // proot --link2symlink 写出的目标可能是「宿主绝对路径」，
+                // 例如 <rootfs>/.l2s/.l2s.x0001（伪硬链接的 backing file）。
+                // 必须先剥掉 rootfs 前缀转成容器路径，否则会被当成容器绝对
+                // 路径再拼一次 rootfs，导致 file not found。
+                target = hostTargetToContainer(target);
+
                 int slash = cur.lastIndexOf("/");
                 String base = slash > 0 ? cur.substring(0, slash) : "";
                 String resolved = target.startsWith("/")
@@ -189,6 +205,24 @@ public final class ProotPathMapper {
     // ---------------------------------------------------------------------
     // ③ 展示：容器内路径（绝不回显宿主路径）
     // ---------------------------------------------------------------------
+
+    /**
+     * 把符号链接目标里的「宿主绝对路径」转成容器可见形式（剥掉 rootfs 前缀）。
+     *
+     * <p>proot 的 {@code --link2symlink} 在 rootfs 内建伪硬链接时，链接目标写作
+     * 宿主绝对路径（如 {@code <rootfs>/.l2s/.l2s.xxx}）。直接当容器路径用会拼出
+     * 双重 rootfs；直接回显给 AI 又会泄露宿主路径。这里统一转换。
+     */
+    public String hostTargetToContainer(String target) {
+        if (target == null) return null;
+        String abs = rootfs.getAbsolutePath();
+        // proot 写链接目标用的是 canonical 路径（/data/data/...），
+        // 而 File 的绝对路径可能是 /data/user/0/...，两种都要比。
+        if (target.equals(abs) || target.equals(rootfsCanonical)) return "/";
+        if (target.startsWith(abs + "/")) return target.substring(abs.length());
+        if (target.startsWith(rootfsCanonical + "/")) return target.substring(rootfsCanonical.length());
+        return target;
+    }
 
     /** 把宿主文件转回容器内路径，供工具回显。 */
     public String toContainerPath(File hostFile) {

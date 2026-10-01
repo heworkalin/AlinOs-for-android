@@ -489,9 +489,11 @@ public final class ProotFs {
         return Files.readAllLines(f.toPath(), StandardCharsets.UTF_8);
     }
 
-    private static String readLinkQuietly(File f) {
+    private String readLinkQuietly(File f) {
         try {
-            return Files.readSymbolicLink(f.toPath()).toString();
+            // 剥掉 rootfs 前缀：proot 的伪硬链接目标是宿主绝对路径，
+            // 直接回显会把宿主路径泄露给 AI。
+            return mapper.hostTargetToContainer(Files.readSymbolicLink(f.toPath()).toString());
         } catch (Exception e) {
             return "?";
         }
