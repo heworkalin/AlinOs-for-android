@@ -40,8 +40,10 @@ AGENTS.md
 /.termux_pkgs/
 /.extract.*
 /.repack*
-/files.default.*.tar.gz.so
-/files.default.*.tar.gz.so.orig
+# ===== ABI 独立 rootfs 包（files.default.*.tar.gz.so）：不入 git =====
+# 由 App 打包/下载流程提供，仓库仅保留构建脚本；匹配任意层级
+files.default.*.tar.gz.so
+files.default.*.tar.gz.so.orig
 /ubuntu-noble_*.tar.xz
 /ubuntu-noble_*.tar.xz.sha256
 /run.log
