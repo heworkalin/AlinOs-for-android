@@ -277,6 +277,8 @@ public class ContainerToolSet {
         try {
             o.put("command", command);
             o.put("ok", r.ok());
+            // 兼容旧错误码：同时提供 status，供 DevTools / MCP 统一判定
+            o.put("status", r.ok() ? "success" : "error");
             o.put("exit_code", r.exitCode);
             o.put("timeout", r.timeout);
             o.put("stdout", clip(r.stdout));

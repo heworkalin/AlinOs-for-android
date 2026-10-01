@@ -248,7 +248,7 @@ public class LocalShellService extends TermuxService {
                     + ", exitCode=" + termuxSession.getTerminalSession().getExitStatus()
                     + ", running=" + termuxSession.getTerminalSession().isRunning());
                 updateNotification();
-            }, new LocalShellEnvironment(), null, false);
+            }, new LocalShellEnvironment(getApplicationContext()), null, false);
         if (session != null) {
             mOwnSessions.add(session);
             ensureForeground();        // 重新进入前台（之前可能因会话清空而 stopForeground）

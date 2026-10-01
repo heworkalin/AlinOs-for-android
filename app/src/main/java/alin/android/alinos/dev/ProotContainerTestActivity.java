@@ -638,10 +638,10 @@ public class ProotContainerTestActivity extends AppCompatActivity {
             log("解包伪造 /proc 异常: " + e);
         }
 
-        // 动态数据：从宿主 /proc 读出来写到 .tmoe-container.*（tmoe install 就是这么干的）
+        // 动态数据：version 等从宿主 /proc 读快照写入 .tmoe-container.*（tmoe install 就是这么干的）
         File procDir = new File(rootfs, "usr/local/etc/tmoe-linux/proot_proc");
         procDir.mkdirs();
-        String[] dynamic = {"stat", "version", "cpuinfo", "meminfo", "uptime", "loadavg", "mounts"};
+        String[] dynamic = {"version", "cpuinfo", "meminfo", "mounts"};
         int ok = 0;
         for (String name : dynamic) {
             File host = new File("/proc/" + name);
@@ -653,6 +653,10 @@ public class ProotContainerTestActivity extends AppCompatActivity {
             }
         }
         log("动态 /proc 数据生成 " + ok + "/" + dynamic.length + " 项");
+
+        // 时间信息（stat/uptime）不走静态快照：由 FakeProcMaintainer 动态维护
+        alin.android.alinos.proot.FakeProcMaintainer.get().ensure(rootfs);
+        log("已启动 /proc 时间维护（btime/uptime 动态生成）");
     }
 
     private static byte[] readAll(File f) throws Exception {
@@ -704,6 +708,10 @@ public class ProotContainerTestActivity extends AppCompatActivity {
         cmd.add("--kill-on-exit");
         cmd.add("--pwd=/root");
         cmd.add("--rootfs=" + rootfs.getAbsolutePath());
+
+        // 动态维护 /proc/uptime 与 /proc/stat（真实 btime + 持续推进的 uptime），
+        // 不绑定宿主 /proc/uptime、/proc/stat（hidepid 下 proot 会 Permission denied）。
+        alin.android.alinos.proot.FakeProcMaintainer.get().ensure(rootfs);
 
         // 伪造 /proc：把 proot_proc 里的每个文件挂到 /proc/<name>
         File procDir = new File(rootfs, "usr/local/etc/tmoe-linux/proot_proc");

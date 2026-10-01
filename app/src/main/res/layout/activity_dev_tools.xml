@@ -226,7 +226,16 @@
                     android:layout_height="42dp"
                     android:text="⟳ 重置"
                     android:textSize="14sp"
-                    android:backgroundTint="#9E9E9E" />
+                    android:backgroundTint="#9E9E9E"
+                    android:layout_marginEnd="6dp" />
+
+                <Button
+                    android:id="@+id/btn_proot_check"
+                    android:layout_width="wrap_content"
+                    android:layout_height="42dp"
+                    android:text="容器"
+                    android:textSize="14sp"
+                    android:backgroundTint="#3F51B5" />
             </LinearLayout>
 
             <!-- ── 状态行 ── -->

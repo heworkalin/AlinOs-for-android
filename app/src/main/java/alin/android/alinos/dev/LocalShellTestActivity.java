@@ -68,12 +68,15 @@ import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 import alin.android.alinos.R;
 import alin.android.alinos.localshell.LocalShellConstants;
+import alin.android.alinos.localshell.LocalShellEnvironment;
 import alin.android.alinos.localshell.LocalShellExecutor;
 import alin.android.alinos.localshell.LocalShellService;
+import alin.android.alinos.proot.ProotContainerManager;
 
 /**
  * 独立终端 Activity — 深度融合 TermuxActivity 的全部终端基础设施。
@@ -169,6 +172,7 @@ public class LocalShellTestActivity extends AppCompatActivity implements Service
         setTerminalToolbarView(savedInstanceState);
         setSettingsButtonView();
         setNewSessionButtonView();
+        setProotContainerButtonView();
         setToggleKeyboardView();
 
         registerForContextMenu(mTerminalView);
@@ -423,6 +427,62 @@ public class LocalShellTestActivity extends AppCompatActivity implements Service
                 -1, null, null);
             return true;
         });
+    }
+
+    /**
+     * 侧边栏「容器」按钮：直接把内部 proot 容器孵化成一个可交互终端会话。
+     *
+     * <p>用 {@link ProotContainerManager#interactiveCommand} 生成 proot argv，
+     * 以伪装成 libproot.so 的 proot 作为 executable 交给
+     * {@link LocalShellService#createTermuxSession}。进程级环境变量
+     * {@code PROOT_LOADER / PROOT_TMP_DIR / PROOT_L2S_DIR} 由
+     * {@link LocalShellEnvironment} 在 {@code ProotMod=true} 时注入。
+     */
+    private void setProotContainerButtonView() {
+        View btn = findViewById(R.id.proot_container_button);
+        if (btn == null) return;
+        btn.setOnClickListener(v -> spawnProotContainerSession());
+    }
+
+    private void spawnProotContainerSession() {
+        if (mTermuxService == null) {
+            showToast("Shell 服务未就绪，请稍候重试", false);
+            return;
+        }
+        if (!ProotContainerManager.isReady(this)) {
+            showToast("容器尚未部署：请先在 DevTools 里初始化容器", true);
+            return;
+        }
+        try {
+            LocalShellService svc = (LocalShellService) mTermuxService;
+
+            // 注入式孵化：只置位 ProotMod，createTermuxSession 内部会同步调用
+            // LocalShellEnvironment.setupShellCommandArguments，把 /bin/bash 包进
+            // proot 容器执行；创建完成后立即复位，不影响默认终端。
+            com.termux.shared.termux.shell.command.runner.terminal.TermuxSession session;
+            LocalShellEnvironment.ProotMod = true;
+            try {
+                session = svc.createTermuxSession(
+                        "/bin/bash", new String[]{"-l"}, null,
+                        LocalShellConstants.HOME_DIR_PATH, false, "proot-container");
+            } finally {
+                LocalShellEnvironment.ProotMod = false;
+            }
+
+            if (session == null) {
+                showToast("孵化容器会话失败", true);
+                return;
+            }
+            if (mTermuxTerminalSessionActivityClient != null) {
+                mTermuxTerminalSessionActivityClient.setCurrentSession(session.getTerminalSession());
+            }
+            DrawerLayout drawer = getDrawer();
+            if (drawer != null) drawer.closeDrawers();
+        } catch (Exception e) {
+            LocalShellEnvironment.ProotMod = false;
+            Logger.logStackTraceWithMessage(LOG_TAG, "spawnProotContainerSession failed", e);
+            showToast("孵化容器异常: " + e, true);
+        }
     }
 
     private void setToggleKeyboardView() {

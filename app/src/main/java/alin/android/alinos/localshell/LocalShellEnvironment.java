@@ -19,8 +19,19 @@ public class LocalShellEnvironment extends UnixShellEnvironment implements IShel
     // ProotMod flag, referenced by TermuxShellUtils for proot injection
     public static boolean ProotMod = false;
 
+    /**
+     * 供 {@link #setupShellCommandArguments} 使用（该方法没有 Context 参数）。
+     * 由 {@code LocalShellService.createTermuxSession} 构造时传入。
+     */
+    private final Context mContext;
+
     public LocalShellEnvironment() {
+        this(null);
+    }
+
+    public LocalShellEnvironment(Context context) {
         super();
+        this.mContext = context;
     }
 
     @NonNull
@@ -58,9 +69,41 @@ public class LocalShellEnvironment extends UnixShellEnvironment implements IShel
         environment.put("LD_LIBRARY_PATH", LocalShellConstants.LIB_DIR_PATH);
 
         // LD_PRELOAD for termux-exec if it exists
+        // 注意：Proot 模式下必须禁用！termux-exec 会把 /usr/bin/env 等路径改写成
+        // termux 前缀，而容器内不存在该路径，proot 会崩：
+        //   execve("/usr/bin/env"): No such file or directory
+        //   proot error: can't chmod '.../proot_tmp/proot-...'
         File termuxExec = new File(LocalShellConstants.TERMUX_EXEC_LD_PRELOAD_PATH);
-        if (termuxExec.exists()) {
+        if (!ProotMod && termuxExec.exists()) {
             environment.put("LD_PRELOAD", LocalShellConstants.TERMUX_EXEC_LD_PRELOAD_PATH);
+        } else {
+            environment.remove("LD_PRELOAD");
+        }
+
+        // Proot 模式：proot / proot-loader / tar 均伪装成 lib*.so 放在 nativeLibraryDir，
+        // 启动 proot 依赖这些进程级环境变量。
+        // 由 LocalShellTestActivity 孵化容器 session 时临时置 ProotMod=true。
+        if (ProotMod && context != null) {
+            String nativeDir = context.getApplicationInfo().nativeLibraryDir;
+
+            File loader = new File(nativeDir, "libproot-loader.so");
+            if (loader.exists()) {
+                environment.put("PROOT_LOADER", loader.getAbsolutePath());
+            }
+
+            File tmp = new File(context.getCacheDir(), "proot_tmp");
+            tmp.mkdirs();
+            environment.put("PROOT_TMP_DIR", tmp.getAbsolutePath());
+
+            File l2s = new File(context.getCacheDir(), "proot_l2s");
+            l2s.mkdirs();
+            environment.put("PROOT_L2S_DIR", l2s.getAbsolutePath());
+
+            // 容器内环境：统一从 ProotContainerManager.CONTAINER_ENV 引入，
+            // 单一数据源，避免两处维护不一致。
+            // 否则 PATH 还是宿主路径，login shell 的 /etc/profile 里连 `id` 都找不到，
+            // PATH 无法被修正，导致 ls/id/groups 全部 command not found。
+            alin.android.alinos.proot.ProotContainerManager.applyContainerEnv(environment);
         }
 
         return environment;
@@ -68,7 +111,14 @@ public class LocalShellEnvironment extends UnixShellEnvironment implements IShel
 
     @Override
     public String[] setupShellCommandArguments(String executable, String[] arguments) {
-        // Use the simple ShellUtils (no proot injection like TermuxShellUtils)
+        // Proot 模式：注入式启动（参考项目早期 termux-shared/TermuxShellUtils 的做法）。
+        // 只有点击「容器」按钮孵化成内部终端时才置 ProotMod=true；
+        // 默认终端（addNewSession）不注入。
+        if (ProotMod && mContext != null) {
+            return alin.android.alinos.proot.ProotContainerManager
+                    .wrapWithProot(mContext, executable, arguments);
+        }
+        // 普通本地环境：不注入 proot
         return com.termux.shared.shell.ShellUtils.setupShellCommandArguments(executable, arguments);
     }
 

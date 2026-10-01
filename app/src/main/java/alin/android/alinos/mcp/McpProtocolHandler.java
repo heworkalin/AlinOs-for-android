@@ -247,9 +247,10 @@ public class McpProtocolHandler {
         try {
             result.put("resultType", "complete");
 
-            // 业务异常（工具自身返回 status:error）与正常结果区分
+            // 业务异常（工具自身返回 status:error）与正常结果区分；兼容新错误码 ok:false
             boolean isError = "error".equals(execResult.optString("status", ""))
-                    || "failed".equals(execResult.optString("status", ""));
+                    || "failed".equals(execResult.optString("status", ""))
+                    || (execResult.has("ok") && !execResult.optBoolean("ok"));
             result.put("isError", isError);
 
             // 文本块：序列化 JSON（多行内容，客户端可直接阅读）

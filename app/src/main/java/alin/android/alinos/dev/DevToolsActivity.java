@@ -31,8 +31,10 @@ import java.util.Map;
 
 import alin.android.alinos.R;
 import alin.android.alinos.localshell.LocalShellExecutor;
+import alin.android.alinos.proot.ProotContainerManager;
 import alin.android.alinos.tools.ToolMeta;
 import alin.android.alinos.tools.ToolRegistry;
+
 /**
  * 通用工具测试界面。
  * 从 {@link ToolRegistry} 加载所有工具，支持表单/JSON 双模式输入，
@@ -51,7 +53,7 @@ public class DevToolsActivity extends AppCompatActivity {
     private TextView tvNoParams;
     private EditText etJsonEditor;
     private SwitchCompat switchMode;
-    private Button btnExecute, btnReset;
+    private Button btnExecute, btnReset, btnProotCheck;
     private TextView tvStatus, tvResult;
     private TextView tvViewRaw, tvViewPretty, tvViewFull;
     private ScrollView svResult;
@@ -69,6 +71,10 @@ public class DevToolsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dev_tools);
 
+        // 注册需要 Context 的工具（容器工具集 bash/read/write/edit/ls/grep/find）；
+        // 否则 ToolRegistry 只有静态注册的 TestToolSet / EnvironmentToolSet，
+        // 容器工具不会出现在测试列表里。
+        ToolRegistry.init(getApplicationContext());
         allTools = ToolRegistry.getAllTools();
         bindViews();
 
@@ -97,6 +103,7 @@ public class DevToolsActivity extends AppCompatActivity {
         switchMode = findViewById(R.id.switch_mode);
         btnExecute = findViewById(R.id.btn_execute);
         btnReset = findViewById(R.id.btn_reset);
+        btnProotCheck = findViewById(R.id.btn_proot_check);
         tvStatus = findViewById(R.id.tv_status);
         tvResult = findViewById(R.id.tv_result);
         tvViewRaw = findViewById(R.id.tv_view_raw);
@@ -506,6 +513,51 @@ public class DevToolsActivity extends AppCompatActivity {
     private void setupButtons() {
         btnExecute.setOnClickListener(v -> executeTool());
         btnReset.setOnClickListener(v -> resetForm());
+        btnProotCheck.setOnClickListener(v -> runProotCheck());
+    }
+
+    /**
+     * 容器自检：「容器」按钮直接调用 {@link ProotContainerManager}，在 proot 内跑
+     * uptime / stat.btime / ps，验证动态 /proc 时间伪造是否生效。
+     */
+    private void runProotCheck() {
+        tvStatus.setText("⏳ 容器自检...");
+        tvStatus.setTextColor(0xFF666666);
+        btnProotCheck.setEnabled(false);
+        new Thread(() -> {
+            JSONObject out = new JSONObject();
+            try {
+                if (!ProotContainerManager.isReady(this)) {
+                    out.put("status", "error");
+                    out.put("message", "容器未部署：请先执行下载 / 解压 / 初始化");
+                } else {
+                    String cmd = "echo '--- /proc/uptime ---'; cat /proc/uptime; "
+                            + "echo '--- btime ---'; grep btime /proc/stat; "
+                            + "echo '--- ps ---'; ps -ef | head -6; "
+                            + "echo '--- uptime ---'; uptime";
+                    ProotContainerManager.Result r =
+                            ProotContainerManager.exec(this, cmd, 20000L);
+                    out.put("status", r.ok() ? "success" : "error");
+                    out.put("exit_code", r.exitCode);
+                    out.put("stdout", r.stdout);
+                    out.put("stderr", r.stderr);
+                }
+            } catch (Exception e) {
+                try {
+                    out.put("status", "error");
+                    out.put("message", e.toString());
+                } catch (Exception ignored) {}
+            }
+            final JSONObject res = out;
+            runOnUiThread(() -> {
+                lastResult = res;
+                showResult(res);
+                boolean ok = "success".equals(res.optString("status"));
+                tvStatus.setText(ok ? "✔ 容器自检完成" : "✖ 容器自检失败");
+                tvStatus.setTextColor(ok ? 0xFF4CAF50 : 0xFFE53935);
+                btnProotCheck.setEnabled(true);
+            });
+        }, "proot-check").start();
     }
 
     private void executeTool() {
@@ -579,8 +631,16 @@ public class DevToolsActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     lastResult = finalResult;
                     showResult(finalResult);
-                    String status = finalResult.optString("status", "unknown");
-                    if ("success".equals(status)) {
+                    // 新旧错误码兼容判定：status（旧）/ ok（新）/ error 字段。
+                    boolean success;
+                    if (finalResult.has("status")) {
+                        success = "success".equals(finalResult.optString("status"));
+                    } else if (finalResult.has("ok")) {
+                        success = finalResult.optBoolean("ok");
+                    } else {
+                        success = !finalResult.has("error");
+                    }
+                    if (success) {
                         tvStatus.setText("✔ 执行成功 · 耗时 " + elapsed + "ms");
                         tvStatus.setTextColor(0xFF4CAF50);
                     } else {
