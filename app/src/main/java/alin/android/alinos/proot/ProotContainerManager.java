@@ -380,15 +380,26 @@ public final class ProotContainerManager {
         new File(profileD, "permanent").mkdirs();
 
         File script = new File(profileD, "001-alinos-login.sh");
-        // 不存在才写入；已存在则保持原样（不校验内容、不覆盖）。
-        if (script.exists()) return;
-        try (FileOutputStream out = new FileOutputStream(script)) {
-            out.write(LOGIN_SCRIPT.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            Log.w("ProotContainerManager", "write login script failed: " + e);
-            return;
+        // 内容一致才跳过；不一致就重写。旧版本写入的脚本如果不更新，
+        // 后来新增的加载逻辑（如 /etc/profile.d/permanent/*）永远不会生效。
+        byte[] wanted = LOGIN_SCRIPT.getBytes(StandardCharsets.UTF_8);
+        byte[] current = null;
+        if (script.exists()) {
+            try {
+                current = java.nio.file.Files.readAllBytes(script.toPath());
+            } catch (IOException ignored) {
+                // 读失败按“需要重写”处理
+            }
         }
-        script.setReadable(true, false);
+        if (current == null || !java.util.Arrays.equals(current, wanted)) {
+            try (FileOutputStream out = new FileOutputStream(script)) {
+                out.write(wanted);
+            } catch (IOException e) {
+                Log.w("ProotContainerManager", "write login script failed: " + e);
+                return;
+            }
+            script.setReadable(true, false);
+        }
     }
 
     /** 确保环境文件存在（不存在才写入默认内容，不覆盖用户改动）。 */
