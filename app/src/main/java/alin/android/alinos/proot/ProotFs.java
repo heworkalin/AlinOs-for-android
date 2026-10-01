@@ -42,6 +42,8 @@ public final class ProotFs {
         public String containerPath;
         public String realContainerPath;
         public String linkWarning;
+        /** 空内容/空行区间等提示，英文。 */
+        public String warning;
         public String content;
         public int totalLines;
         public int startLine;
@@ -75,6 +77,12 @@ public final class ProotFs {
         out.totalLines = total;
         out.startLine = start;
         out.truncated = end < total;
+        if (total == 0) {
+            out.warning = "Note: this file is empty (0 bytes); there is no content to display.";
+        } else if (sb.length() == 0) {
+            out.warning = "Note: no content in the requested line range (the file has "
+                    + total + " line(s)).";
+        }
         return out;
     }
 

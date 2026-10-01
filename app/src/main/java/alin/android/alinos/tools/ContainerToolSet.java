@@ -89,6 +89,7 @@ public class ContainerToolSet {
                     o.put("path", r.containerPath);
                     o.put("real_path", r.realContainerPath);
                     putLinkWarning(o, r.linkWarning);
+                    if (r.warning != null) o.put("warning", r.warning);
                     o.put("total_lines", r.totalLines);
                     o.put("start_line", r.startLine);
                     o.put("truncated", r.truncated);
