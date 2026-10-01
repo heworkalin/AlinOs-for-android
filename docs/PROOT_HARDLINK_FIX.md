@@ -155,3 +155,46 @@ touch /tmp/x && ln /tmp/x /tmp/y && chown 0:0 /tmp/y; echo "exit=$?"   # exit=0
 rm -f /tmp/x /tmp/y
 apt install -y perl
 ```
+
+## 补充：`ln` 普通符号链接导致 backing 名错乱
+
+现象（`z -> y`，`y` 是伪硬链接）：
+
+```sh
+ln z c
+ls -li
+# z -> y0001      ← z 的目标被改写
+# c -> y0001      ← 垃圾目标
+```
+
+**根因**：`move_and_symlink_path()` 在 `S_ISLNK(original)` 分支里，把
+`readlink(original)` 的结果当作 intermediate。对「普通用户符号链接」，
+链接目标（`y`）不是 PREFIX 开头，`first_link` 保持 1，随后
+
+```c
+sprintf(new_intermediate, "%s%04d", intermediate, 1);   // "y" + "0001" = "y0001"
+```
+
+就用链接目标名拼出了 backing，还 `l2s_rename()` 改写了原链接。
+
+**修复**：非伪造硬链接（目标不以 PREFIX 开头）的符号链接，必须像普通文件一样
+**用它自己的路径名**构造 intermediate。git diff 摘要：
+
+```diff
+ 	if (S_ISLNK(statl.st_mode)) {
+ 		size = my_readlink(original, intermediate);
+ 		...
+ 		if (strncmp(name, PREFIX, strlen(PREFIX)) == 0)
+ 			first_link = 0;
+-	} else {
+-		/* compute new name */
++	}
++
++	if (first_link) {
++		/* compute new name from the original path */
+ 		name = strrchr(original,'/');
+ 		...
+ 		strcat(intermediate, PREFIX);
+ 		strcat(intermediate, name);
+ 	}
+```
