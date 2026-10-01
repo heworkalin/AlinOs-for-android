@@ -106,8 +106,11 @@ bash、openssl、coreutils 等。
 
     打包形态：包体内只有软链接、无硬链接。
 
-    待办：libtar.so 静态编译流程尚未实现（需修改多个 termux-packages
-    包体才能完成静态链接），暂沿用既有产物。
+    待办：libtar.so（静态 GNU tar）构建流程尚未固化。
+    与 rootfs 同源，但不能用 scripts/rootfs/ 的流程（那是动态构建）；
+    要静态链接需 tar 及其依赖链（lzma/zstd/bzip2/iconv 等）全部静态编入，
+    而这些包在 termux-packages 中默认动态构建，当时**修改了多个包体**
+    才编译成功，改动面大，暂沿用既有四架构产物（已真机验证）。
 
   本环境由 Termux 官方 .deb 的内容经魔改裁剪合并而成（非官方发布的 bootstrap），
   并已内置 proot 虚拟化工具链（见下节）。

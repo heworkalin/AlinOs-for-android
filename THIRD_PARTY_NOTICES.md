@@ -111,8 +111,17 @@ bash / openssh
 （实测 arm64 包 `bin/` 下约 416 个命令）。这些同样是**引入的第三方资源**，
 归属见第三节与第七节——**不因“自动依赖”而免除记录义务**。
 
-**待办（尚未完成）**：`libtar.so` 的静态编译（需修改多个 termux-packages 包体
-才能完成静态链接），当前仍沿用既有产物。详见 `THIRD_PARTY_NOTICES.md` 备注。
+**待办（尚未完成，且短期不做）**：`libtar.so`（静态 GNU tar）的构建流程**尚未在仓库中固化**。
+
+- **同源但不同流程**：它与 rootfs 同源于 termux-packages，但**不能**用
+  `scripts/rootfs/` 的流程得到——rootfs 脚本只做“编译 + 打包”（依赖动态库，正常）。
+- **难点**：要产出**静态链接、零依赖**的 tar，需让 tar 及其依赖链
+  （liblzma / zstd / bzip2 / libiconv 等）全部以静态方式编入，
+  而这些包在 termux-packages 中默认都是动态构建，因此当时**修改了多个包体**
+  才编译成功，改动面大、难以在本次一并固化。
+- **当前策略**：暂沿用既有四架构产物（已真机验证可用），待后续
+  单独为“静态 libtar 构建”整理一份可复现流程再补入仓库。
+- 完成后需同步更新本节、`README.md` 与 `LICENSE`。
 
 ---
 
@@ -167,8 +176,10 @@ bash / openssh
   及其全部依赖（coreutils/curl/tar/gzip/sed/grep 等），实测 arm64 包约 416 个基础命令。
 - **构建方式**：本项目自行编译；构建脚本见 `scripts/rootfs/`，产物经路径重定位
   （`com.termux`→`alin.android.alinos`、`usr`→`default`）与硬链接→软链接转换后打包。
-- **待办**：`libtar.so` 静态编译流程尚未实现（需修改多个 termux-packages 包体），
-  暂沿用既有产物；完成后需同步更新本节与 `LICENSE`。
+- **待办**：`libtar.so`（静态 GNU tar）构建流程未固化——它与 rootfs 同源，
+  但不能用 `scripts/rootfs/` 得到（那是动态构建）；静态化需 tar 及其依赖链
+  （lzma/zstd/bzip2/iconv 等）全部静态编入，当时**修改了多个包体**才成功，
+  改动面大，暂沿用既有产物；待后续单独整理可复现流程。
 - GPLv3 传染（来自 termux-app）：**分发本项目必须提供完整源码且以 GPLv3 授权**；
   个人本地评估/不发行 stage 不触发对外分发义务，但源码开放存在于 Gitee/GitHub。
 - 保留上游版权与协议文本；协议仅作技术参考，不构成法律建议。

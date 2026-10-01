@@ -82,7 +82,12 @@ execution layer on self-compiled *proot* (Ubuntu 24.04 rootfs, 4 ABIs)**.
 
 - **`files.default.*.tar.gz.so` (4 ABIs)** — packages the Termux `$PREFIX` (`files/default/`): a **Termux rootfs** containing `bash` / `openssh` / coreutils / `curl` / `tar` / `gzip` / `sed` / `grep` etc., all sourced from **[termux/termux-packages](https://github.com/termux/termux-packages)**. It is **self-compiled by this project** via `scripts/rootfs/` (only `bash` + `openssh` are built explicitly; the dependency graph pulls in `termux-tools` and its whole dependency set), then path-relocated (`com.termux`→`alin.android.alinos`, `files/usr`→`files/default`) and repacked with all hard links converted to symlinks. See `scripts/rootfs/README.md`.
 - **`libproot.so` / `libproot-loader.so` (jniLibs, 4 ABIs)** — self-compiled static proot and loader, see “Prebuilt sources” below.
-- **`libtar.so` (jniLibs, 4 ABIs)** — a **statically compiled GNU tar** sharing the rootfs's origin: it exists simply as a zero-dependency extraction tool (the rootfs's `bin/tar` relies on the Termux dynamic-library environment) and is overlaid into `jniLibs` for the extraction flow to call directly. Unrelated to execution permissions.
+- **`libtar.so` (jniLibs, 4 ABIs)** — a **statically compiled GNU tar** (same upstream as the rootfs, but a
+  **different build flow**: statically linked, zero-dependency): it exists simply as a zero-dependency extraction
+  tool (the rootfs's `bin/tar` relies on the Termux dynamic-library environment) and is overlaid into `jniLibs`
+  for the extraction flow to call directly. Unrelated to execution permissions.
+  **TODO**: its static build flow is not yet codified (it required patching several package bodies); the
+  existing artifact is used for now.
 - `app/src/main/assets/proot_proc.tar.xz` — fake `/proc` data pack (from the `proot_proc` project).
 - `app/src/main/assets/models.json` — model & pricing registry (translated from pi's provider data).
 
@@ -180,8 +185,12 @@ mechanics, instead extracting the deb contents onto the target path before packi
 repo/APK it counts as an included upstream resource — attribution and license obligations do not change with
 the build method.
 
-> TODO: static compilation of `libtar.so` is not implemented yet (it requires modifying several
-> termux-packages package bodies); the existing artifact is used for now.
+> TODO (not planned short-term): the static build flow of `libtar.so` (static GNU tar) is **not codified**.
+> Same upstream as the rootfs, but it **cannot** be produced by `scripts/rootfs/` (that flow is dynamic).
+> Static linking requires tar and its whole dependency chain (lzma / zstd / bzip2 / iconv, etc.) to be built
+> statically, while those packages default to dynamic builds in termux-packages — several package bodies had to
+> be patched at the time, so the change surface is large. The existing 4-ABI artifact (verified on device) is
+> used for now.
 
 ### AI tools
 

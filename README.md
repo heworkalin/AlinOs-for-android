@@ -73,7 +73,9 @@
 
 - **`files.default.*.tar.gz.so`（四架构）** —— 打包内容为 Termux 的 `$PREFIX`（`files/default/` 即 Termux 的 `usr/`），也就是 **Termux bootstrap rootfs**：内含 `bash` / coreutils / `curl` / `ssh` / `apt` / `dpkg` / `tar` / `proot` / `unzip` 等，来源为 **[termux/termux-packages](https://github.com/termux/termux-packages)** 的构建产物与下载源；如需自建，可按其构建流程（Docker）编译对应包后重新打包。
 - **`libproot.so` / `libproot-loader.so`（jniLibs，四架构）** —— 自编译静态 proot 与 loader，见下方「预编译来源」。
-- **`libtar.so`（jniLibs，四架构）** —— 与 rootfs 同源的 **GNU tar 静态编译版**：只为一个零依赖的解压工具（rootfs 内的 `bin/tar` 依赖 Termux 动态库环境），叠加进 `jniLibs` 供解压流程直接调用；与执行权限无关。
+- **`libtar.so`（jniLibs，四架构）** —— **静态编译的 GNU tar**（与 rootfs 同源于 termux-packages，但**不同构建流程**：此为静态链接、零依赖）：
+  只为一个零依赖的解压工具（rootfs 内的 `bin/tar` 依赖 Termux 动态库环境），叠加进 `jniLibs` 供解压流程直接调用；与执行权限无关。
+  **待办**：其静态构建流程尚未固化（需修改多个包体），暂用既有产物。
 - `app/src/main/assets/proot_proc.tar.xz` —— 伪造 `/proc` 数据包（来自 `proot_proc` 项目）。
 - `app/src/main/assets/models.json` —— 模型与定价注册表（由 pi 的 provider 数据转译）。
 
@@ -136,7 +138,11 @@
 关键点：官方 `build-package.sh` 默认产出 `.deb`，本项目**不用**其 dpkg 安装机制，而是将 deb 内容解包到目标路径再打包；
 包体内**只有软链接、无硬链接**；`tar` 打包时**不加 `-h`**（否则软链会被展开为实体副本）。
 
-> 待办：`libtar.so` 的静态编译流程尚未实现（需修改多个 termux-packages 包体才能完成静态链接），暂沿用既有产物。
+> **待办（短期不做）**：`libtar.so`（静态 GNU tar）构建流程**尚未固化**。
+> 它与 rootfs 同源，但**不能**用 `scripts/rootfs/` 得到（那是动态构建）；
+> 静态化需 tar 及其依赖链（lzma/zstd/bzip2/iconv 等）全部静态编入，
+> 而这些包在 termux-packages 中默认动态构建，当时**修改了多个包体**才编译成功，
+> 改动面大、难以一并固化；暂沿用既有四架构产物（已真机验证可用）。
 
 ### AI 工具
 

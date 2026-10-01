@@ -197,7 +197,27 @@ rm -rf ./output
 
 ---
 
-## 七、产物自检
+## 七、本脚本链的边界（重要）
+
+本脚本链**只负责 rootfs**（`files.default.*.tar.gz.so`），**不包含 `libtar.so`**。
+
+| 产物 | 是否由本脚本链生成 | 说明 |
+|------|:-----------------:|------|
+| `files.default.*.tar.gz.so` | ✅ 是 | 动态链接的 rootfs（bash / openssh 及其依赖链） |
+| `libtar.so` | ❌ 否 | 静态链接、零依赖，**需另一套构建流程** |
+
+二者同源于 termux-packages，但**构建流程不同**：
+
+- rootfs：编译出的是**动态链接**包，本脚本链只做“编译 + 解包 + 重定位 + 重新打包”。
+- `libtar.so`：需要 tar 及其依赖链（lzma / zstd / bzip2 / iconv 等）**全部静态编入**，
+  而这些包在 termux-packages 中默认是动态构建，当时**修改了多个包体**才编译成功，
+  改动面大，**尚未在本仓库固化**；暂沿用既有四架构产物（已真机验证可用）。
+
+> 所以：**不要指望用本脚本链生成 `libtar.so`**。
+
+---
+
+## 八、产物自检
 
 ```bash
 f=app/src/arm64/assets/files.default.aarch64.tar.gz.so
@@ -211,7 +231,7 @@ tar -tzf  "$f" | head | sed 's/^/  /'    # 期望 files/default/...
 
 ---
 
-## 八、常见问题
+## 九、常见问题
 
 | 现象 | 原因 / 处理 |
 |------|------------|
