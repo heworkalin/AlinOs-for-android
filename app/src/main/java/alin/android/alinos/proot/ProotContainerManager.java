@@ -81,32 +81,40 @@ public final class ProotContainerManager {
      */
     private static final String LOGIN_SCRIPT =
             "# AlinOs login initialization (adapted from tmoe-linux environment/login)\n"
-            + "# 加载 /etc/profile.d/permanent/ 下的用户环境脚本；不强制 cd ~。\n"
-            + "if [ -d /etc/profile.d/permanent ]; then\n"
-            + "    for i in /etc/profile.d/permanent/*; do\n"
-            + "        [ -f \"$i\" ] || continue\n"
-            + "        chmod a+rx \"$i\" 2>/dev/null\n"
-            + "        . \"$i\"\n"
-            + "    done\n"
-            + "fi\n"
-            + "unset i\n";
+            + "# 幂等：同一会话内 permanent/* 只执行一次，\n"
+            + "# 即使同时被 /etc/profile 和 ~/.profile 引用也不会重复跑。\n"
+            + "if [ -z \"$ALINOS_LOGIN_LOADED\" ]; then\n"
+            + "    ALINOS_LOGIN_LOADED=1\n"
+            + "    export ALINOS_LOGIN_LOADED\n"
+            + "    if [ -d /etc/profile.d/permanent ]; then\n"
+            + "        for i in /etc/profile.d/permanent/*; do\n"
+            + "            [ -f \"$i\" ] || continue\n"
+            + "            chmod a+rx \"$i\" 2>/dev/null\n"
+            + "            . \"$i\"\n"
+            + "        done\n"
+            + "    fi\n"
+            + "    unset i\n"
+            + "fi\n";
 
-    /** 标记：用于判断 /root/.profile 是不是我们写的。 */
+    /** 标记：用于判断 /root/.profile 是不是我们写/追加过的。 */
     private static final String ROOT_PROFILE_MARKER = "# AlinOs profile";
 
     /**
-     * 写入 /root/.profile 的内容（仅当文件不存在时）。
+     * 追加/写入 {@code /root/.profile} 的片段。
      *
-     * <p>很多精简 rootfs 根本没有 /root/.profile，login shell 就不会加载
-     * ~/.bashrc。环境变量与永久脚本已经挂在 /etc/profile.d/ 上（由 /etc/profile
-     * 读取），所以这里只需负责把 ~/.bashrc 接上，不重复 source profile.d。
+     * <p>不依赖 {@code /etc/profile} 是否 source {@code profile.d}：
+     * login shell 一定会读 {@code ~/.profile}，这里主动把容器环境和永久脚本接上。
+     * {@code 001} 已幂等，重复 source 无副作用。
      */
     private static final String DEFAULT_ROOT_PROFILE =
             ROOT_PROFILE_MARKER + "\n"
-            + "# 由 AlinOs 写入：精简 rootfs 缺少 ~/.profile 时，保证 login shell 加载 ~/.bashrc\n"
+            + "# 由 AlinOs 写入：保证 login shell 加载容器环境与 ~/.bashrc\n"
+            + "[ -r /etc/profile.d/000-alinos-env.sh ] && . /etc/profile.d/000-alinos-env.sh\n"
+            + "[ -r /etc/profile.d/001-alinos-login.sh ] && . /etc/profile.d/001-alinos-login.sh\n"
             + "if [ -n \"$BASH_VERSION\" ] && [ -f \"$HOME/.bashrc\" ]; then\n"
             + "    . \"$HOME/.bashrc\"\n"
-            + "fi\n";
+            + "fi\n"
+            + ROOT_PROFILE_MARKER + " end\n";
 
     /**
      * 把容器环境写入给定环境表：解析环境文件 + 关键变量兜底 + 清掉宿主专有变量。
@@ -422,20 +430,31 @@ public final class ProotContainerManager {
     }
 
     /**
-     * 保证 {@code /root/.profile} 存在。
+     * 保证 {@code /root/.profile} 会加载容器环境。
      *
-     * <p>缺失时写一份标准内容（只负责加载 {@code ~/.bashrc}）；已存在则不动。
-     * 环境变量/永久脚本由 {@code /etc/profile.d/} 负责，不在这里重复 source。
+     * <p>缺失则创建；已存在但没带标记则追加（不动原有内容）；带标记则跳过。
      */
     private static void ensureRootProfile(File rootfs) {
         File home = new File(rootfs, "root");
         if (!home.isDirectory() && !home.mkdirs()) return;
 
         File profile = new File(home, ".profile");
-        if (profile.exists()) return;
+        byte[] wanted = DEFAULT_ROOT_PROFILE.getBytes(StandardCharsets.UTF_8);
+
+        if (profile.exists()) {
+            String text = readText(profile);
+            if (text != null && text.contains(ROOT_PROFILE_MARKER)) return;
+            try (FileOutputStream out = new FileOutputStream(profile, true)) {
+                out.write("\n".getBytes(StandardCharsets.UTF_8));
+                out.write(wanted);
+            } catch (IOException e) {
+                Log.w("ProotContainerManager", "append root .profile failed: " + e);
+            }
+            return;
+        }
 
         try (FileOutputStream out = new FileOutputStream(profile)) {
-            out.write(DEFAULT_ROOT_PROFILE.getBytes(StandardCharsets.UTF_8));
+            out.write(wanted);
         } catch (IOException e) {
             Log.w("ProotContainerManager", "write root .profile failed: " + e);
             return;
