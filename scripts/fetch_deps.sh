@@ -6,7 +6,8 @@
 #        sherpa-onnx aar（build.gradle files() 引用，缺它无法编译）。
 #
 #  不在本脚本的范围：
-#   · files.default.*（各 ABI 精简 proot 环境）→ 无外部发布源，随仓库保留。
+#   · files.default.*（各 ABI rootfs）→ 由 scripts/rootfs/ 从 termux-packages
+#     源码自行编译生成，见 scripts/rootfs/README.md。
 #   · ASR/KWS/声纹/VAD/TTS 等运行时语音模型 → 由 App 内部 Java
 #     (voice/ModelDownloadManager 等) 运行时下载 / 手动导入，勿在此拉。
 #

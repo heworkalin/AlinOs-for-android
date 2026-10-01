@@ -41,6 +41,8 @@ execution layer on self-compiled *proot* (Ubuntu 24.04 rootfs, 4 ABIs)**.
   (`sherpa-onnx-1.13.5.aar` → `app/libs/`).
 - The **proot toolchain is now self-compiled and static** (4 ABIs); it no longer depends on the old proot
   inside `files.default.*` nor on `libtalloc.so.2`.
+- **rootfs is reproducible**: `files.default.*.tar.gz.so` (4 ABIs) is compiled from source by
+  `scripts/rootfs/`; see `scripts/rootfs/README.md`.
 
 ### Execution layer (current focus, working)
 
@@ -78,7 +80,7 @@ execution layer on self-compiled *proot* (Ubuntu 24.04 rootfs, 4 ABIs)**.
 
 ### Bundled environment
 
-- **`files.default.*.tar.gz.so` (4 ABIs)** — packages the Termux `$PREFIX` (`files/default/`, i.e. Termux's `usr/`): a **Termux bootstrap rootfs** containing `bash` / coreutils / `curl` / `ssh` / `apt` / `dpkg` / `tar` / `proot` / `unzip`, sourced from the build artifacts and download sources of **[termux/termux-packages](https://github.com/termux/termux-packages)**; rebuild it by compiling the corresponding packages through that repo's (Docker) build flow and repacking.
+- **`files.default.*.tar.gz.so` (4 ABIs)** — packages the Termux `$PREFIX` (`files/default/`): a **Termux rootfs** containing `bash` / `openssh` / coreutils / `curl` / `tar` / `gzip` / `sed` / `grep` etc., all sourced from **[termux/termux-packages](https://github.com/termux/termux-packages)**. It is **self-compiled by this project** via `scripts/rootfs/` (only `bash` + `openssh` are built explicitly; the dependency graph pulls in `termux-tools` and its whole dependency set), then path-relocated (`com.termux`→`alin.android.alinos`, `files/usr`→`files/default`) and repacked with all hard links converted to symlinks. See `scripts/rootfs/README.md`.
 - **`libproot.so` / `libproot-loader.so` (jniLibs, 4 ABIs)** — self-compiled static proot and loader, see “Prebuilt sources” below.
 - **`libtar.so` (jniLibs, 4 ABIs)** — a **statically compiled GNU tar** sharing the rootfs's origin: it exists simply as a zero-dependency extraction tool (the rootfs's `bin/tar` relies on the Termux dynamic-library environment) and is overlaid into `jniLibs` for the extraction flow to call directly. Unrelated to execution permissions.
 - `app/src/main/assets/proot_proc.tar.xz` — fake `/proc` data pack (from the `proot_proc` project).
@@ -151,11 +153,35 @@ The four-ABI `libproot.so` and `libproot-loader.so` under `app/src/main/jniLibs/
 **[Android-Proot-Builder](https://github.com/wuxianggujun/Android-Proot-Builder)** and extends it with 32-bit
 targets.
 
-The four-ABI `libtar.so` and `files.default.*.tar.gz.so` (rootfs) share the
-**[termux/termux-packages](https://github.com/termux/termux-packages)** ecosystem: the former is a
-**statically compiled GNU tar** overlaid into `jniLibs` purely as a zero-dependency extraction tool for the
-extraction flow; the latter is the Termux bootstrap user-space, which can be rebuilt through that repo's build
-flow and repacked.
+The four-ABI `files.default.*.tar.gz.so` (rootfs) originate from
+**[termux/termux-packages](https://github.com/termux/termux-packages)**: this project **self-compiles** them
+using the scripts under `scripts/rootfs/` (only `bash` + `openssh` are built explicitly; the dependency graph
+pulls in `termux-tools` and its whole dependency set), then path-relocates them
+(`com.termux`→`alin.android.alinos`, `files/usr`→`files/default`) and converts all hard links to symlinks
+before packing.
+
+### rootfs build (`scripts/rootfs/`)
+
+| Script | Purpose |
+|--------|---------|
+| `build-rootfs.sh` | Orchestrator: patch properties.sh → Docker-build bash+openssh → pack → clean (4 ABIs) |
+| `pack-rootfs.sh` | Extract deb → batch path replacement → hard-link→symlink → tar pack |
+| `replace-paths.sh` | Batch replacement of hard-coded paths (standalone, supports `--dry-run`) |
+| `README.md` | Environment requirements, step-by-step manual, self-check and troubleshooting |
+
+Key points: upstream `build-package.sh` emits `.deb` by default; this project does **not** use its dpkg install
+mechanics, instead extracting the deb contents onto the target path before packing. The archives contain
+**only symlinks, no hard links**, and `tar` is run **without `-h`** (which would expand symlinks into real copies).
+
+> Background: no `termux-packages`, no usable `bash` / `ssh` / `coreutils` / `proot` on Android.
+> This project is merely a downstream consumer and packager.
+
+**Inclusion principle**: whether an artifact is *downloaded* or *compiled from source*, if it ends up in the
+repo/APK it counts as an included upstream resource — attribution and license obligations do not change with
+the build method.
+
+> TODO: static compilation of `libtar.so` is not implemented yet (it requires modifying several
+> termux-packages package bodies); the existing artifact is used for now.
 
 ### AI tools
 
@@ -187,6 +213,8 @@ This project embeds/references third-party open-source components owned by their
   mainly GPLv3, some MIT / Apache-2.0 / GPLv2+Classpath.
 - **Local runtime toolchain (bash / ssh / coreutils, etc.) — [termux/termux-packages](https://github.com/termux/termux-packages)**:
   the upstream source of build scripts and Android porting patches; each package under its own declared license.
+  **The rootfs is self-compiled by this project** (`scripts/rootfs/`); attribution and license obligations do
+  **not** change with the build method.
 - **proot / proot-loader (self-compiled) — [termux/proot](https://github.com/termux/proot): GPLv2**; `loader`
   from the same source. `talloc`, statically linked in — LGPL-2.1+.
 - `libtar.so` — GNU tar, GPLv3.
@@ -196,7 +224,9 @@ This project embeds/references third-party open-source components owned by their
 - `com.termux.terminal` / `view` — [Android-Terminal-Emulator](https://github.com/jackpal/Android-Terminal-Emulator): Apache-2.0.
 - Audio engines — [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (incl. [onnxruntime](https://github.com/microsoft/onnxruntime)),
   [alphacep/vosk-api](https://github.com/alphacep/vosk-api): Apache-2.0 / MIT (models per their own notices).
-- Original `alin.android.alinos` code and Gradle deps (AndroidX / JNA / okhttp / gson / media3 / lottie /
-  markwon-prism etc.) — Apache-2.0 / MIT / LGPL; details in NOTICE.
+- Original `alin.android.alinos` code and Gradle deps (AndroidX / Material / okhttp / gson / media3 / lottie /
+  markwon / JSch / Shizuku / HiddenApiBypass / commons-io etc.) — Apache-2.0 / BSD-style / MIT; details in
+  [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+  (Note: `jna` and `prism4j` are declared but **currently commented out** — not active dependencies.)
 
 Third-party components follow their original stated licenses.
