@@ -105,15 +105,20 @@ public final class ProotPathMapper {
      */
     public Resolved resolve(String input, String cwd) throws IOException {
         String abs = toContainerAbsolute(input, cwd);
-        String real = resolveSymlinks(abs);
-        File host = hostFile(real);
-        boolean via = !real.equals(abs);
+        String resolved = resolveSymlinks(abs);
+        File host = hostFile(resolved);
+        boolean via = !resolved.equals(abs);
+        String display = resolved;
         // proot --link2symlink 的伪硬链接：/tmp/x -> /.l2s/.l2s.x0001 -> ...0002。
-        // 这是 proot 内部的备份文件，不是用户可见的符号链接，不报 link_warning。
-        if (via && isProotL2sPath(real)) {
+        // 这是 proot 内部备份，对 AI 来说就是一个普通文件：
+        //   * 不报 link_warning
+        //   * real_path 回显为原路径，不暴露 /.l2s/... 内部路径
+        // hostFile 仍指向真实 backing file，读写依然写穿到它。
+        if (via && isProotL2sPath(resolved)) {
             via = false;
+            display = abs;
         }
-        return new Resolved(input, abs, real, host, via);
+        return new Resolved(input, abs, display, host, via);
     }
 
     /** 解析出宿主文件（不保证存在）。 */
