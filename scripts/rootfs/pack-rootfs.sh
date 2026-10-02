@@ -2,24 +2,34 @@
 # ============================================================
 #  AlinOs-for-android — rootfs 打包脚本
 # ------------------------------------------------------------
-#  前提：在构建机上已完成 termux-packages 编译，产物直接落在
-#        设备目标路径 <staging>/files/default/ 下（不改用 deb）。
+#  设计定位：本脚本在 **Docker 容器内** 执行（容器内有 python3/tar/find，
+#            权限干净，无需 chown）。宿主只负责 docker cp 取走最终产物。
 #
-#  流程（严格五步）：
-#    1. 从编译产出的 deb 解包，落到 staging/files/<subdir>/
-#       （官方最终也是把内容解到这个目标路径再打包）
-#    2. 批量替换文件树内硬编码的旧路径（replace-paths.sh）
-#    3. 硬链接 → 软链接（保证包体内只有软链接，无硬链接）
-#    4. tar 打包为 files.default.<arch>.tar.gz.so
+#  前提：termux-packages 官方构建流程已跑完。官方流程本身就会把文件
+#        "释放"到 $PREFIX，即：
 #
-#  用法：
-#    bash scripts/rootfs/pack-rootfs.sh \
-#         --arch aarch64 --abi arm64 --debs <deb目录> --outdir <输出目录>
+#          termux_step_make_install        → $PREFIX
+#          termux_step_copy_into_massagedir→ $MASSAGEDIR/$PREFIX_CLASSICAL
+#          termux_step_massage             → strip/shebang/硬链检查/子包
+#          termux_step_create_debian_package → output/*.deb（顺带产出）
+#
+#        因为 properties.sh 已改成 alin.android.alinos + default，$PREFIX 即
+#        /data/data/alin.android.alinos/files/default，所以官方释放出的
+#        **massage 目录**就是我们真正要打包的对象，**不需要**从 deb 二次解包。
+#
+#  流程（③④⑤，与 README 一致）：
+#    ③ 批量替换文件树内硬编码的旧路径（replace-paths.sh）
+#    ④ 硬链接 → 软链接（保证包体内只有软链接，无硬链接）
+#    ⑤ tar 打包为 files.default.<arch>.tar.gz.so
+#
+#  用法（容器内）：
+#    bash pack-rootfs.sh --arch aarch64 --abi arm64 \
+#         --staging <massagedir的files根> --outdir <输出目录>
 #
 #  参数：
-#    --debs <目录>    编译产出的 .deb 目录（termux-packages/output）
-#    --staging <目录> 可选：已解包好的产物根（含 files/<subdir>/）；
-#                     给了 --staging 则跳过 deb 解包（直接后处理）
+#    --staging <目录> 【首选】官方流程释放好的产物根（含 files/<subdir>/）
+#                     典型值：~/.termux-build/<pkg>/massage
+#    --debs <目录>    【兜底】仅当没有 staging 时，从 .deb 解出文件树
 #
 #  可选：
 #    --app-package    目标包名（默认 alin.android.alinos）
@@ -54,15 +64,16 @@ die() { echo -e "\033[1;31m[错误]\033[0m $*" >&2; exit 1; }
 [ -n "$ARCH" ]   || die "缺少 --arch"
 [ -n "$ABI" ]    || die "缺少 --abi"
 [ -n "$OUTDIR" ] || die "缺少 --outdir"
-[ -n "$STAGING" ] || [ -n "$DEBS_DIR" ] || die "需要 --debs（从 deb 解包）或 --staging（已解包产物）"
+[ -n "$STAGING" ] || [ -n "$DEBS_DIR" ] || die "需要 --staging（官方释放产物，首选）或 --debs（兜底）"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NEW_ROOT="/data/data/$APP_PACKAGE/files"
 NEW_PREFIX="$NEW_ROOT/$PREFIX_SUBDIR"
 
-# 默认 staging：从 deb 解包到临时目录
+# 兜底路径：没有 --staging 时才从 deb 解包到临时目录
 TMPROOT=""
 if [ -z "$STAGING" ]; then
+  log "未提供 --staging，回退到 deb 兜底路径"
   TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/alin-stage.XXXXXX")"
   [ "$KEEP" = "1" ] || trap 'rm -rf "$TMPROOT"' EXIT
   STAGING="$TMPROOT"
@@ -70,7 +81,9 @@ if [ -z "$STAGING" ]; then
 fi
 
 # ------------------------------------------------------------
-# 步骤 0：从 deb 解包，内容落到 files/<subdir>/（目标路径）
+# 【兜底】从 deb 解包，内容落到 files/<subdir>/
+#   仅在未提供 --staging（官方释放产物）时使用。
+#   注意：这不是主路径，主路径是官方流程已经释放好的 files/<subdir>/。
 # ------------------------------------------------------------
 if [ -n "$DEBS_DIR" ]; then
   shopt -s nullglob
@@ -101,30 +114,44 @@ if [ -n "$DEBS_DIR" ]; then
   rm -rf "$EXTRACT_ROOT/DEBIAN" "$EXTRACT_ROOT/debian-binary" 2>/dev/null || true
 fi
 
-# 定位 PREFIX 目录
+# ------------------------------------------------------------
+# 归一化：把 STAGING 变成一棵只含 files/<subdir>/ 的干净树
+#   后续 ③④⑤ 三步统一对 $STAGING 整树操作，因此先收敛目录形状。
+#   典型输入（--staging 指向官方 massage 目录）：
+#     <massagedir>/data/data/<pkg>/files/<subdir>/
+#   归一化后：
+#     <staging>/files/<subdir>/
+# ------------------------------------------------------------
 if [ -d "$STAGING/files/$PREFIX_SUBDIR" ]; then
-  PREFIX_DIR="$STAGING/files/$PREFIX_SUBDIR"
+  : # 已是目标形状
 elif [ -d "$STAGING/$PREFIX_SUBDIR" ]; then
-  log "归一化目录结构：$STAGING/$PREFIX_SUBDIR → $STAGING/files/$PREFIX_SUBDIR"
+  log "归一化：$STAGING/$PREFIX_SUBDIR → $STAGING/files/$PREFIX_SUBDIR"
   mkdir -p "$STAGING/files"
   mv "$STAGING/$PREFIX_SUBDIR" "$STAGING/files/$PREFIX_SUBDIR"
-  PREFIX_DIR="$STAGING/files/$PREFIX_SUBDIR"
+elif [ -d "$STAGING/$NEW_PREFIX" ]; then
+  # massage 目录：<massagedir>/data/data/<pkg>/files/<subdir>
+  log "识别为 massage 目录，提升 files/$PREFIX_SUBDIR"
+  mkdir -p "$STAGING/_lift"
+  mv "$STAGING/$NEW_PREFIX" "$STAGING/_lift/$PREFIX_SUBDIR"
+  rm -rf "$STAGING/files"
+  mv "$STAGING/_lift" "$STAGING/files"
 else
-  die "在 $STAGING 下找不到 files/$PREFIX_SUBDIR（编译产物路径不符合预期）"
+  die "在 $STAGING 下找不到 files/$PREFIX_SUBDIR 或 $NEW_PREFIX（官方释放产物路径不符合预期）"
 fi
+PREFIX_DIR="$STAGING/files/$PREFIX_SUBDIR"
 
 echo "============================================================"
 echo " rootfs 打包：arch=$ARCH abi=$ABI"
 echo "   产物源目录 : $STAGING"
-echo "   PREFIX     : $PREFIX_DIR"
+echo "   归一化后   : $PREFIX_DIR"
 echo "   输出       : $OUTDIR/$ABI/assets/files.default.$ARCH.tar.gz.so"
 echo "   目标 PREFIX: $NEW_PREFIX"
 echo "============================================================"
 
 # ------------------------------------------------------------
-# 步骤 1：批量替换硬编码路径
+# 步骤 ③：批量替换硬编码路径
 # ------------------------------------------------------------
-log "步骤 1/3：批量替换硬编码路径"
+log "步骤 ③/⑤：批量替换硬编码路径"
 [ -f "$SCRIPT_DIR/replace-paths.sh" ] || die "缺少 replace-paths.sh"
 bash "$SCRIPT_DIR/replace-paths.sh" "$STAGING" \
     --old-package com.termux \
@@ -133,12 +160,12 @@ bash "$SCRIPT_DIR/replace-paths.sh" "$STAGING" \
     --new-subdir  "$PREFIX_SUBDIR"
 
 # ------------------------------------------------------------
-# 步骤 2：硬链接 → 软链接
+# 步骤 ④：硬链接 → 软链接
 # ------------------------------------------------------------
 # GNU tar 无“硬链接转软链接”原生参数（-h 是软链→实体，
 # --hard-dereference 是硬链→实体副本），必须在打包前自行转换：
 # 同一 inode 只保留一个实体，其余改为指向实体的【相对】软链接。
-log "步骤 2/3：硬链接 → 软链接"
+log "步骤 ④/⑤：硬链接 → 软链接"
 python3 - "$STAGING" <<'PYEOF'
 import os, sys, collections
 
@@ -174,10 +201,10 @@ LEFT=$(find "$STAGING" -type f -links +1 2>/dev/null | wc -l)
 [ "$LEFT" = "0" ] && echo "    [通过] 已无硬链接" || echo "    [警告] 仍有 $LEFT 个文件 link count > 1"
 
 # ------------------------------------------------------------
-# 步骤 3：tar 打包
+# 步骤 ⑤：tar 打包
 # ------------------------------------------------------------
 # 关键：**不能**加 -h（会把软链接展开成实体副本）。
-log "步骤 3/3：tar 打包"
+log "步骤 ⑤/⑤：tar 打包"
 # outdir 可能为相对路径，而 tar 会在子 shell 中 cd 到 staging，
 # 因此先转为绝对路径，避免路径失效。
 mkdir -p "$OUTDIR"
