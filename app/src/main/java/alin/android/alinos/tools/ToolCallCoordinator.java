@@ -84,6 +84,14 @@ public class ToolCallCoordinator {
     public void stop() {
         mStopped = true;
         AlinLog.d(TAG, "收到停止信号");
+        // 立即中断当前正在执行的 proot 进程（若在跑），
+        // 使阻塞命令（sleep/apt 等）不必等超时。
+        try {
+            boolean killed = alin.android.alinos.proot.ProotContainerManager.cancelRunning();
+            AlinLog.d(TAG, "cancelRunning => " + killed);
+        } catch (Throwable e) {
+            AlinLog.w(TAG, "cancelRunning 失败: " + e.getMessage());
+        }
     }
 
     private void runLoop(JSONArray toolCallsJson) {
@@ -117,6 +125,7 @@ public class ToolCallCoordinator {
                 try {
                     String toolName = ToolMeta.toolCallName(toolCallsJson.getJSONObject(i));
                     if (toolName.isEmpty()) toolName = "unknown";
+                    final String finalArgs = ToolMeta.toolCallArguments(toolCallsJson.getJSONObject(i));
                     String uuid = UUID.randomUUID().toString();
                     mToolUuids[i] = uuid;
 
@@ -127,7 +136,7 @@ public class ToolCallCoordinator {
                         final String finalUuid = uuid;
                         final String finalToolName = toolName;
                         mMainHandler.post(() -> {
-                            resultIdx[0] = mCardCallback.onNewPlaceholder(finalToolName, finalUuid);
+                            resultIdx[0] = mCardCallback.onNewPlaceholder(finalToolName, finalArgs, finalUuid);
                             latch.countDown();
                         });
                         latch.await(5, TimeUnit.SECONDS);
@@ -189,6 +198,25 @@ public class ToolCallCoordinator {
 
                 try {
                     result = tool.executor.execute(params);
+                    // 执行期间用户点了停止：无论工具实际结果如何，
+                    // 强制把返回内容替换为「用户已终止」并终止循环。
+                    if (mStopped) {
+                        result = ToolMeta.error("用户已终止");
+                        status = "error";
+                        errorMsg = "用户已终止";
+                        emitToolCallResult(toolName, argumentsStr, result.toString(), "error", errorMsg,
+                                System.currentTimeMillis() - startMs, mCurrentIndices[i]);
+                        // 仍记一条日志，然后结束
+                        ToolCallLogBean stopBean = new ToolCallLogBean(
+                                uuid, mSessionId, toolName, toolCallId, argumentsStr, System.currentTimeMillis());
+                        stopBean.setResult(result.toString());
+                        stopBean.setStatus("error");
+                        stopBean.setErrorMessage("用户已终止");
+                        stopBean.setDurationMs(System.currentTimeMillis() - startMs);
+                        mDbHelper.insert(stopBean);
+                        emitError("用户已终止");
+                        return;
+                    }
                     if (result == null) result = ToolMeta.ok();
                     // 统一：每个工具都应带 status；缺失则补上
                     status = result.optString("status", "success");
@@ -197,6 +225,15 @@ public class ToolCallCoordinator {
                     emitToolCallResult(toolName, argumentsStr, result.toString(), status, "",
                             System.currentTimeMillis() - startMs, mCurrentIndices[i]);
                 } catch (Exception e) {
+                    if (mStopped) {
+                        result = ToolMeta.error("用户已终止");
+                        status = "error";
+                        errorMsg = "用户已终止";
+                        emitToolCallResult(toolName, argumentsStr, result.toString(), "error", errorMsg,
+                                System.currentTimeMillis() - startMs, mCurrentIndices[i]);
+                        emitError("用户已终止");
+                        return;
+                    }
                     result = ToolMeta.error(e.getMessage());
                     status = "error";
                     errorMsg = e.getMessage() == null ? "unknown error" : e.getMessage();
@@ -263,6 +300,7 @@ public class ToolCallCoordinator {
         final boolean[] isToolCalls = {false};
         final JSONArray nextToolCalls = new JSONArray();
         final StringBuilder textBuffer = new StringBuilder();
+        final String[] roundText = {null};  // 本轮结束时的正文（用于判定后发 finish）
 
         AlinLog.d(TAG, "回注完成，重新请求 LLM...");
 
@@ -308,16 +346,15 @@ public class ToolCallCoordinator {
                 }
             }
 
-            // 完成（普通文本或工具调用——最终事件）
+            // 完成（普通文本或工具调用——本轮结束）
             if (data.isFinish() && !data.isThinkFinish()) {
-                // 普通文本结束（非工具调用）
+                // 本轮普通文本（非工具调用）：记录文本，finish 事件延后到
+                // 判定是否继续递归后再发（避免中间轮提前恢复按钮）。
                 if (data.getToolCallsJson() == null) {
-                    String finalText = !textBuffer.toString().isEmpty()
-                            ? textBuffer.toString()
-                            : (data.getFullContent() != null ? data.getFullContent() : "");
-                    if (!finalText.isEmpty()) {
-                        mListener.onStreamEvent("stream_chat",
-                                ChatStreamEventBus.StreamEventData.buildFinish(mSessionId, finalText));
+                    if (!textBuffer.toString().isEmpty()) {
+                        roundText[0] = textBuffer.toString();
+                    } else if (data.getFullContent() != null) {
+                        roundText[0] = data.getFullContent();
                     }
                 }
                 latch.countDown();
@@ -335,9 +372,21 @@ public class ToolCallCoordinator {
 
         // 判断是否需要继续循环
         if (isToolCalls[0] && nextToolCalls.length() > 0) {
+            // 还要继续下一轮工具调用：发一个普通 finish 关闭本轮 AI 文本，
+            // 但不带 toolChainDone 标记（ChatActivity 不会因此恢复按钮）。
+            if (roundText[0] != null && !roundText[0].isEmpty()) {
+                mListener.onStreamEvent("stream_chat",
+                        ChatStreamEventBus.StreamEventData.buildFinish(mSessionId, roundText[0]));
+            }
             AlinLog.d(TAG, "进入下一轮工具调用循环，共 " + nextToolCalls.length() + " 个工具");
             mMessages = finalMessages; // 保留已累积的消息
             runLoop(nextToolCalls);
+        } else {
+            // 工具链真正结束：发带 toolChainDone 标记的 finish，
+            // 只有它才会让 ChatActivity 恢复发送按钮为「发送」。
+            String finalText = roundText[0] == null ? "" : roundText[0];
+            mListener.onStreamEvent("stream_chat",
+                    ChatStreamEventBus.StreamEventData.buildToolChainFinish(mSessionId, finalText));
         }
     }
 

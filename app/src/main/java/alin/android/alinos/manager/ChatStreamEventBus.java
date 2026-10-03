@@ -70,6 +70,7 @@ public class ChatStreamEventBus {
         private String toolCallsJson; // 工具调用数据（JSON数组）
         private boolean thinkFinish; // 标记仅为 think 完成事件（后续可能还有 tool_calls）
         private boolean isUsage;     // 标记这是用量/费用事件
+        private boolean toolChainDone; // 标记：工具链真正结束（最后一轮 AI 文本完成）
         private double costTotal;    // 本次请求费用（美元）
         private String usageJson;    // 完整用量 JSON（含 cost 明细）
 
@@ -90,6 +91,19 @@ public class ChatStreamEventBus {
             data.fullContent = fullContent;
             data.isFinish = true;
             data.isError = false;
+            return data;
+        }
+
+        /**
+         * 构建「工具链真正结束」的结束消息（最后一轮 AI 文本完成）。
+         *
+         * <p>与 {@link #buildFinish} 的区别：带 {@code toolChainDone} 标记。
+         * ChatActivity 只有在收到该标记时才恢复发送按钮，避免工具链中间轮的
+         * finish 提前把按钮恢复为「发送」。
+         */
+        public static StreamEventData buildToolChainFinish(int sessionId, String fullContent) {
+            StreamEventData data = buildFinish(sessionId, fullContent);
+            data.toolChainDone = true;
             return data;
         }
 
@@ -167,6 +181,7 @@ public class ChatStreamEventBus {
         public String getToolCallsJson() { return toolCallsJson; }
         public boolean isThinkFinish() { return thinkFinish; }
         public boolean isUsage() { return isUsage; }
+        public boolean isToolChainDone() { return toolChainDone; }
         public double getCostTotal() { return costTotal; }
         public String getUsageJson() { return usageJson; }
     }

@@ -265,17 +265,120 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         holder.tvToolStatus.setText(status);
         holder.tvToolDuration.setText(duration);
         holder.tvToolPreview.setText(preview);
-        holder.tvToolRequest.setText(requestJson);
-        holder.tvToolResponse.setText(responseJson);
+        holder.tvToolRequest.setText(prettyArgs(argsText));
+        holder.tvToolResponse.setText(prettyResponse(responseJson));
         holder.tvToolLog.setText(logText);
 
         // 点击切换展开/折叠详情
-        boolean isExpanded = holder.llToolDetail.getVisibility() == View.VISIBLE;
         holder.llToolCall.setOnClickListener(v -> {
             boolean nowVisible = holder.llToolDetail.getVisibility() != View.VISIBLE;
             holder.llToolDetail.setVisibility(nowVisible ? View.VISIBLE : View.GONE);
             holder.tvExpandHint.setText(nowVisible ? "── 点击收起详情 ──" : "── 点击展开完整详情 ──");
         });
+
+        // 全屏详情：结构化展示 + 可滚动弹窗
+        final String fToolName = toolName;
+        final String fArgs = argsText;
+        final String fResponse = responseJson;
+        final String fLog = logText;
+        final String fStatus = status;
+        final String fDuration = duration;
+        holder.btnToolFullscreen.setOnClickListener(v ->
+                showToolDetailDialog(fToolName, fArgs, fResponse, fLog, fStatus, fDuration));
+    }
+
+    // ================================================================
+    //  工具详情：结构化展示 + 全屏弹窗
+    // ================================================================
+
+    /** 尝试将 JSON 字符串格式化为缩进形式；失败则原样返回。 */
+    private String prettyJson(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return "";
+        String s = raw.trim();
+        if (!s.startsWith("{") && !s.startsWith("[")) return raw;
+        try {
+            org.json.JSONTokener tk = new org.json.JSONTokener(s);
+            Object obj = tk.nextValue();
+            int indent = obj instanceof org.json.JSONObject ? 2 : 2;
+            return obj instanceof org.json.JSONObject
+                    ? ((org.json.JSONObject) obj).toString(indent)
+                    : ((org.json.JSONArray) obj).toString(indent);
+        } catch (Exception e) {
+            return raw;
+        }
+    }
+
+    private String prettyArgs(String args) {
+        String p = prettyJson(args);
+        return p.isEmpty() ? "" : p;
+    }
+
+    private String prettyResponse(String response) {
+        if (response == null || response.isEmpty()) return "";
+        // response 可能是 "status: success\n{json}"，尝试分离前缀与 JSON
+        String s = response;
+        int brace = s.indexOf('{');
+        if (brace > 0 && s.startsWith("status:")) {
+            String head = s.substring(0, brace).trim();
+            String body = prettyJson(s.substring(brace));
+            return head + "\n" + body;
+        }
+        return prettyJson(s);
+    }
+
+    /** 弹出工具详情：结构化、可滚动、可复制。 */
+    private void showToolDetailDialog(String toolName, String args, String response,
+                                      String log, String status, String duration) {
+        try {
+            final android.app.Dialog dialog = new android.app.Dialog(mContext);
+            dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+            View content = LayoutInflater.from(mContext).inflate(R.layout.dialog_tool_detail, null);
+            dialog.setContentView(content);
+
+            TextView tvTitle = content.findViewById(R.id.tv_fs_title);
+            TextView tvMeta = content.findViewById(R.id.tv_fs_meta);
+            TextView tvArgs = content.findViewById(R.id.tv_fs_args);
+            TextView tvOutput = content.findViewById(R.id.tv_fs_output);
+            TextView tvLog = content.findViewById(R.id.tv_fs_log);
+
+            tvTitle.setText("🔧 " + toolName + "()");
+            tvMeta.setText("status: " + status + (duration.isEmpty() ? "" : "  ·  耗时 " + duration));
+            tvArgs.setText(args == null || args.isEmpty() ? "(无参数)" : prettyJson(args));
+
+            String body = response == null ? "" : response;
+            // 去掉 status 前缀行，只留结果主体
+            String outputText = body.replaceAll("^status:\\s*\\w+\\s*\\n?", "");
+            outputText = prettyJson(outputText);
+            tvOutput.setText(outputText.isEmpty() ? "(无输出)" : outputText);
+            // 错误结果标红
+            if (status != null && (status.contains("❌") || status.toLowerCase().startsWith("error"))) {
+                tvOutput.setTextColor(0xFFF56C6C);
+            } else {
+                tvOutput.setTextColor(0xFF606266);
+            }
+            tvLog.setText(log == null ? "" : log);
+
+            final String allText = "工具: " + toolName + "\n"
+                    + "状态: " + status + "\n"
+                    + "耗时: " + duration + "\n\n"
+                    + "Arguments:\n" + (args == null || args.isEmpty() ? "" : prettyJson(args)) + "\n\n"
+                    + "Output:\n" + outputText + "\n"
+                    + (log == null || log.isEmpty() ? "" : log);
+
+            content.findViewById(R.id.btn_fs_copy).setOnClickListener(x -> copyToClipboard(mContext, allText));
+            content.findViewById(R.id.btn_fs_close).setOnClickListener(x -> dialog.dismiss());
+
+            dialog.show();
+            // 占屏幕 92%，居中
+            android.view.Window w = dialog.getWindow();
+            if (w != null) {
+                android.util.DisplayMetrics dm = mContext.getResources().getDisplayMetrics();
+                w.setLayout((int) (dm.widthPixels * 0.92f), (int) (dm.heightPixels * 0.86f));
+                w.setBackgroundDrawableResource(android.R.color.transparent);
+            }
+        } catch (Exception e) {
+            Toast.makeText(mContext, "打开详情失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     // -------------------- 工具方法 --------------------
@@ -369,6 +472,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         LinearLayout llToolDetail;
         TextView tvToolRequest, tvToolResponse, tvToolLog;
         TextView tvExpandHint;
+        TextView btnToolFullscreen;
 
         public ToolCallViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -382,6 +486,7 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             tvToolResponse = itemView.findViewById(R.id.tv_tool_response);
             tvToolLog = itemView.findViewById(R.id.tv_tool_log);
             tvExpandHint = itemView.findViewById(R.id.tv_expand_hint);
+            btnToolFullscreen = itemView.findViewById(R.id.btn_tool_fullscreen);
         }
     }
 }

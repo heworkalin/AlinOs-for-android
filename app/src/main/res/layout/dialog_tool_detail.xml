@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FFFFFF">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#1976D2"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/tv_fs_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔧 tool()"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_fs_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="status · duration"
+            android:textColor="#D6E4FF"
+            android:textSize="12sp"
+            android:layout_marginTop="2dp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Arguments"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#303133" />
+
+            <TextView
+                android:id="@+id/tv_fs_args"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="#606266"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:background="#F5F6F8"
+                android:padding="8dp"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Output"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#303133"
+                android:layout_marginTop="12dp" />
+
+            <TextView
+                android:id="@+id/tv_fs_output"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="#606266"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:background="#F5F6F8"
+                android:padding="8dp"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:id="@+id/tv_fs_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="#909399"
+                android:fontFamily="monospace"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 底部操作 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="10dp"
+        android:background="#F5F6F8">
+
+        <Button
+            android:id="@+id/btn_fs_copy"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="复制全部"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_fs_close"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="关闭"
+            android:textSize="13sp" />
+    </LinearLayout>
+</LinearLayout>

@@ -244,6 +244,7 @@ public final class ProotContainerManager {
                     env.toArray(new String[0]),
                     rootfs);
             p = proc;
+            registerProcess(proc);
 
             StringBuilder out = new StringBuilder();
             StringBuilder err = new StringBuilder();
@@ -265,8 +266,48 @@ public final class ProotContainerManager {
         } catch (Exception e) {
             return new Result(-1, "", "exec failed: " + e, false);
         } finally {
+            unregisterProcess(p);
             if (p != null && p.isAlive()) p.destroyForcibly();
         }
+    }
+
+    // =====================================================================
+    //  运行中进程注册表（供“停止”强制中断）
+    // =====================================================================
+
+    /** 当前正在运行的 proot 进程（同一时刻单一 AI 会话，保持简单）。 */
+    private static volatile Process sRunningProcess;
+
+    private static void registerProcess(Process p) {
+        sRunningProcess = p;
+    }
+
+    private static void unregisterProcess(Process p) {
+        if (sRunningProcess == p) sRunningProcess = null;
+    }
+
+    /**
+     * 强制中断当前正在执行的命令（供用户“停止”调用）。
+     *
+     * <p>会等待一小段时间让进程退出；调用方仍应按自己的逻辑将结果丢弃 /
+     * 替换为「用户已终止」。
+     *
+     * @return 是否确实中断了一个进程
+     */
+    public static boolean cancelRunning() {
+        Process p = sRunningProcess;
+        if (p == null) return false;
+        AlinLog.w("ProotContainerManager", "cancelRunning: 强制终止正在执行的进程");
+        try {
+            p.destroy();
+            if (!p.waitFor(1500, TimeUnit.MILLISECONDS)) {
+                p.destroyForcibly();
+            }
+        } catch (Exception ignored) {
+            try { p.destroyForcibly(); } catch (Exception ignored2) { }
+        }
+        sRunningProcess = null;
+        return true;
     }
 
     /** 拼接完整的 proot 命令行（一次性执行：env -i + bash -lc）。 */

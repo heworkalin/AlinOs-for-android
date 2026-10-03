@@ -21,8 +21,9 @@ public interface ToolCallCardCallback {
      * 由 ToolCallCoordinator 在递归循环中调用。
      *
      * @param toolName  工具名称
+     * @param args      模型传入的参数（JSON 字符串），用于立即展示
      * @param uuid      业务 UUID（用于与 tool_call_log 关联）
      * @return 新占位消息的索引（相对于当前批次起始位置）
      */
-    int onNewPlaceholder(String toolName, String uuid);
+    int onNewPlaceholder(String toolName, String args, String uuid);
 }

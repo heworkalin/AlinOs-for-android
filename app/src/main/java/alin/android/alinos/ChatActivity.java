@@ -97,6 +97,11 @@ public class ChatActivity extends AppCompatActivity {
     private int mToolCallStartPosition = -1; // 工具调用卡片起始位置
     private boolean isStreamLoading = false;
     private boolean isStreamFinished = false;   // 标记流式是否真正完成
+    /** 工具链进行中（从工具调用开始，到最后一轮 AI 文本结束）。
+     *  只要为 true，发送按钮必须保持「停止」。 */
+    private boolean mToolChainActive = false;
+    /** 一次性：跳过紧接着工具调用事件之后的那次 finish（原始流的 onDone）。 */
+    private boolean mSkipNextFinish = false;
     private ToolCallCoordinator mCoordinator;    // 当前活跃的协调器，用于停止
     private Button mBtnSend;                     // 发送/停止按钮
     private final Handler mStreamHandler = new Handler(Looper.getMainLooper()); // 用于错误重试
@@ -442,6 +447,8 @@ public class ChatActivity extends AppCompatActivity {
                     ? "[流式异常] " + data.getErrorMsg()
                     : accumulatedText + "\n\n[异常终止] " + data.getErrorMsg();
             writeStreamRecordToDb(errorContent);
+            mToolChainActive = false;
+            mSkipNextFinish = false;
             handleStreamFinish();
             if (mAiMessagePosition != -1) {
                 mChatAdapter.updateAiMessage(mAiMessagePosition, errorContent, false);
@@ -468,12 +475,19 @@ public class ChatActivity extends AppCompatActivity {
             try {
                 JSONArray toolCalls = new JSONArray(data.getToolCallsJson());
 
-                // 先保存起始位置（必须在 handleStreamFinish 之前，因为它会重置）
+                // 先保存起始位置（必须在清理之前，因为清理会重置位置）
                 final int toolCallStartPos = mMessageList.size();
 
-                // 结束流式状态，重置相关位置于这是工具调用为了避免出现错误的变成红色手动处理
-                handleStreamFinish();
-                // 手动清理 UI（仅隐藏 loading，不重置按钮）
+                // 结束「流式文本」阶段：隐藏转圈、重置文本位置。
+                // 注意：这里绝不能恢复按钮为「发送」——因为工具马上要执行，
+                // 按交互规则「只要有工具调用，按钮必须保持停止态」。
+                endStreamingTextKeepStopping();
+
+                // 进入工具链：保持停止态，并跳过紧随其后的原始流 finish
+                // （StreamClient 在 onToolCalls 后会无条件再发一个 onDone/finish，
+                //  若不跳过会在工具执行期间把按钮提前恢复成「发送」）。
+                mToolChainActive = true;
+                mSkipNextFinish = true;
 
                 // 为每个工具生成 UUID，添加 TYPE_TOOL_CALL 占位消息 + 写入 chat_record 标记
                 String[] uuids = new String[toolCalls.length()];
@@ -486,8 +500,10 @@ public class ChatActivity extends AppCompatActivity {
                     placeholder.put("toolName", toolName);
                     placeholder.put("status", "⏳");
                     placeholder.put("duration", "");
-                    placeholder.put("args", "");
-                    placeholder.put("request", "");
+                    // 立即展示模型传入的调用参数（不必等执行完成）
+                    String callArgs = ToolMeta.toolCallArguments(toolCalls.getJSONObject(i));
+                    placeholder.put("args", callArgs);
+                    placeholder.put("request", "tool_call: " + toolName + "\narguments: " + callArgs);
                     placeholder.put("response", "");
                     placeholder.put("log", "执行中...");
 
@@ -526,15 +542,16 @@ public class ChatActivity extends AppCompatActivity {
                     }
 
                     @Override
-                    public int onNewPlaceholder(String toolName, String uuid) {
+                    public int onNewPlaceholder(String toolName, String args, String uuid) {
                         // 递归工具调用时创建新占位消息（在 UI 线程上被 Coordinator 同步调用）
                         JSONObject placeholder = new JSONObject();
                         try {
                             placeholder.put("toolName", toolName);
                             placeholder.put("status", "⏳");
                             placeholder.put("duration", "");
-                            placeholder.put("args", "");
-                            placeholder.put("request", "");
+                            // 立即展示调用参数
+                            placeholder.put("args", args == null ? "" : args);
+                            placeholder.put("request", "tool_call: " + toolName + "\narguments: " + (args == null ? "" : args));
                             placeholder.put("response", "");
                             placeholder.put("log", "执行中...");
                         } catch (Exception ignored) {}
@@ -605,6 +622,20 @@ public class ChatActivity extends AppCompatActivity {
 
         // ========== 流式结束（普通文本） ==========
         if (data.isFinish() && data.getToolCallsJson() == null) {
+            // 工具调用刚结束的那次 finish（原始流的 onDone）：跳过，保持「停止」。
+            if (mSkipNextFinish) {
+                mSkipNextFinish = false;
+                AlinLog.d(TAG, "跳过工具调用后的首次 finish，保持停止态");
+                return;
+            }
+
+            // 工具链进行中：仅在收到 toolChainDone 标记时才允许恢复按钮。
+            // 中间轮的 finish 也会走到这里，必须忽略，否则按钮会提前恢复成「发送」。
+            if (mToolChainActive && !data.isToolChainDone()) {
+                AlinLog.d(TAG, "工具链中间轮 finish，忽略（保持停止态）");
+                return;
+            }
+
             AlinLog.d(TAG, "流式完成，总长度：" + mStreamContentBuffer.length());
             String finalContent = data.getFullContent() != null
                     ? data.getFullContent().trim()
@@ -615,6 +646,8 @@ public class ChatActivity extends AppCompatActivity {
                 AlinLog.w(TAG, "流式完成但内容为空");
             }
 
+            // 工具链真正结束：清除标记，允许恢复按钮
+            mToolChainActive = false;
             writeStreamRecordToDb(finalContent);
             handleStreamFinish();
             if (mAiMessagePosition != -1) {
@@ -668,6 +701,8 @@ public class ChatActivity extends AppCompatActivity {
     private void stopExecution() {
         AlinLog.d(TAG, "用户触发停止");
         isStreamLoading = false;
+        mToolChainActive = false;
+        mSkipNextFinish = false;
         if (mCoordinator != null) {
             mCoordinator.stop();
             mCoordinator = null;
@@ -684,6 +719,7 @@ public class ChatActivity extends AppCompatActivity {
     private void handleStreamFinish() {
         isStreamFinished = true;
         setSendButtonState(false);
+        isStreamLoading = false;
         mThinkMessagePosition = -1; // 重置 Think 块位置
         mToolCallStartPosition = -1; // 重置工具卡片起始位置
         // 超时检测任务已由 AiStreamEngine 管理
@@ -699,6 +735,32 @@ public class ChatActivity extends AppCompatActivity {
         // 注意：这里不再调用resetStreamLoadingState()，避免提前重置mStreamRecordId
         // 重置操作移到最后，且保留mStreamRecordId直到数据库写入完成
         resetStreamLoadingStateSafe(); // 改用安全的重置方法
+    }
+
+    /**
+     * 结束「流式文本」阶段，但<b>保持停止态</b>（因为后续还有工具调用要执行）。
+     *
+     * <p>与 {@link #handleStreamFinish()} 的区别：
+     * <ul>
+     *   <li>不把按钮恢复为「发送」（仍为处理中）；</li>
+     *   <li>不把 {@code isStreamLoading} 置 false（工具执行期间仍视为处理中）；</li>
+     *   <li>只做：隐藏转圈、重置文本 / Think 位置，为工具卡片腾出位置。</li>
+     * </ul>
+     *
+     * <p>最终按钮的恢复统一由「最后一轮普通文本结束」的 {@link #handleStreamFinish()}
+     * 或用户停止 / 出错负责。
+     */
+    private void endStreamingTextKeepStopping() {
+        mThinkMessagePosition = -1;
+        if (mAiMessagePosition != -1) {
+            mChatAdapter.updateAiMessage(mAiMessagePosition, mStreamContentBuffer.toString(), false);
+        }
+        hideLoadingForce();
+        // 清空文本缓存，下一轮 AI 文本会新建消息
+        mStreamContentBuffer.setLength(0);
+        mAiMessagePosition = -1;
+        // 保持 isStreamLoading=true、按钮为「停止」
+        setSendButtonState(true);
     }
 
     // 新增：终极保险方法，强制隐藏loading
