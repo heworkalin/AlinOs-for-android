@@ -12,7 +12,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import androidx.annotation.Nullable;
 
@@ -109,9 +109,9 @@ public class LocalShellService extends TermuxService {
             } else {
                 startForeground(NOTIFICATION_ID, buildMinimalNotification());
             }
-            Log.d(LOG_TAG, "ensureForeground()");
+            AlinLog.d(LOG_TAG, "ensureForeground()");
         } catch (Exception e) {
-            Log.e(LOG_TAG, "ensureForeground failed: " + e.getMessage());
+            AlinLog.e(LOG_TAG, "ensureForeground failed: " + e.getMessage());
         }
     }
 
@@ -128,10 +128,10 @@ public class LocalShellService extends TermuxService {
             }
             if (mWakeLock != null && !mWakeLock.isHeld()) {
                 mWakeLock.acquire();
-                Log.d(LOG_TAG, "WakeLock acquired");
+                AlinLog.d(LOG_TAG, "WakeLock acquired");
             }
         } catch (Exception e) {
-            Log.e(LOG_TAG, "acquire WakeLock failed: " + e.getMessage());
+            AlinLog.e(LOG_TAG, "acquire WakeLock failed: " + e.getMessage());
         }
 
         try {
@@ -146,10 +146,10 @@ public class LocalShellService extends TermuxService {
             }
             if (mWifiLock != null && !mWifiLock.isHeld()) {
                 mWifiLock.acquire();
-                Log.d(LOG_TAG, "WifiLock acquired");
+                AlinLog.d(LOG_TAG, "WifiLock acquired");
             }
         } catch (Exception e) {
-            Log.e(LOG_TAG, "acquire WifiLock failed: " + e.getMessage());
+            AlinLog.e(LOG_TAG, "acquire WifiLock failed: " + e.getMessage());
         }
     }
 
@@ -158,13 +158,13 @@ public class LocalShellService extends TermuxService {
         try {
             if (mWakeLock != null && mWakeLock.isHeld()) {
                 mWakeLock.release();
-                Log.d(LOG_TAG, "WakeLock released");
+                AlinLog.d(LOG_TAG, "WakeLock released");
             }
         } catch (Exception ignored) {}
         try {
             if (mWifiLock != null && mWifiLock.isHeld()) {
                 mWifiLock.release();
-                Log.d(LOG_TAG, "WifiLock released");
+                AlinLog.d(LOG_TAG, "WifiLock released");
             }
         } catch (Exception ignored) {}
     }
@@ -180,7 +180,7 @@ public class LocalShellService extends TermuxService {
         try {
             startForeground(NOTIFICATION_ID, buildMinimalNotification());
         } catch (Exception e) {
-            Log.e(LOG_TAG, "startForeground 失败: " + e.getMessage());
+            AlinLog.e(LOG_TAG, "startForeground 失败: " + e.getMessage());
         }
         // 再用完整通知刷新内容
         try {
@@ -188,7 +188,7 @@ public class LocalShellService extends TermuxService {
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (n != null && nm != null) nm.notify(NOTIFICATION_ID, n);
         } catch (Exception e) {
-            Log.e(LOG_TAG, "buildNotification 失败: " + e.getMessage());
+            AlinLog.e(LOG_TAG, "buildNotification 失败: " + e.getMessage());
         }
     }
 
@@ -318,7 +318,7 @@ public class LocalShellService extends TermuxService {
 
         TermuxSession session = TermuxSession.execute(this, cmd,
             getTermuxTerminalSessionClient(), termuxSession -> {
-                android.util.Log.d("LocalShellService", "TermuxSession finished: sid=" + sessionName
+                AlinLog.d("LocalShellService", "TermuxSession finished: sid=" + sessionName
                     + ", exitCode=" + termuxSession.getTerminalSession().getExitStatus()
                     + ", running=" + termuxSession.getTerminalSession().isRunning());
                 updateNotification();

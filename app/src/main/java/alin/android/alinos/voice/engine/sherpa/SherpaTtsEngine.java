@@ -1,6 +1,6 @@
 package alin.android.alinos.voice.engine.sherpa;
 
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import com.k2fsa.sherpa.onnx.GeneratedAudio;
 import com.k2fsa.sherpa.onnx.OfflineTts;
@@ -40,9 +40,9 @@ public class SherpaTtsEngine implements ITtsEngine {
                 String tokensFile = findFile(modelDir, "tokens.txt");
                 String lexiconFile = findFile(modelDir, "lexicon.txt");
 
-                Log.d(TAG, "model: " + modelFile);
-                Log.d(TAG, "tokens: " + tokensFile);
-                Log.d(TAG, "lexicon: " + lexiconFile);
+                AlinLog.d(TAG, "model: " + modelFile);
+                AlinLog.d(TAG, "tokens: " + tokensFile);
+                AlinLog.d(TAG, "lexicon: " + lexiconFile);
 
                 if (modelFile == null || tokensFile == null) {
                     throw new Exception("缺少模型文件: " + modelDir);
@@ -64,10 +64,10 @@ public class SherpaTtsEngine implements ITtsEngine {
                 mTts = new OfflineTts(null, config);
                 mReady = true;
 
-                Log.d(TAG, "TTS 模型加载成功: " + modelDir);
+                AlinLog.d(TAG, "TTS 模型加载成功: " + modelDir);
                 cb.onAudio(null); // 就绪信号
             } catch (Exception e) {
-                Log.e(TAG, "TTS 初始化失败", e);
+                AlinLog.e(TAG, "TTS 初始化失败", e);
                 cb.onError(e.getMessage());
             }
         }).start();
@@ -86,20 +86,20 @@ public class SherpaTtsEngine implements ITtsEngine {
 
         new Thread(() -> {
             try {
-                Log.d(TAG, "合成: " + text + " speed=" + speed);
+                AlinLog.d(TAG, "合成: " + text + " speed=" + speed);
                 int sid = 0;
                 GeneratedAudio audio = mTts.generate(text, sid, speed);
                 float[] samples = audio.getSamples();
                 int sampleRate = audio.getSampleRate();
 
-                Log.d(TAG, "合成完成: samples=" + samples.length
+                AlinLog.d(TAG, "合成完成: samples=" + samples.length
                         + " sampleRate=" + sampleRate);
 
                 // 转为 16-bit PCM 字节数组 + WAV 头
                 byte[] wav = toWav(samples, sampleRate);
                 cb.onAudio(wav);
             } catch (Exception e) {
-                Log.e(TAG, "合成失败", e);
+                AlinLog.e(TAG, "合成失败", e);
                 cb.onError(e.getMessage());
             }
         }).start();
@@ -112,7 +112,7 @@ public class SherpaTtsEngine implements ITtsEngine {
             mTts.release();
             mTts = null;
         }
-        Log.d(TAG, "TTS 释放");
+        AlinLog.d(TAG, "TTS 释放");
     }
 
     @Override public boolean isReady() { return mReady; }
@@ -130,8 +130,8 @@ public class SherpaTtsEngine implements ITtsEngine {
     private void logDir(File dir, String prefix) {
         File[] fs = dir.listFiles(); if (fs == null) return;
         for (File f : fs) {
-            if (f.isDirectory()) { Log.d(TAG, prefix + "[" + f.getName() + "]"); logDir(f, prefix + "  "); }
-            else Log.d(TAG, prefix + f.getName() + " (" + f.length() + " bytes)");
+            if (f.isDirectory()) { AlinLog.d(TAG, prefix + "[" + f.getName() + "]"); logDir(f, prefix + "  "); }
+            else AlinLog.d(TAG, prefix + f.getName() + " (" + f.length() + " bytes)");
         }
     }
 
@@ -182,7 +182,7 @@ public class SherpaTtsEngine implements ITtsEngine {
 
             return out.toByteArray();
         } catch (Exception e) {
-            Log.e(TAG, "WAV 转换失败", e);
+            AlinLog.e(TAG, "WAV 转换失败", e);
             return null;
         }
     }

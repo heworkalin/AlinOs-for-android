@@ -5,7 +5,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -87,7 +87,7 @@ public class AppConfigStore extends SQLiteOpenHelper {
             c.close();
             return v;
         } catch (Exception e) {
-            Log.e(TAG, "getConfig 失败: " + key, e);
+            AlinLog.e(TAG, "getConfig 失败: " + key, e);
             return def;
         }
     }
@@ -100,7 +100,7 @@ public class AppConfigStore extends SQLiteOpenHelper {
             getWritableDatabase().insertWithOnConflict(
                     T_CONFIG, null, cv, SQLiteDatabase.CONFLICT_REPLACE);
         } catch (Exception e) {
-            Log.e(TAG, "setConfig 失败: " + key, e);
+            AlinLog.e(TAG, "setConfig 失败: " + key, e);
         }
     }
 
@@ -140,9 +140,9 @@ public class AppConfigStore extends SQLiteOpenHelper {
                 db.insert(T_MODEL, null, cv);
             }
             c.close();
-            Log.d(TAG, "注册模型: type=" + type + " subtype=" + subtype + " path=" + path);
+            AlinLog.d(TAG, "注册模型: type=" + type + " subtype=" + subtype + " path=" + path);
         } catch (Exception e) {
-            Log.e(TAG, "registerModel 失败", e);
+            AlinLog.e(TAG, "registerModel 失败", e);
         }
     }
 
@@ -169,7 +169,7 @@ public class AppConfigStore extends SQLiteOpenHelper {
             }
             c.close();
         } catch (Exception e) {
-            Log.e(TAG, "getModels 失败: " + type, e);
+            AlinLog.e(TAG, "getModels 失败: " + type, e);
         }
         return list;
     }
@@ -179,7 +179,7 @@ public class AppConfigStore extends SQLiteOpenHelper {
         try {
             return getWritableDatabase().delete(T_MODEL, C_ID + "=?", new String[]{String.valueOf(id)}) > 0;
         } catch (Exception e) {
-            Log.e(TAG, "removeModel 失败", e);
+            AlinLog.e(TAG, "removeModel 失败", e);
             return false;
         }
     }
@@ -197,7 +197,7 @@ public class AppConfigStore extends SQLiteOpenHelper {
         scanKws(new File(modelDir, "kws"));
         scanSpeaker(new File(modelDir, "speaker"));
         scanVad(new File(modelDir, "vad"));
-        Log.d(TAG, "模型扫描完成: " + modelDir);
+        AlinLog.d(TAG, "模型扫描完成: " + modelDir);
     }
 
     private void scanAsr(File dir) {

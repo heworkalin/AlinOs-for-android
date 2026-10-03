@@ -203,12 +203,13 @@ public class McpHttpServer {
             return Response.empty(403);
         }
 
-        // 协议版本头校验
+        // 协议版本头：不硬性拒绝未知版本。
+        // 按 MCP 规范，版本由 initialize 协商；此处仅记录，避免新版客户端
+        // （如携带未来版本号的 mcp-cli）在协商前就被 400 拦下。
         String protoVer = req.headers.get("mcp-protocol-version");
         if (protoVer != null && !protoVer.isEmpty()
                 && !McpProtocolHandler.isSupportedVersion(protoVer)) {
-            return Response.json(400, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,"
-                    + "\"message\":\"Unsupported MCP-Protocol-Version: " + protoVer + "\"}}");
+            log("未知协议版本，按协商处理: " + protoVer);
         }
 
         if (req.body == null || req.body.length == 0) {

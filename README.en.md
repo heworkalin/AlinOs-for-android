@@ -102,20 +102,17 @@ execution layer on self-compiled *proot* (Ubuntu 24.04 rootfs, 4 ABIs)**.
 - **MCP**: prefer a **client** form, or just use `mcp-cli` to connect remote servers.
 - **Audio (paused)**: no deep updates short-term; evaluate later if resumed.
 
-## Docs archive (`docs/`)
-
-To avoid losing which doc to read, the long historical reports were moved (kept, index-only) under `docs/`:
+## Docs (`docs/`)
 
 | File | Content |
 |------|---------|
-| `docs/_archive_PROJECT_STATUS.md` | phase progress / status |
-| `docs/_archive_AGENT_CAPABILITY_ROADMAP.md` | Agent capability planning |
-| `docs/_archive_PROOT_REFACTOR_PLAN.md` | proot single-shot refactor (was planned) |
-| `docs/_archive_TMOE_PROOT_ANALYSIS.md` | proot startup deep-dive |
-| `docs/_archive_SYSTEM_REPORT.md` | early system report |
-| `docs/_archive_mcp.md` | MCP spec excerpt |
+| `docs/MCP.md` | MCP positioning (server mode = developer debugging/dev, unrelated to the internal AI) and short-term plan |
+| `docs/LOGGING.md` | Unified logging implementation record and short-term plan |
+| `docs/PROOT_HARDLINK_FIX.md` | proot fake-hardlink ENOENT fix record |
+| `docs/PROOT_LINK_SEMANTICS_REPORT.md` | proot link semantics fixes and residual limits |
+| `docs/ANDROID_EXEC_RESTRICTION.md` | Android private-dir executable mechanism |
 
-Convention: read this README first; dig into `docs/_archive_*` only if needed.
+Convention: read this README first, then the active docs under `docs/`. Long historical reports were removed; see git log for history.
 
 ---
 

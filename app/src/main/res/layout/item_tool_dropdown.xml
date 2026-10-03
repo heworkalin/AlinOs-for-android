@@ -23,6 +23,18 @@
         android:ellipsize="end" />
 
     <TextView
+        android:id="@+id/tv_tool_scope"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:paddingHorizontal="5dp"
+        android:paddingVertical="1dp"
+        android:textSize="10sp"
+        android:textColor="#FFFFFF"
+        android:background="#909399"
+        android:singleLine="true" />
+
+    <TextView
         android:id="@+id/tv_tool_capability"
         android:layout_width="0dp"
         android:layout_height="wrap_content"

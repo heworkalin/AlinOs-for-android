@@ -2,7 +2,7 @@ package alin.android.alinos.ai;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -113,9 +113,9 @@ public final class ModelRegistry {
                 }
                 if (!p.models.isEmpty()) providers.put(pid, p);
             }
-            Log.d(TAG, "静态基线: " + providers.size() + " 个 provider / " + baselineCount + " 个模型");
+            AlinLog.d(TAG, "静态基线: " + providers.size() + " 个 provider / " + baselineCount + " 个模型");
         } catch (Exception e) {
-            Log.e(TAG, "加载 " + ASSET + " 失败", e);
+            AlinLog.e(TAG, "加载 " + ASSET + " 失败", e);
         }
     }
 
@@ -145,9 +145,9 @@ public final class ModelRegistry {
                     total += list.size();
                 }
             }
-            Log.d(TAG, "动态缓存: " + dynamic.size() + " 个 provider / " + total + " 个模型");
+            AlinLog.d(TAG, "动态缓存: " + dynamic.size() + " 个 provider / " + total + " 个模型");
         } catch (Exception e) {
-            Log.w(TAG, "加载动态模型缓存失败", e);
+            AlinLog.w(TAG, "加载动态模型缓存失败", e);
         }
     }
 
@@ -277,7 +277,7 @@ public final class ModelRegistry {
                     .putString(KEY_DYNAMIC, root.toString())
                     .apply();
         } catch (Exception e) {
-            Log.w(TAG, "持久化动态模型失败", e);
+            AlinLog.w(TAG, "持久化动态模型失败", e);
         }
     }
 

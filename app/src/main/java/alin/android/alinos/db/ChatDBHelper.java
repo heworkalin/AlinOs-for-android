@@ -7,7 +7,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.text.TextUtils;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -136,7 +136,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
                 } while (cursor.moveToNext());
             }
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "getAllSessions 异常", e);
+            AlinLog.e("ChatDBHelper", "getAllSessions 异常", e);
         }
         return list;
     }
@@ -151,7 +151,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             values.put(SESSION_CREATE_TIME, session.getCreateTime());
             return db.insert(TABLE_SESSION, null, values);
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "addSession 异常", e);
+            AlinLog.e("ChatDBHelper", "addSession 异常", e);
             return -1;
         }
     }
@@ -166,7 +166,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             db.update(TABLE_SESSION, values, SESSION_ID + "=?",
                     new String[]{String.valueOf(session.getId())});
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "updateSession 异常", e);
+            AlinLog.e("ChatDBHelper", "updateSession 异常", e);
         }
     }
 
@@ -179,7 +179,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             db.delete(TABLE_SESSION, SESSION_ID + "=?", new String[]{String.valueOf(sessionId)});
             db.setTransactionSuccessful();
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "deleteSession 异常", e);
+            AlinLog.e("ChatDBHelper", "deleteSession 异常", e);
         } finally {
             if (db != null) {
                 db.endTransaction();
@@ -253,7 +253,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
                 } while (cursor.moveToNext());
             }
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "getRecordsBySessionId 异常", e);
+            AlinLog.e("ChatDBHelper", "getRecordsBySessionId 异常", e);
         }
         return list;
     }
@@ -280,7 +280,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             values.put(RECORD_CACHE_WRITE_TOKENS, record.getCacheWriteTokens());
             return db.insert(TABLE_RECORD, null, values);
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "addRecord 异常", e);
+            AlinLog.e("ChatDBHelper", "addRecord 异常", e);
             return -1;
         }
     }
@@ -292,7 +292,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             values.put(RECORD_CONTENT, newContent);
             db.update(TABLE_RECORD, values, RECORD_ID + "=?", new String[]{String.valueOf(recordId)});
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "updateRecordContent 异常", e);
+            AlinLog.e("ChatDBHelper", "updateRecordContent 异常", e);
         }
     }
 
@@ -314,7 +314,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             values.put(RECORD_TOTAL_TOKENS, totalTokens);
             db.update(TABLE_RECORD, values, RECORD_ID + "=?", new String[]{String.valueOf(recordId)});
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "updateRecordTokens 异常", e);
+            AlinLog.e("ChatDBHelper", "updateRecordTokens 异常", e);
         }
     }
 
@@ -343,7 +343,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
             values.put(RECORD_CACHE_WRITE_TOKENS, cacheWriteTokens);
             db.update(TABLE_RECORD, values, RECORD_ID + "=?", new String[]{String.valueOf(recordId)});
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "updateRecordUsage 异常", e);
+            AlinLog.e("ChatDBHelper", "updateRecordUsage 异常", e);
         }
     }
 
@@ -359,7 +359,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
                 content = cursor.getString(0);
             }
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "getRecordContentById 异常", e);
+            AlinLog.e("ChatDBHelper", "getRecordContentById 异常", e);
         } finally {
             if (cursor != null) cursor.close();
             if (db != null) db.close();
@@ -384,7 +384,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
                 return session;
             }
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "getOrCreateFloatWindowSession 异常", e);
+            AlinLog.e("ChatDBHelper", "getOrCreateFloatWindowSession 异常", e);
         }
 
         ConfigDBHelper configDbHelper = new ConfigDBHelper(this.context);
@@ -401,7 +401,7 @@ public class ChatDBHelper extends SQLiteOpenHelper {
         try (SQLiteDatabase db = getWritableDatabase()) {
             db.delete(TABLE_SESSION, SESSION_TYPE + "=?", new String[]{"1"});
         } catch (Exception e) {
-            Log.e("ChatDBHelper", "deleteFloatWindowSession 异常", e);
+            AlinLog.e("ChatDBHelper", "deleteFloatWindowSession 异常", e);
         }
     }
 }

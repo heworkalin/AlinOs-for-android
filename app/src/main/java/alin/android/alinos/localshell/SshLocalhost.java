@@ -1,7 +1,7 @@
 package alin.android.alinos.localshell;
 
 import android.content.Context;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import alin.android.alinos.bean.SshConfigBean;
 import alin.android.alinos.db.SshDbHelper;
@@ -50,7 +50,7 @@ public class SshLocalhost {
                 arr.put(item);
             }
         } catch (Exception e) {
-            Log.e(TAG, "listConfigs 失败", e);
+            AlinLog.e(TAG, "listConfigs 失败", e);
         }
         return arr;
     }
@@ -245,7 +245,7 @@ public class SshLocalhost {
 
         } catch (Exception e) {
             // 全局兜底异常，销毁所有残留会话
-            Log.e(TAG, "connectByUuid 全局异常", e);
+            AlinLog.e(TAG, "connectByUuid 全局异常", e);
             if (tempSid != null) {
                 try {
                     exec.destroy_session(tempSid);

@@ -7,7 +7,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -143,7 +143,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     getApplicationContext().getContentResolver(),
                     Settings.Secure.ACCESSIBILITY_ENABLED);
         } catch (Settings.SettingNotFoundException e) {
-            Log.e("MainActivity", "获取无障碍服务状态失败", e);
+            AlinLog.e("MainActivity", "获取无障碍服务状态失败", e);
         }
 
         if (accessibilityEnabled == 1) {

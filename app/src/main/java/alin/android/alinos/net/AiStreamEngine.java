@@ -2,7 +2,7 @@ package alin.android.alinos.net;
 
 import android.content.Context;
 import android.text.TextUtils;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -71,7 +71,7 @@ public class AiStreamEngine {
         final double temperature = optExtraDouble("temperature", 0.7);
         final JSONObject extra = buildExtraBody();
 
-        Log.d(TAG, "发送: api=" + apiType + " provider=" + config.getProviderId()
+        AlinLog.d(TAG, "发送: api=" + apiType + " provider=" + config.getProviderId()
                 + " model=" + modelId + " base=" + baseUrl
                 + " tools=" + (tools == null ? 0 : tools.length()));
 
@@ -157,7 +157,7 @@ public class AiStreamEngine {
                             (int) usage.input, (int) usage.output, (int) usage.totalTokens(),
                             usage.costTotal, usage.toJson().toString()));
         } catch (Exception e) {
-            Log.w(TAG, "发送费用事件失败", e);
+            AlinLog.w(TAG, "发送费用事件失败", e);
         }
     }
 

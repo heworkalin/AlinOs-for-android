@@ -2,7 +2,7 @@ package alin.android.alinos.voice;
 
 import android.content.Context;
 import android.os.AsyncTask;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -199,7 +199,7 @@ public class ModelDownloadManager {
         // 检查是否已存在
         File targetDir = new File(getModelCacheDir(), targetSubDir);
         if (targetDir.exists() && targetDir.list().length > 0) {
-            Log.d(TAG, "模型已存在：" + targetSubDir);
+            AlinLog.d(TAG, "模型已存在：" + targetSubDir);
             if (listener != null) {
                 listener.onDownloadSuccess(targetSubDir, targetDir);
             }
@@ -226,14 +226,14 @@ public class ModelDownloadManager {
             conn.connect();
             return conn.getContentLengthLong();
         } catch (Exception e) {
-            Log.e(TAG, "获取文件大小失败（将使用未知大小下载）", e);
+            AlinLog.e(TAG, "获取文件大小失败（将使用未知大小下载）", e);
             return -1;
         }
     }
 
     private void tryNextProxy() {
         proxyIndex++;
-        Log.d(TAG, "尝试代理 " + proxyIndex + "/" + (PROXY_LIST.length + 1));
+        AlinLog.d(TAG, "尝试代理 " + proxyIndex + "/" + (PROXY_LIST.length + 1));
     }
 
     /**
@@ -300,9 +300,9 @@ public class ModelDownloadManager {
                 headConn.connect();
                 totalSize = headConn.getContentLengthLong();
                 headConn.disconnect();
-                Log.d(TAG, "文件大小：" + totalSize + " bytes");
+                AlinLog.d(TAG, "文件大小：" + totalSize + " bytes");
             } catch (IOException e) {
-                Log.w(TAG, "无法获取文件大小，将按未知大小下载");
+                AlinLog.w(TAG, "无法获取文件大小，将按未知大小下载");
             }
 
             // ===== 第二步：GET 请求下载文件 =====
@@ -310,14 +310,14 @@ public class ModelDownloadManager {
 
             // 如果失败且还有代理可用，重试
             if (!result && proxyIndex < PROXY_LIST.length) {
-                Log.d(TAG, "直连下载失败，尝试代理...");
+                AlinLog.d(TAG, "直连下载失败，尝试代理...");
                 tryNextProxy();
                 result = downloadWithRetry(addProxy(downloadUrl), tempFile, totalSize);
             }
 
             // 如果再次失败且还有第二个代理，再试
             if (!result && proxyIndex < PROXY_LIST.length) {
-                Log.d(TAG, "代理1失败，尝试代理2...");
+                AlinLog.d(TAG, "代理1失败，尝试代理2...");
                 tryNextProxy();
                 result = downloadWithRetry(addProxy(downloadUrl), tempFile, totalSize);
             }
@@ -355,11 +355,11 @@ public class ModelDownloadManager {
                 in.close();
                 conn.disconnect();
 
-                Log.d(TAG, "下载完成：" + destFile.getAbsolutePath() + " (" + downloaded + " bytes)");
+                AlinLog.d(TAG, "下载完成：" + destFile.getAbsolutePath() + " (" + downloaded + " bytes)");
                 return true;
 
             } catch (IOException e) {
-                Log.e(TAG, "下载失败：" + e.getMessage());
+                AlinLog.e(TAG, "下载失败：" + e.getMessage());
                 return false;
             }
         }
@@ -403,7 +403,7 @@ public class ModelDownloadManager {
      */
     public boolean extractArchive(File archiveFile, File targetDir) {
         if (!archiveFile.exists()) {
-            Log.e(TAG, "归档文件不存在：" + archiveFile.getAbsolutePath());
+            AlinLog.e(TAG, "归档文件不存在：" + archiveFile.getAbsolutePath());
             return false;
         }
 
@@ -432,7 +432,7 @@ public class ModelDownloadManager {
             }
 
         } catch (Exception e) {
-            Log.e(TAG, "解压失败：" + e.getMessage(), e);
+            AlinLog.e(TAG, "解压失败：" + e.getMessage(), e);
             return false;
         }
     }
@@ -499,7 +499,7 @@ public class ModelDownloadManager {
     public void deleteModel(String modelKey) {
         File modelDir = new File(getModelCacheDir(), modelKey);
         deleteRecursive(modelDir);
-        Log.d(TAG, "已删除模型缓存：" + modelKey);
+        AlinLog.d(TAG, "已删除模型缓存：" + modelKey);
     }
 
     private void deleteRecursive(File file) {

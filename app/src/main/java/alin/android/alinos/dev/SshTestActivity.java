@@ -8,7 +8,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
@@ -966,7 +966,7 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
                     out = execResult(exec.shell_read(sid, "all", 100, false, false, false));
                     if (out.contains("AGENT_DONE")) break;
                 }
-                Log.d(TAG, "agent attempt " + attempt + ": out=[" + out + "]");
+                AlinLog.d(TAG, "agent attempt " + attempt + ": out=[" + out + "]");
                 agentOk = out.contains("AGENT_READY:/");
                 if (!agentOk) sleep(800);
             }
@@ -1012,7 +1012,7 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
             }
 
             // 5. 判断结果
-            Log.d(TAG, "ssh-add out=[" + out + "]");
+            AlinLog.d(TAG, "ssh-add out=[" + out + "]");
             int idx = out.lastIndexOf("ADD_EXIT:");
             if (idx < 0) {
                 return "私钥加载超时（ssh-add 未响应），请检查私钥密码是否正确";
@@ -1041,7 +1041,7 @@ public class SshTestActivity extends AppCompatActivity implements SshConfigAdapt
             fos.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             fos.flush();
         } catch (Exception e) {
-            Log.d(TAG, "writeFile failed: " + e);
+            AlinLog.d(TAG, "writeFile failed: " + e);
             return false;
         } finally {
             try { if (fos != null) fos.close(); } catch (Exception ignored) {}

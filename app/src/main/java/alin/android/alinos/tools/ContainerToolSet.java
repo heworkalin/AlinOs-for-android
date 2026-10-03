@@ -13,11 +13,21 @@ import alin.android.alinos.proot.ProotFs;
 import alin.android.alinos.proot.ProotPathMapper;
 
 /**
- * 工作环境工具集：bash / read / write / edit / ls / grep / find。
+ * 工作环境工具集（proot 容器）。
  *
- * <p>面向 AI 的描述全部为英文，并且<b>只说明这是一个 Ubuntu 工作环境</b>，
- * 不暴露底层实现细节。路径一律为环境内路径（相对路径以 {@code /root} 为基准），
- * 宿主机路径不可见。
+ * <p>可见面分层：
+ * <ul>
+ *   <li>{@link ToolMeta.Scope#AI}：{@code bash} / {@code read} / {@code write} / {@code edit}
+ *       —— 暴露给模型与 MCP；</li>
+ *   <li>{@link ToolMeta.Scope#INTERNAL}：{@code ls} / {@code grep} / {@code find}
+ *       —— 保留给测试界面与内部调用，不喂给模型。</li>
+ * </ul>
+ *
+ * <p>统一返回约定：所有结果都带 {@code status}（success / error），
+ * 失败时统一写入 {@code error} 字段。详见 {@link ToolMeta}。
+ *
+ * <p>面向模型的描述全部为英语，并且只说明这是一个 Ubuntu 工作环境，
+ * 不暴露底层实现细节。路径一律为环境内路径，宿主机路径不可见。
  *
  * <p>符号链接写穿：读写链接指向的真实文件，链接本身不变，结果里返回 {@code link_warning}。
  */
@@ -32,6 +42,7 @@ public class ContainerToolSet {
         registerRead(ctx);
         registerWrite(ctx);
         registerEdit(ctx);
+        // 内部工具（不暴露给 AI）
         registerLs(ctx);
         registerGrep(ctx);
         registerFind(ctx);
@@ -47,11 +58,9 @@ public class ContainerToolSet {
 
     private static void registerBash(Context ctx) {
         ToolRegistry.register("bash",
-                "Execute a bash command in the working environment. Use it for builds, package "
-                + "installation (apt), running scripts, git, and any other shell work. The "
-                + "environment is a full Ubuntu userland running as root. Each call starts a fresh "
-                + "shell, so chain related commands together when state matters. All paths are "
-                + "environment-internal.",
+                "Execute a bash command in the current working directory. Returns stdout and "
+                + "stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit "
+                + "first). Optionally provide a timeout in seconds.",
                 ToolMeta.params(
                         ToolMeta.param("command", "string", true, "", "Shell command to execute"),
                         ToolMeta.param("timeout", "long", false, "60",
@@ -63,7 +72,8 @@ public class ContainerToolSet {
                     ProotContainerManager.Result r = ProotContainerManager.exec(
                             ctx, p.optString("command", ""), seconds * 1000L);
                     return bashJson(r, p.optString("command", ""));
-                });
+                },
+                ToolMeta.Scope.AI, ToolMeta.Category.CONTAINER);
     }
 
     // =====================================================================
@@ -73,8 +83,7 @@ public class ContainerToolSet {
     private static void registerRead(Context ctx) {
         ToolRegistry.register("read",
                 "Read the contents of a file. Content is the raw file text (no line-number prefix). "
-                + "Reading a directory does not fail: it returns is_directory=true with a warning; "
-                + "use the ls tool to list directory contents.",
+                + "Reading a directory does not fail: it returns is_directory=true with a warning.",
                 ToolMeta.params(
                         ToolMeta.param("path", "string", true, "",
                                 "Path to the file to read (relative or absolute)"),
@@ -87,7 +96,7 @@ public class ContainerToolSet {
                             p.optString("path", ""),
                             p.optInt("offset", 1),
                             p.optInt("limit", ProotFs.MAX_READ_LINES));
-                    JSONObject o = new JSONObject();
+                    JSONObject o = ToolMeta.ok();
                     o.put("path", r.containerPath);
                     o.put("real_path", r.realContainerPath);
                     putLinkWarning(o, r.linkWarning);
@@ -99,7 +108,8 @@ public class ContainerToolSet {
                     o.put("next_offset", r.nextOffset);
                     o.put("content", r.content);
                     return o;
-                });
+                },
+                ToolMeta.Scope.AI, ToolMeta.Category.CONTAINER);
     }
 
     private static void registerWrite(Context ctx) {
@@ -115,14 +125,15 @@ public class ContainerToolSet {
                             p.optString("path", ""),
                             p.optString("content", ""),
                             false);
-                    JSONObject o = new JSONObject();
+                    JSONObject o = ToolMeta.ok();
                     o.put("path", w.containerPath);
                     o.put("real_path", w.realContainerPath);
                     putLinkWarning(o, w.linkWarning);
                     o.put("bytes", w.bytes);
                     o.put("created", !w.existed);
                     return o;
-                });
+                },
+                ToolMeta.Scope.AI, ToolMeta.Category.CONTAINER);
     }
 
     private static void registerEdit(Context ctx) {
@@ -152,7 +163,7 @@ public class ContainerToolSet {
                     }
                     ProotFs.MultiEditResult r = fs(ctx).editMany(
                             p.optString("path", ""), edits, p.optBoolean("replace_all", false));
-                    JSONObject o = new JSONObject();
+                    JSONObject o = ToolMeta.ok();
                     o.put("path", r.containerPath);
                     o.put("real_path", r.realContainerPath);
                     putLinkWarning(o, r.linkWarning);
@@ -162,19 +173,20 @@ public class ContainerToolSet {
                     o.put("first_changed_line", r.firstChangedLine);
                     o.put("diff", r.diff);
                     return o;
-                });
+                },
+                ToolMeta.Scope.AI, ToolMeta.Category.CONTAINER);
     }
 
     // =====================================================================
-    // ls / grep / find
+    // ls / grep / find —— INTERNAL（测试界面 / 内部调用，不喂给 AI）
     // =====================================================================
 
     private static void registerLs(Context ctx) {
         ToolRegistry.register("ls",
                 "List directory contents.",
                 ToolMeta.params(
-                        ToolMeta.param("path", "string", false, "/root",
-                                "Directory to list (default: /root)"),
+                        ToolMeta.param("path", "string", false, "",
+                                "Directory to list (default: working directory)"),
                         ToolMeta.param("recursive", "boolean", false, "false",
                                 "List subdirectories recursively"),
                         ToolMeta.param("limit", "int", false, "500",
@@ -190,7 +202,7 @@ public class ContainerToolSet {
                         entries = entries.subList(0, limit);
                         truncated = true;
                     }
-                    JSONObject o = new JSONObject();
+                    JSONObject o = ToolMeta.ok();
                     o.put("path", r.containerPath);
                     putLinkWarning(o, r.linkWarning);
                     o.put("dirs", r.dirs);
@@ -199,7 +211,8 @@ public class ContainerToolSet {
                     o.put("truncated", truncated);
                     o.put("entries", new JSONArray(entries));
                     return o;
-                });
+                },
+                ToolMeta.Scope.INTERNAL, ToolMeta.Category.CONTAINER);
     }
 
     private static void registerGrep(Context ctx) {
@@ -208,8 +221,8 @@ public class ContainerToolSet {
                 ToolMeta.params(
                         ToolMeta.param("pattern", "string", true, "",
                                 "Search pattern (regular expression)"),
-                        ToolMeta.param("path", "string", false, "/root",
-                                "Directory or file to search (default: /root)"),
+                        ToolMeta.param("path", "string", false, "",
+                                "Directory or file to search (default: working directory)"),
                         ToolMeta.param("ignore_case", "boolean", false, "false",
                                 "Case-insensitive search"),
                         ToolMeta.param("recursive", "boolean", false, "true",
@@ -232,14 +245,14 @@ public class ContainerToolSet {
                         matches = matches.subList(0, limit);
                         truncated = true;
                     }
-                    JSONObject o = new JSONObject();
+                    JSONObject o = r.error != null ? ToolMeta.markError(ToolMeta.ok(), r.error) : ToolMeta.ok();
                     o.put("path", r.containerPath == null ? "" : r.containerPath);
-                    if (r.error != null) o.put("error", r.error);
                     o.put("match_count", matches.size());
                     o.put("truncated", truncated);
                     o.put("matches", new JSONArray(matches));
                     return o;
-                });
+                },
+                ToolMeta.Scope.INTERNAL, ToolMeta.Category.CONTAINER);
     }
 
     private static void registerFind(Context ctx) {
@@ -249,8 +262,8 @@ public class ContainerToolSet {
                 ToolMeta.params(
                         ToolMeta.param("pattern", "string", true, "",
                                 "Glob pattern, e.g. '*.ts', '**/*.json'"),
-                        ToolMeta.param("path", "string", false, "/root",
-                                "Directory to search in (default: /root)"),
+                        ToolMeta.param("path", "string", false, "",
+                                "Directory to search in (default: working directory)"),
                         ToolMeta.param("limit", "int", false, "1000",
                                 "Maximum number of results")),
                 p -> {
@@ -258,14 +271,14 @@ public class ContainerToolSet {
                             p.optString("pattern", "*"),
                             p.optString("path", ProotPathMapper.DEFAULT_CWD),
                             p.optInt("limit", 1000));
-                    JSONObject o = new JSONObject();
+                    JSONObject o = r.error != null ? ToolMeta.markError(ToolMeta.ok(), r.error) : ToolMeta.ok();
                     o.put("path", r.containerPath == null ? "" : r.containerPath);
-                    if (r.error != null) o.put("error", r.error);
                     o.put("match_count", r.matches.size());
                     o.put("truncated", r.truncated);
                     o.put("matches", new JSONArray(r.matches));
                     return o;
-                });
+                },
+                ToolMeta.Scope.INTERNAL, ToolMeta.Category.CONTAINER);
     }
 
     // =====================================================================
@@ -285,9 +298,8 @@ public class ContainerToolSet {
         JSONObject o = new JSONObject();
         try {
             o.put("command", command);
-            o.put("ok", r.ok());
-            // 兼容旧错误码：同时提供 status，供 DevTools / MCP 统一判定
             o.put("status", r.ok() ? "success" : "error");
+            if (!r.ok()) o.put("error", r.timeout ? "command timed out" : "command failed");
             o.put("exit_code", r.exitCode);
             o.put("timeout", r.timeout);
             o.put("stdout", clip(r.stdout));

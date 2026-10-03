@@ -9,7 +9,7 @@ import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.Spinner;
@@ -343,7 +343,7 @@ public class AsrTestActivity extends AppCompatActivity {
             return;
         }
         byte[] pcm = mAudioBuf.toByteArray();
-        Log.d("AsrTest", "识别: " + pcm.length + " bytes, engine=" + mEngine.getName());
+        AlinLog.d("AsrTest", "识别: " + pcm.length + " bytes, engine=" + mEngine.getName());
         btnRecognize.setEnabled(false);
         btnRecognize.setText("⏳ 识别中...");
         tvResult.setText("识别中...");

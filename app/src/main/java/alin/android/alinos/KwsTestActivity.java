@@ -9,7 +9,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -550,7 +550,7 @@ public class KwsTestActivity extends AppCompatActivity {
                 float[] emb = computeEmbedding(mLatestPcm);
                 runOnUiThread(() -> advanceRound(round, emb, conf));
             } catch (Exception e) {
-                Log.e(TAG, "声纹提取异常", e);
+                AlinLog.e(TAG, "声纹提取异常", e);
                 runOnUiThread(() -> advanceRound(round, null, conf));
             }
         }).start();
@@ -567,7 +567,7 @@ public class KwsTestActivity extends AppCompatActivity {
         }
         mRoundLog.append(String.format("第%d轮: 命中 置信度%.2f%s\n", round, conf,
                 emb != null ? " 声纹已记录" : " 无声纹"));
-        Log.d(TAG, String.format("第%d轮: 命中 置信度%.2f%s", round, conf, emb != null ? " 声纹已记录" : " 无声纹"));
+        AlinLog.d(TAG, String.format("第%d轮: 命中 置信度%.2f%s", round, conf, emb != null ? " 声纹已记录" : " 无声纹"));
 
         if (round >= ROUNDS) {
             // 五轮全部通过 → 统一声纹验证
@@ -627,7 +627,7 @@ public class KwsTestActivity extends AppCompatActivity {
                         : "⚠ 统一声纹验证：平均相似度 " + String.format("%.2f", sim) + "（<0.60，声纹不稳定，建议重新五轮）");
                 tvRoundResult.setTextColor(stable ? 0xFF4CAF50 : 0xFFFF9800);
                 mRoundLog.append(String.format("统一声纹验证: 平均相似度%.2f %s（请手动保存到数据库）\n", sim, stable ? "通过" : "不稳定"));
-                Log.d(TAG, "统一声纹验证: 平均相似度 " + sim + (stable ? " 通过" : " 不稳定"));
+                AlinLog.d(TAG, "统一声纹验证: 平均相似度 " + sim + (stable ? " 通过" : " 不稳定"));
             });
         }).start();
     }
@@ -642,7 +642,7 @@ public class KwsTestActivity extends AppCompatActivity {
             String line = "静音验证: " + (silent ? "✅ 模型正常（环境静音，无误触发）" : "❌ 环境非静音（RMS=" + String.format("%.3f", rms) + "）")
                     + "\n（静音下 KWS 不应误触发唤醒词）";
             tvReport.setText(line + "\n\n" + tvReport.getText());
-            Log.d(TAG, line);
+            AlinLog.d(TAG, line);
         });
     }
 
@@ -713,9 +713,9 @@ public class KwsTestActivity extends AppCompatActivity {
                             : "❌ 长录音验证失败（false）：声纹或唤醒词不一致");
                     tvRoundResult.setTextColor(result ? 0xFF4CAF50 : 0xFFF44336);
                 });
-                Log.d(TAG, line);
+                AlinLog.d(TAG, line);
             } catch (Exception e) {
-                Log.e(TAG, "长录音验证异常", e);
+                AlinLog.e(TAG, "长录音验证异常", e);
             }
         }).start();
     }
@@ -758,7 +758,7 @@ public class KwsTestActivity extends AppCompatActivity {
                 writeWav(f, mLatestPcm);
                 wavPath = f.getAbsolutePath();
             } catch (Exception e) {
-                Log.e(TAG, "写WAV失败", e);
+                AlinLog.e(TAG, "写WAV失败", e);
             }
         }
         boolean updating = wasSaved(keyword);
@@ -767,7 +767,7 @@ public class KwsTestActivity extends AppCompatActivity {
             String line = "保存数据库: 「" + keyword + "」 声纹" + avg.length + "维"
                     + (wavPath != null ? " + 声音样本" : "（无声音样本）") + " 已" + (updating ? "更新覆盖" : "保存");
             tvReport.setText(line + "\n\n" + tvReport.getText());
-            Log.d(TAG, line);
+            AlinLog.d(TAG, line);
             Toast.makeText(this, updating ? "已更新覆盖" : "已保存到数据库", Toast.LENGTH_SHORT).show();
         } else {
             Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show();
@@ -791,7 +791,7 @@ public class KwsTestActivity extends AppCompatActivity {
             refreshSavedState();
             String line = "删除数据库: 「" + keyword + "」";
             tvReport.setText(line + "\n\n" + tvReport.getText());
-            Log.d(TAG, line);
+            AlinLog.d(TAG, line);
             Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
         } else {
             Toast.makeText(this, "「" + keyword + "」未保存，无需删除", Toast.LENGTH_SHORT).show();
@@ -822,7 +822,7 @@ public class KwsTestActivity extends AppCompatActivity {
             tvKwStatus.setText("✅ 已从数据库加载：「" + latest.keyword + "」（声纹" + latest.embedding.length
                     + "维" + (latest.audioPath != null ? ", 声音✓" : "") + "）");
             tvKwStatus.setTextColor(0xFF009688);
-            Log.d(TAG, "已从数据库加载: " + latest.keyword);
+            AlinLog.d(TAG, "已从数据库加载: " + latest.keyword);
             // 自动初始化 KWS（否则重启后引擎未就绪，长录音验证会误报"唤醒词未命中"）
             saveKeyword();
         }
@@ -885,7 +885,7 @@ public class KwsTestActivity extends AppCompatActivity {
         sb.append("═══ END ═══");
 
         tvReport.setText(sb.toString());
-        Log.d(TAG, sb.toString()); // 打印日志
+        AlinLog.d(TAG, sb.toString()); // 打印日志
         Toast.makeText(this, "报告已生成并打印到日志", Toast.LENGTH_SHORT).show();
     }
 
@@ -967,7 +967,7 @@ public class KwsTestActivity extends AppCompatActivity {
             stream.release();
             return emb;
         } catch (Exception e) {
-            Log.e(TAG, "computeEmbedding 异常", e);
+            AlinLog.e(TAG, "computeEmbedding 异常", e);
             return null;
         }
     }

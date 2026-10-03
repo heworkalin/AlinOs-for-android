@@ -1,6 +1,6 @@
 package alin.android.alinos.voice.engine.sherpa;
 
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import com.k2fsa.sherpa.onnx.OfflineModelConfig;
 import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig;
@@ -37,7 +37,7 @@ public class SherpaAsrEngine implements IAsrEngine {
         try {
             System.loadLibrary("sherpa-onnx-jni");
         } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "JNI库加载失败", e);
+            AlinLog.e(TAG, "JNI库加载失败", e);
         }
     }
 
@@ -50,7 +50,7 @@ public class SherpaAsrEngine implements IAsrEngine {
                 if (dir == null) {
                     throw new Exception("未找到模型文件（缺少 tokens.txt）：" + modelDir);
                 }
-                Log.d(TAG, "使用模型目录: " + dir);
+                AlinLog.d(TAG, "使用模型目录: " + dir);
 
                 OfflineModelConfig modelConfig = new OfflineModelConfig();
                 modelConfig.setTokens(new File(dir, "tokens.txt").getAbsolutePath());
@@ -64,20 +64,20 @@ public class SherpaAsrEngine implements IAsrEngine {
                     whisper.setLanguage("en");
                     whisper.setTask("transcribe");
                     modelConfig.setWhisper(whisper);
-                    Log.d(TAG, "识别到 whisper 模型: encoder=" + whisper.getEncoder());
+                    AlinLog.d(TAG, "识别到 whisper 模型: encoder=" + whisper.getEncoder());
                 } else if (name.contains("sense")) {
                     OfflineSenseVoiceModelConfig sv = new OfflineSenseVoiceModelConfig();
                     sv.setModel(findIn(dir, "model.int8.onnx", "model.onnx"));
                     sv.setLanguage("auto");
                     sv.setUseInverseTextNormalization(true);
                     modelConfig.setSenseVoice(sv);
-                    Log.d(TAG, "识别到 sensevoice 模型: " + sv.getModel());
+                    AlinLog.d(TAG, "识别到 sensevoice 模型: " + sv.getModel());
                 } else {
                     // 默认按 paraformer 处理
                     OfflineParaformerModelConfig pf = new OfflineParaformerModelConfig();
                     pf.setModel(findIn(dir, "model.int8.onnx", "model.onnx"));
                     modelConfig.setParaformer(pf);
-                    Log.d(TAG, "识别到 paraformer 模型: " + pf.getModel());
+                    AlinLog.d(TAG, "识别到 paraformer 模型: " + pf.getModel());
                 }
 
                 OfflineRecognizerConfig config = new OfflineRecognizerConfig();
@@ -86,11 +86,11 @@ public class SherpaAsrEngine implements IAsrEngine {
                 // 第一个参数传 null → newFromFile，读取本地磁盘文件，不走 assets
                 mRecognizer = new OfflineRecognizer(null, config);
 
-                Log.d(TAG, "模型初始化完成: " + dir);
+                AlinLog.d(TAG, "模型初始化完成: " + dir);
                 mReady = true;
                 cb.onResult("就绪");
             } catch (Exception e) {
-                Log.e(TAG, "初始化失败", e);
+                AlinLog.e(TAG, "初始化失败", e);
                 cb.onError(e.getMessage());
             }
         }).start();
@@ -132,7 +132,7 @@ public class SherpaAsrEngine implements IAsrEngine {
                 cb.onResult(text);
 
             } catch (Exception e) {
-                Log.e(TAG, "识别异常", e);
+                AlinLog.e(TAG, "识别异常", e);
                 cb.onError(e.getMessage());
             } finally {
                 if (stream != null) {

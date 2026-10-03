@@ -1,6 +1,6 @@
 package alin.android.alinos.prompt;
 
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -80,7 +80,7 @@ public class ContextCache {
             entries.add(new CompressedEntry(role, content));
         }
 
-        Log.d(TAG, "上下文: " + mSource.size() + "条原始 → " + entries.size() + "条");
+        AlinLog.d(TAG, "上下文: " + mSource.size() + "条原始 → " + entries.size() + "条");
         return entries;
     }
 

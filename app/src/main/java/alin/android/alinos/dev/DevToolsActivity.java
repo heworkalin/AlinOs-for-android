@@ -71,8 +71,8 @@ public class DevToolsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dev_tools);
 
-        // 注册需要 Context 的工具（容器工具集 bash/read/write/edit/ls/grep/find）；
-        // 否则 ToolRegistry 只有静态注册的 TestToolSet / EnvironmentToolSet，
+        // 注册需要 Context 的工具（容器工具集 bash/read/write/edit）；
+        // 否则 ToolRegistry 只有静态注册的 TestToolSet，
         // 容器工具不会出现在测试列表里。
         ToolRegistry.init(getApplicationContext());
         allTools = ToolRegistry.getAllTools();
@@ -213,11 +213,32 @@ public class DevToolsActivity extends AppCompatActivity {
             }
             ToolMeta t = data.get(position);
             TextView tvName = v.findViewById(R.id.tv_tool_name);
+            TextView tvScope = v.findViewById(R.id.tv_tool_scope);
             TextView tvCap = v.findViewById(R.id.tv_tool_capability);
 
             tvName.setText(t.displayName);
+            tvScope.setText(scopeLabel(t));
+            tvScope.getBackground().setTint(scopeColor(t));
             tvCap.setText(shortCapability(t));
             return v;
+        }
+
+        private String scopeLabel(ToolMeta t) {
+            switch (t.scope) {
+                case AI: return "AI";
+                case INTERNAL: return "内部";
+                case DEBUG: return "调试";
+                default: return "?";
+            }
+        }
+
+        private int scopeColor(ToolMeta t) {
+            switch (t.scope) {
+                case AI: return 0xFF67C23A;       // 绿：暴露给 AI
+                case INTERNAL: return 0xFF909399; // 灰：内部
+                case DEBUG: return 0xFFE6A23C;    // 橙：调试
+                default: return 0xFF909399;
+            }
         }
 
         /** 取描述首句作为能力摘要（去掉换行与多余空白）。 */

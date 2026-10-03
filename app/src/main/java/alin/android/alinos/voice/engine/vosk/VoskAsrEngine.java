@@ -1,6 +1,6 @@
 package alin.android.alinos.voice.engine.vosk;
 
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONObject;
 import org.vosk.Model;
@@ -32,14 +32,14 @@ public class VoskAsrEngine implements IAsrEngine {
                 if (!modelDir.exists() || !modelDir.isDirectory()) {
                     throw new Exception("Vosk 模型目录不存在: " + modelDir);
                 }
-                Log.d(TAG, "加载 Vosk 模型: " + modelDir);
+                AlinLog.d(TAG, "加载 Vosk 模型: " + modelDir);
                 mModel = new Model(modelDir.getAbsolutePath());
                 mRecognizer = new Recognizer(mModel, SAMPLE_RATE);
                 mReady = true;
-                Log.d(TAG, "Vosk 模型加载成功");
+                AlinLog.d(TAG, "Vosk 模型加载成功");
                 cb.onResult("就绪");
             } catch (Exception e) {
-                Log.e(TAG, "Vosk 初始化失败", e);
+                AlinLog.e(TAG, "Vosk 初始化失败", e);
                 cb.onError(e.getMessage());
             }
         }).start();
@@ -53,20 +53,20 @@ public class VoskAsrEngine implements IAsrEngine {
         }
         new Thread(() -> {
             try {
-                Log.d(TAG, "开始识别: " + pcm.length + " bytes");
+                AlinLog.d(TAG, "开始识别: " + pcm.length + " bytes");
                 // 关键：重置识别器状态
                 mRecognizer.reset();
 
                 boolean accepted = mRecognizer.acceptWaveForm(pcm, pcm.length);
-                Log.d(TAG, "acceptWaveForm: " + accepted);
+                AlinLog.d(TAG, "acceptWaveForm: " + accepted);
                 String json = accepted ? mRecognizer.getResult() : mRecognizer.getPartialResult();
-                Log.d(TAG, "原始结果: " + json);
+                AlinLog.d(TAG, "原始结果: " + json);
 
                 String text = parseText(json);
-                Log.d(TAG, "解析结果: " + text);
+                AlinLog.d(TAG, "解析结果: " + text);
                 cb.onResult(text.isEmpty() ? "(未识别到语音)" : text);
             } catch (Exception e) {
-                Log.e(TAG, "识别异常", e);
+                AlinLog.e(TAG, "识别异常", e);
                 cb.onError(e.getMessage());
             }
         }).start();
@@ -91,7 +91,7 @@ public class VoskAsrEngine implements IAsrEngine {
             if (obj.has("text") && !obj.isNull("text")) return obj.getString("text");
             if (obj.has("partial") && !obj.isNull("partial")) return obj.getString("partial");
         } catch (Exception e) {
-            Log.w(TAG, "JSON 解析失败", e);
+            AlinLog.w(TAG, "JSON 解析失败", e);
         }
         return "";
     }

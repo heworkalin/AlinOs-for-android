@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.File;
 import java.util.List;
@@ -49,7 +49,7 @@ public class SystemTtsEngine implements ITtsEngine {
 
     @Override
     public void init(File modelDir, Callback cb) {
-        Log.d(TAG, "检查系统 TTS 引擎...");
+        AlinLog.d(TAG, "检查系统 TTS 引擎...");
 
         // 重复 init 防护：先释放旧实例
         releaseInternal();
@@ -68,35 +68,35 @@ public class SystemTtsEngine implements ITtsEngine {
                 probe.shutdown();
             }
         } catch (Exception e) {
-            Log.e(TAG, "检测 TTS 引擎失败", e);
+            AlinLog.e(TAG, "检测 TTS 引擎失败", e);
             cb.onError("无法检测 TTS 引擎");
             return;
         }
 
         if ((defaultEngine == null || defaultEngine.isEmpty())
                 && (engineList == null || engineList.isEmpty())) {
-            Log.w(TAG, "未检测到任何 TTS 引擎");
+            AlinLog.w(TAG, "未检测到任何 TTS 引擎");
             cb.onError("NO_ENGINE");
             return;
         }
         if (defaultEngine != null && !defaultEngine.isEmpty()) {
-            Log.d(TAG, "✅ 使用默认 TTS 引擎: " + defaultEngine);
+            AlinLog.d(TAG, "✅ 使用默认 TTS 引擎: " + defaultEngine);
         } else {
-            Log.d(TAG, "✅ 无默认引擎，使用已安装引擎（共 " + engineList.size() + " 个）");
+            AlinLog.d(TAG, "✅ 无默认引擎，使用已安装引擎（共 " + engineList.size() + " 个）");
         }
 
         // 第二步：初始化 + 自动配置
         try {
             mTts = new TextToSpeech(mCtx, status -> {
                 if (status != TextToSpeech.SUCCESS) {
-                    Log.e(TAG, "TTS 初始化失败, status=" + status);
+                    AlinLog.e(TAG, "TTS 初始化失败, status=" + status);
                     mReady = false;
                     if (mTts != null) { mTts.shutdown(); mTts = null; }
                     cb.onError("TTS 初始化失败，code=" + status);
                     return;
                 }
 
-                Log.d(TAG, "✅ TTS 初始化成功，应用默认配置");
+                AlinLog.d(TAG, "✅ TTS 初始化成功，应用默认配置");
                 mTts.setSpeechRate(DEFAULT_SPEECH_RATE);
                 mTts.setPitch(DEFAULT_PITCH);
 
@@ -104,18 +104,18 @@ public class SystemTtsEngine implements ITtsEngine {
                 int langResult = mTts.setLanguage(Locale.SIMPLIFIED_CHINESE);
                 if (langResult == TextToSpeech.LANG_MISSING_DATA
                         || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Log.w(TAG, "中文语音包缺失/不支持，自动回退英文");
+                    AlinLog.w(TAG, "中文语音包缺失/不支持，自动回退英文");
                     mTts.setLanguage(Locale.ENGLISH);
                 }
 
                 // 进度监听：开始/完成/错误（回调可能来自 binder 线程，内部自行切换主线程）
                 mTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String id) {
-                        Log.d(TAG, "🔊 朗读开始: " + id);
+                        AlinLog.d(TAG, "🔊 朗读开始: " + id);
                     }
 
                     @Override public void onDone(String id) {
-                        Log.d(TAG, "✅ 朗读完成: " + id);
+                        AlinLog.d(TAG, "✅ 朗读完成: " + id);
                         final Callback cb1 = mCurrentCallback;
                         mCurrentCallback = null;
                         if (cb1 != null) {
@@ -126,7 +126,7 @@ public class SystemTtsEngine implements ITtsEngine {
                     }
 
                     @Override public void onError(String id) {
-                        Log.e(TAG, "❌ 朗读错误: " + id);
+                        AlinLog.e(TAG, "❌ 朗读错误: " + id);
                         final Callback cb1 = mCurrentCallback;
                         mCurrentCallback = null;
                         if (cb1 != null) {
@@ -137,11 +137,11 @@ public class SystemTtsEngine implements ITtsEngine {
                 });
 
                 mReady = true;
-                Log.d(TAG, "系统 TTS 就绪");
+                AlinLog.d(TAG, "系统 TTS 就绪");
                 cb.onAudio(null); // 就绪信号（与项目内其他 TTS 引擎一致）
             });
         } catch (Exception e) {
-            Log.e(TAG, "创建 TTS 实例失败", e);
+            AlinLog.e(TAG, "创建 TTS 实例失败", e);
             mReady = false;
             cb.onError("创建 TTS 实例失败: " + e.getMessage());
         }
@@ -180,7 +180,7 @@ public class SystemTtsEngine implements ITtsEngine {
                 // 回退另一种语言
                 Locale fallback = locale == Locale.SIMPLIFIED_CHINESE
                         ? Locale.ENGLISH : Locale.SIMPLIFIED_CHINESE;
-                Log.w(TAG, locale.getDisplayName() + " 不支持，回退 " + fallback.getDisplayName());
+                AlinLog.w(TAG, locale.getDisplayName() + " 不支持，回退 " + fallback.getDisplayName());
                 mTts.setLanguage(fallback);
             }
 
@@ -192,7 +192,7 @@ public class SystemTtsEngine implements ITtsEngine {
                 cb.onError("朗读请求失败，code=" + result);
             }
         } catch (Exception e) {
-            Log.e(TAG, "朗读异常", e);
+            AlinLog.e(TAG, "朗读异常", e);
             mCurrentCallback = null;
             cb.onError("朗读异常: " + e.getMessage());
         }
@@ -204,7 +204,7 @@ public class SystemTtsEngine implements ITtsEngine {
             try {
                 mTts.stop();
             } catch (Exception e) {
-                Log.w(TAG, "stop 异常", e);
+                AlinLog.w(TAG, "stop 异常", e);
             }
         }
         mCurrentCallback = null;
@@ -213,7 +213,7 @@ public class SystemTtsEngine implements ITtsEngine {
     @Override
     public void release() {
         releaseInternal();
-        Log.d(TAG, "系统 TTS 已释放");
+        AlinLog.d(TAG, "系统 TTS 已释放");
     }
 
     /** 释放内部资源（init 重复调用与 release 共用） */
@@ -225,7 +225,7 @@ public class SystemTtsEngine implements ITtsEngine {
                 mTts.stop();
                 mTts.shutdown();
             } catch (Exception e) {
-                Log.w(TAG, "释放 TTS 异常", e);
+                AlinLog.w(TAG, "释放 TTS 异常", e);
             }
             mTts = null;
         }
@@ -252,7 +252,7 @@ public class SystemTtsEngine implements ITtsEngine {
                             .setData(android.net.Uri.parse("market://details?id=com.google.android.tts"))
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                 } catch (Exception e3) {
-                    Log.e(TAG, "无法打开 TTS 设置");
+                    AlinLog.e(TAG, "无法打开 TTS 设置");
                 }
             }
         }

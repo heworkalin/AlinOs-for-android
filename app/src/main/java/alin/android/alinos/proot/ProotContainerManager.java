@@ -2,7 +2,7 @@ package alin.android.alinos.proot;
 
 import android.content.Context;
 import android.os.Build;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -420,7 +420,7 @@ public final class ProotContainerManager {
             try (FileOutputStream out = new FileOutputStream(script)) {
                 out.write(wanted);
             } catch (IOException e) {
-                Log.w("ProotContainerManager", "write login script failed: " + e);
+                AlinLog.w("ProotContainerManager", "write login script failed: " + e);
                 return;
             }
             script.setReadable(true, false);
@@ -448,7 +448,7 @@ public final class ProotContainerManager {
                 out.write("\n".getBytes(StandardCharsets.UTF_8));
                 out.write(wanted);
             } catch (IOException e) {
-                Log.w("ProotContainerManager", "append root .profile failed: " + e);
+                AlinLog.w("ProotContainerManager", "append root .profile failed: " + e);
             }
             return;
         }
@@ -456,7 +456,7 @@ public final class ProotContainerManager {
         try (FileOutputStream out = new FileOutputStream(profile)) {
             out.write(wanted);
         } catch (IOException e) {
-            Log.w("ProotContainerManager", "write root .profile failed: " + e);
+            AlinLog.w("ProotContainerManager", "write root .profile failed: " + e);
             return;
         }
         profile.setReadable(true, false);
@@ -471,7 +471,7 @@ public final class ProotContainerManager {
         try (FileOutputStream out = new FileOutputStream(envFile)) {
             out.write(DEFAULT_ENV_FILE.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            Log.w("ProotContainerManager", "write env file failed: " + e);
+            AlinLog.w("ProotContainerManager", "write env file failed: " + e);
             return;
         }
         envFile.setReadable(true, false);

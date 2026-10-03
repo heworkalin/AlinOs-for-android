@@ -22,7 +22,7 @@ import com.termux.terminal.WcWidth;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -200,7 +200,7 @@ public class LocalShellExecutor {
     public static void provideContext(Context context) {
         if (context != null) {
             appContext = context.getApplicationContext();
-            Log.d(TAG, "provideContext: appContext set");
+            AlinLog.d(TAG, "provideContext: appContext set");
         }
     }
 
@@ -216,7 +216,7 @@ public class LocalShellExecutor {
             envReady = checkEnvironmentReady();
             initPersistence(appContext);
             LocalShellEnvironment.init(appContext);
-            Log.d(TAG, "ensureInitialized: first init, envReady=" + envReady);
+            AlinLog.d(TAG, "ensureInitialized: first init, envReady=" + envReady);
         }
         if (!envReady) return errorJson("ENV_NOT_READY", MSG_ENV_NOT_READY);
         // 每次 create_session 都确保服务已绑定
@@ -240,7 +240,7 @@ public class LocalShellExecutor {
         if (localShellService != null) {
             return;
         }
-        Log.d(TAG, "ensureServiceBound: binding, thread=" + Thread.currentThread().getName());
+        AlinLog.d(TAG, "ensureServiceBound: binding, thread=" + Thread.currentThread().getName());
         mServiceBindLatch = new CountDownLatch(1);
         try {
             Intent intent = new Intent(context, LocalShellService.class);
@@ -251,10 +251,10 @@ public class LocalShellExecutor {
             }
             context.bindService(intent, mServiceConnection, 0);
             boolean ok = mServiceBindLatch.await(SERVICE_BIND_WAIT_MAX_MS, TimeUnit.MILLISECONDS);
-            Log.d(TAG, "ensureServiceBound: await=" + ok + ", service="
+            AlinLog.d(TAG, "ensureServiceBound: await=" + ok + ", service="
                 + (localShellService != null ? "bound" : "null"));
         } catch (Exception e) {
-            Log.e(TAG, "ensureServiceBound error: " + e.getMessage());
+            AlinLog.e(TAG, "ensureServiceBound error: " + e.getMessage());
         }
     }
 
@@ -271,13 +271,13 @@ public class LocalShellExecutor {
             if (LocalShellExecutor.this.localShellService == null) {
                 LocalShellExecutor.this.localShellService = mLocalService;
             }
-            Log.d(TAG, "onServiceConnected: bound OK, latch countdown");
+            AlinLog.d(TAG, "onServiceConnected: bound OK, latch countdown");
             if (mServiceBindLatch != null) mServiceBindLatch.countDown();
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            Log.d(TAG, "onServiceDisconnected: service died, cleaning up");
+            AlinLog.d(TAG, "onServiceDisconnected: service died, cleaning up");
             mLocalService = null;
             mServiceBound = false;
 
@@ -314,7 +314,7 @@ public class LocalShellExecutor {
         private final TerminalSessionClient sessionClient = new TerminalSessionClient() {
             @Override public void onTextChanged(TerminalSession s) {}
             @Override public void onSessionFinished(TerminalSession s) {
-                Log.d(TAG, "PtySession.onSessionFinished: sid=" + PtySession.this.id
+                AlinLog.d(TAG, "PtySession.onSessionFinished: sid=" + PtySession.this.id
                     + ", exitCode=" + s.getExitStatus());
             }
             @Override public void onTitleChanged(TerminalSession s) {}
@@ -324,7 +324,7 @@ public class LocalShellExecutor {
             @Override public void onColorsChanged(TerminalSession s) {}
             @Override public void onTerminalCursorStateChange(boolean state) {}
             @Override public void setTerminalShellPid(TerminalSession s, int pid) {
-                Log.d(TAG, "PtySession.setTerminalShellPid: sid=" + PtySession.this.id + ", pid=" + pid);
+                AlinLog.d(TAG, "PtySession.setTerminalShellPid: sid=" + PtySession.this.id + ", pid=" + pid);
             }
             @Override public Integer getTerminalCursorStyle() { return null; }
             @Override public void logError(String t, String m) {}
@@ -397,16 +397,16 @@ public class LocalShellExecutor {
         mServiceBindLatch = new CountDownLatch(1);
         try {
             Intent intent = new Intent(ctx, LocalShellService.class);
-            Log.d(TAG, "bindLocalShellService: starting service " + LocalShellService.class.getSimpleName());
+            AlinLog.d(TAG, "bindLocalShellService: starting service " + LocalShellService.class.getSimpleName());
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 ctx.startForegroundService(intent);
             } else {
                 ctx.startService(intent);
             }
             boolean bound = ctx.bindService(intent, mServiceConnection, 0);
-            Log.d(TAG, "bindLocalShellService: bindService returned " + bound);
+            AlinLog.d(TAG, "bindLocalShellService: bindService returned " + bound);
         } catch (Exception e) {
-            Log.e(TAG, "bindLocalShellService: exception " + e.getMessage(), e);
+            AlinLog.e(TAG, "bindLocalShellService: exception " + e.getMessage(), e);
             mServiceBindLatch.countDown();
         }
     }
@@ -634,13 +634,13 @@ public class LocalShellExecutor {
                 sessionPool.remove(sid);
             }
 
-            Log.d(TAG, "create_session: sid=" + sid + ", poolSize=" + sessionPool.size());
+            AlinLog.d(TAG, "create_session: sid=" + sid + ", poolSize=" + sessionPool.size());
             try {
                 PtySession session = createViaService(sid);
                 if (session == null) {
                     return errorJson("CREATE_FAILED", "Failed to create session: " + sid);
                 }
-                Log.d(TAG, "create_session: created, alive=" + session.isAlive()
+                AlinLog.d(TAG, "create_session: created, alive=" + session.isAlive()
                     + ", viaService=" + session.createdViaService
                     + ", running=" + session.session.isRunning()
                     + ", pid=" + (session.session.isRunning() ? "alive" : session.session.getExitStatus()));
@@ -864,7 +864,7 @@ public class LocalShellExecutor {
         if (session == null) {
             return errorJson("SESSION_NOT_FOUND", "Session not found: " + sessionId);
         }
-        Log.d(TAG, "shell_exec: sessionId=" + sessionId + ", alive=" + session.isAlive()
+        AlinLog.d(TAG, "shell_exec: sessionId=" + sessionId + ", alive=" + session.isAlive()
             + ", cmd=" + command.substring(0, Math.min(command.length(), 80)));
 
         if (waitMs <= 0) waitMs = SHELL_EXEC_DEFAULT_WAIT_MS;
@@ -964,7 +964,7 @@ public class LocalShellExecutor {
             envReady = checkEnvironmentReady();
             initPersistence(appContext);
             LocalShellEnvironment.init(appContext);
-            Log.d(TAG, "exec_capture init: envReady=" + envReady + ", bashInstalled=" + isBashInstalled());
+            AlinLog.d(TAG, "exec_capture init: envReady=" + envReady + ", bashInstalled=" + isBashInstalled());
         }
         if (command == null || command.trim().isEmpty()) {
             return errorJson("INVALID_COMMAND", "command cannot be empty");
@@ -1583,23 +1583,23 @@ public class LocalShellExecutor {
 
     private PtySession createViaService(String sessionId) {
         String workingDir = LocalShellConstants.HOME_DIR_PATH;
-        Log.d(TAG, "createViaService: sid=" + sessionId + ", cwd=" + workingDir);
+        AlinLog.d(TAG, "createViaService: sid=" + sessionId + ", cwd=" + workingDir);
 
         TermuxSession termuxSession = localShellService.createTermuxSession(
                 null, null, null, workingDir, false, sessionId);
-        Log.d(TAG, "createViaService: TermuxSession=" + (termuxSession != null ? "created" : "NULL"));
+        AlinLog.d(TAG, "createViaService: TermuxSession=" + (termuxSession != null ? "created" : "NULL"));
         if (termuxSession == null) return null;
 
         TerminalSession terminalSession = termuxSession.getTerminalSession();
         if (terminalSession == null) {
-            Log.w(TAG, "createViaService: terminalSession is null");
+            AlinLog.w(TAG, "createViaService: terminalSession is null");
             return null;
         }
-        Log.d(TAG, "createViaService: terminalSession running=" + terminalSession.isRunning());
+        AlinLog.d(TAG, "createViaService: terminalSession running=" + terminalSession.isRunning());
 
         PtySession session = new PtySession(sessionId, terminalSession);
         sessionPool.put(sessionId, session);
-        Log.d(TAG, "createViaService: PtySession created, alive=" + session.isAlive()
+        AlinLog.d(TAG, "createViaService: PtySession created, alive=" + session.isAlive()
             + ", createdViaService=" + session.createdViaService);
         return session;
     }

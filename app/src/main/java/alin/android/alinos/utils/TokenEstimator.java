@@ -1,7 +1,7 @@
 package alin.android.alinos.utils;
 
 import android.text.TextUtils;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.util.List;
 import java.util.regex.Pattern;

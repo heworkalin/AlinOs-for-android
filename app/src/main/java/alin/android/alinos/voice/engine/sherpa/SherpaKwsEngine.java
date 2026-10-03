@@ -1,7 +1,7 @@
 package alin.android.alinos.voice.engine.sherpa;
 
 import android.content.Context;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import com.k2fsa.sherpa.onnx.KeywordSpotter;
 import com.k2fsa.sherpa.onnx.KeywordSpotterConfig;
@@ -48,7 +48,7 @@ public class SherpaKwsEngine implements IKwsEngine {
         try {
             System.loadLibrary("sherpa-onnx-jni");
         } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "JNI库加载失败", e);
+            AlinLog.e(TAG, "JNI库加载失败", e);
         }
     }
 
@@ -70,14 +70,14 @@ public class SherpaKwsEngine implements IKwsEngine {
                 if (dir == null) {
                     throw new Exception("未找到KWS模型文件（缺少 tokens.txt）：" + modelDir);
                 }
-                Log.d(TAG, "使用模型目录: " + dir);
+                AlinLog.d(TAG, "使用模型目录: " + dir);
 
                 // 唤醒词 → tokens（完整复刻 sherpa text2token，校验不过则拒绝初始化，绝不喂给 native）
                 mTokenizer = new KeywordTokenizer(mContext);
                 mTokenizer.load(dir);
                 String keywordLine = mTokenizer.tokenize(mKeyword, 1.5f, mThreshold);
                 writeKeywordsFile(keywordLine);
-                Log.d(TAG, "keywords: " + keywordLine);
+                AlinLog.d(TAG, "keywords: " + keywordLine);
 
                 OnlineModelConfig modelConfig = new OnlineModelConfig();
                 modelConfig.setTokens(new File(dir, "tokens.txt").getAbsolutePath());
@@ -98,10 +98,10 @@ public class SherpaKwsEngine implements IKwsEngine {
 
                 mSpotter = new KeywordSpotter(null, config);
                 mReady = true;
-                Log.d(TAG, "KWS初始化完成, keyword=" + mKeyword + ", threshold=" + mThreshold);
+                AlinLog.d(TAG, "KWS初始化完成, keyword=" + mKeyword + ", threshold=" + mThreshold);
                 cb.onListening();
             } catch (Exception e) {
-                Log.e(TAG, "KWS初始化失败", e);
+                AlinLog.e(TAG, "KWS初始化失败", e);
                 cb.onError(e.getMessage());
             }
         }).start();
@@ -140,10 +140,10 @@ public class SherpaKwsEngine implements IKwsEngine {
                 }
 
                 boolean hit = !hitKeyword.isEmpty();
-                Log.d(TAG, "检测结果: hit=" + hit + ", keyword=" + hitKeyword);
+                AlinLog.d(TAG, "检测结果: hit=" + hit + ", keyword=" + hitKeyword);
                 cb.onDetected(hit ? hitKeyword : "", hit ? 1.0f : 0.0f);
             } catch (Exception e) {
-                Log.e(TAG, "检测异常", e);
+                AlinLog.e(TAG, "检测异常", e);
                 cb.onError(e.getMessage());
             } finally {
                 if (stream != null) {
@@ -178,7 +178,7 @@ public class SherpaKwsEngine implements IKwsEngine {
             KeywordSpotterResult r = mSpotter.getResult(mStream);
             String kw = r.getKeyword();
             if (kw != null && !kw.isEmpty()) {
-                Log.d(TAG, "流式命中: " + kw);
+                AlinLog.d(TAG, "流式命中: " + kw);
                 if (mCallback != null) {
                     final String hit = kw;
                     new android.os.Handler(android.os.Looper.getMainLooper())
@@ -187,7 +187,7 @@ public class SherpaKwsEngine implements IKwsEngine {
                 mSpotter.reset(mStream);
             }
         } catch (Exception e) {
-            Log.e(TAG, "流式检测异常", e);
+            AlinLog.e(TAG, "流式检测异常", e);
         }
     }
 

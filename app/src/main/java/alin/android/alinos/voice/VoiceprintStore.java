@@ -5,7 +5,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -97,11 +97,11 @@ public class VoiceprintStore extends SQLiteOpenHelper {
             c.close();
             cv.put(COL_CREATED, created);
             long id = db.insertWithOnConflict(TABLE, null, cv, SQLiteDatabase.CONFLICT_REPLACE);
-            Log.d(TAG, "保存声纹: keyword=" + keyword + ", embLen=" + embedding.length
+            AlinLog.d(TAG, "保存声纹: keyword=" + keyword + ", embLen=" + embedding.length
                     + ", audio=" + audioPath + (exists ? " (更新)" : " (新增)"));
             return id != -1;
         } catch (Exception e) {
-            Log.e(TAG, "保存声纹失败", e);
+            AlinLog.e(TAG, "保存声纹失败", e);
             return false;
         }
     }
@@ -125,7 +125,7 @@ public class VoiceprintStore extends SQLiteOpenHelper {
             }
             c.close();
         } catch (Exception e) {
-            Log.e(TAG, "查询声纹失败", e);
+            AlinLog.e(TAG, "查询声纹失败", e);
         }
         return list;
     }
@@ -142,16 +142,16 @@ public class VoiceprintStore extends SQLiteOpenHelper {
                 if (audio != null && !audio.isEmpty()) {
                     File f = new File(audio);
                     if (f.exists() && !f.delete()) {
-                        Log.w(TAG, "删除音频文件失败: " + audio);
+                        AlinLog.w(TAG, "删除音频文件失败: " + audio);
                     }
                 }
             }
             c.close();
             int n = db.delete(TABLE, COL_KEYWORD + "=?", new String[]{keyword});
-            Log.d(TAG, "删除声纹: keyword=" + keyword + ", rows=" + n);
+            AlinLog.d(TAG, "删除声纹: keyword=" + keyword + ", rows=" + n);
             return n > 0;
         } catch (Exception e) {
-            Log.e(TAG, "删除声纹失败", e);
+            AlinLog.e(TAG, "删除声纹失败", e);
             return false;
         }
     }

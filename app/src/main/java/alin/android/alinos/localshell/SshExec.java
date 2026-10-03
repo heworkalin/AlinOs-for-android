@@ -1,7 +1,7 @@
 package alin.android.alinos.localshell;
 
 import android.content.Context;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
@@ -80,7 +80,7 @@ public final class SshExec {
         boolean useKey = "key".equals(config.getAuthType());
         if (timeoutMs <= 0) timeoutMs = 10000;
 
-        Log.d(TAG, "verify start: " + user + "@" + host + ":" + port
+        AlinLog.d(TAG, "verify start: " + user + "@" + host + ":" + port
                 + " authType=" + config.getAuthType()
                 + " useKey=" + useKey
                 + " passwordEmpty=" + (config.getPassword() == null || config.getPassword().isEmpty())
@@ -118,7 +118,7 @@ public final class SshExec {
             session.setConfig("PreferredAuthentications",
                     useKey ? "publickey" : "password,keyboard-interactive");
             session.connect(timeoutMs);
-            Log.d(TAG, "session connected (auth ok), verifyOnly="
+            AlinLog.d(TAG, "session connected (auth ok), verifyOnly="
                     + (command == null || command.trim().isEmpty()));
 
             // 只验证：连上即成功
@@ -145,10 +145,10 @@ public final class SshExec {
             boolean ok = exit == 0;
             return new Result(ok, ok ? "成功" : "命令退出码 " + exit, exit, stdout, stderr);
         } catch (JSchException e) {
-            Log.w(TAG, "JSch error: " + e.getMessage());
+            AlinLog.w(TAG, "JSch error: " + e.getMessage());
             return fail(mapJSchError(e));
         } catch (Exception e) {
-            Log.w(TAG, "ssh exec failed: " + e);
+            AlinLog.w(TAG, "ssh exec failed: " + e);
             return fail("连接异常: " + e);
         } finally {
             if (session != null) {
@@ -158,7 +158,7 @@ public final class SshExec {
                 }
             }
             if (keyFile != null && !keyFile.delete()) {
-                Log.w(TAG, "cannot delete temp key: " + keyFile);
+                AlinLog.w(TAG, "cannot delete temp key: " + keyFile);
             }
         }
     }

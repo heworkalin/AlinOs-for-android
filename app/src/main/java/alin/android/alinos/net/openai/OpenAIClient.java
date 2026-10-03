@@ -1,7 +1,7 @@
 package alin.android.alinos.net.openai;
 
 import android.content.Context;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -74,7 +74,7 @@ public class OpenAIClient implements OpenAIApi {
         try {
             return ChatResponse.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 ChatResponse 失败", e);
+            AlinLog.e(TAG, "解析 ChatResponse 失败", e);
             return null;
         }
     }
@@ -84,7 +84,7 @@ public class OpenAIClient implements OpenAIApi {
         StringBuilder path = new StringBuilder("/chat/completions?limit=").append(limit)
                 .append("&order=").append(order != null ? order : "desc");
         if (after != null) path.append("&after=").append(after);
-        Log.d(TAG, "listChatCompletions: " + path);
+        AlinLog.d(TAG, "listChatCompletions: " + path);
         // TODO: 实现分页逻辑
         return "[]";
     }
@@ -95,7 +95,7 @@ public class OpenAIClient implements OpenAIApi {
             String result = httpGet("/chat/completions/" + completionId);
             return result != null ? ChatResponse.fromJson(new JSONObject(result)) : null;
         } catch (Exception e) {
-            Log.e(TAG, "getChatCompletion 失败", e);
+            AlinLog.e(TAG, "getChatCompletion 失败", e);
             return null;
         }
     }
@@ -107,7 +107,7 @@ public class OpenAIClient implements OpenAIApi {
             String result = httpPost("/chat/completions/" + completionId, body);
             return result != null ? ChatResponse.fromJson(new JSONObject(result)) : null;
         } catch (Exception e) {
-            Log.e(TAG, "updateChatCompletion 失败", e);
+            AlinLog.e(TAG, "updateChatCompletion 失败", e);
             return null;
         }
     }
@@ -118,7 +118,7 @@ public class OpenAIClient implements OpenAIApi {
             String result = httpDelete("/chat/completions/" + completionId);
             return result != null ? CommonResponses.DeletionStatus.fromJson(new JSONObject(result)) : null;
         } catch (Exception e) {
-            Log.e(TAG, "deleteChatCompletion 失败", e);
+            AlinLog.e(TAG, "deleteChatCompletion 失败", e);
             return null;
         }
     }
@@ -129,7 +129,7 @@ public class OpenAIClient implements OpenAIApi {
                 .append("/messages?limit=").append(limit)
                 .append("&order=").append(order != null ? order : "desc");
         if (after != null) path.append("&after=").append(after);
-        Log.d(TAG, "getChatCompletionMessages: " + path);
+        AlinLog.d(TAG, "getChatCompletionMessages: " + path);
         // TODO: 实现
         return "[]";
     }
@@ -140,14 +140,14 @@ public class OpenAIClient implements OpenAIApi {
 
     @Override
     public byte[] createSpeech(AudioSpeechRequest request) {
-        Log.d(TAG, "createSpeech: model=" + request.model + ", voice=" + request.voice);
+        AlinLog.d(TAG, "createSpeech: model=" + request.model + ", voice=" + request.voice);
         String body = request.toJson().toString();
         return httpPostBinary("/audio/speech", body);
     }
 
     @Override
     public String createTranscription(AudioTranscriptionRequest request, byte[] audioFile) {
-        Log.d(TAG, "createTranscription: model=" + request.model);
+        AlinLog.d(TAG, "createTranscription: model=" + request.model);
         // TODO: multipart/form-data 上传音频文件
         return null;
     }
@@ -158,14 +158,14 @@ public class OpenAIClient implements OpenAIApi {
 
     @Override
     public EmbeddingResponse createEmbedding(EmbeddingRequest request) {
-        Log.d(TAG, "createEmbedding: model=" + request.model);
+        AlinLog.d(TAG, "createEmbedding: model=" + request.model);
         String body = request.toJson().toString();
         String result = httpPost("/embeddings", body);
         if (result == null) return null;
         try {
             return EmbeddingResponse.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 EmbeddingResponse 失败", e);
+            AlinLog.e(TAG, "解析 EmbeddingResponse 失败", e);
             return null;
         }
     }
@@ -176,14 +176,14 @@ public class OpenAIClient implements OpenAIApi {
 
     @Override
     public CommonResponses.ImageResponse createImage(ImageGenerationRequest request) {
-        Log.d(TAG, "createImage: model=" + request.model);
+        AlinLog.d(TAG, "createImage: model=" + request.model);
         String body = request.toJson().toString();
         String result = httpPost("/images/generations", body);
         if (result == null) return null;
         try {
             return CommonResponses.ImageResponse.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 ImageResponse 失败", e);
+            AlinLog.e(TAG, "解析 ImageResponse 失败", e);
             return null;
         }
     }
@@ -194,39 +194,39 @@ public class OpenAIClient implements OpenAIApi {
 
     @Override
     public CommonResponses.ModelListResponse listModels() {
-        Log.d(TAG, "listModels");
+        AlinLog.d(TAG, "listModels");
         String result = httpGet("/models");
         if (result == null) return null;
         try {
             return CommonResponses.ModelListResponse.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 ModelListResponse 失败", e);
+            AlinLog.e(TAG, "解析 ModelListResponse 失败", e);
             return null;
         }
     }
 
     @Override
     public CommonResponses.ModelInfo retrieveModel(String modelId) {
-        Log.d(TAG, "retrieveModel: " + modelId);
+        AlinLog.d(TAG, "retrieveModel: " + modelId);
         String result = httpGet("/models/" + modelId);
         if (result == null) return null;
         try {
             return CommonResponses.ModelInfo.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 ModelInfo 失败", e);
+            AlinLog.e(TAG, "解析 ModelInfo 失败", e);
             return null;
         }
     }
 
     @Override
     public CommonResponses.DeletionStatus deleteModel(String modelId) {
-        Log.d(TAG, "deleteModel: " + modelId);
+        AlinLog.d(TAG, "deleteModel: " + modelId);
         String result = httpDelete("/models/" + modelId);
         if (result == null) return null;
         try {
             return CommonResponses.DeletionStatus.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 DeletionStatus 失败", e);
+            AlinLog.e(TAG, "解析 DeletionStatus 失败", e);
             return null;
         }
     }
@@ -237,14 +237,14 @@ public class OpenAIClient implements OpenAIApi {
 
     @Override
     public CommonResponses.ModerationResponse createModeration(CommonResponses.ModerationRequest request) {
-        Log.d(TAG, "createModeration: model=" + request.model);
+        AlinLog.d(TAG, "createModeration: model=" + request.model);
         String body = request.toJson().toString();
         String result = httpPost("/moderations", body);
         if (result == null) return null;
         try {
             return CommonResponses.ModerationResponse.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 ModerationResponse 失败", e);
+            AlinLog.e(TAG, "解析 ModerationResponse 失败", e);
             return null;
         }
     }
@@ -257,46 +257,46 @@ public class OpenAIClient implements OpenAIApi {
     public String listFiles(String purpose) {
         String path = "/files";
         if (purpose != null) path += "?purpose=" + purpose;
-        Log.d(TAG, "listFiles: " + path);
+        AlinLog.d(TAG, "listFiles: " + path);
         return httpGet(path);
     }
 
     @Override
     public CommonResponses.FileInfo uploadFile(String filePath, String purpose) {
-        Log.d(TAG, "uploadFile: " + filePath + ", purpose=" + purpose);
+        AlinLog.d(TAG, "uploadFile: " + filePath + ", purpose=" + purpose);
         // TODO: multipart/form-data 上传
         return null;
     }
 
     @Override
     public CommonResponses.DeletionStatus deleteFile(String fileId) {
-        Log.d(TAG, "deleteFile: " + fileId);
+        AlinLog.d(TAG, "deleteFile: " + fileId);
         String result = httpDelete("/files/" + fileId);
         if (result == null) return null;
         try {
             return CommonResponses.DeletionStatus.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 DeletionStatus 失败", e);
+            AlinLog.e(TAG, "解析 DeletionStatus 失败", e);
             return null;
         }
     }
 
     @Override
     public CommonResponses.FileInfo retrieveFile(String fileId) {
-        Log.d(TAG, "retrieveFile: " + fileId);
+        AlinLog.d(TAG, "retrieveFile: " + fileId);
         String result = httpGet("/files/" + fileId);
         if (result == null) return null;
         try {
             return CommonResponses.FileInfo.fromJson(new JSONObject(result));
         } catch (Exception e) {
-            Log.e(TAG, "解析 FileInfo 失败", e);
+            AlinLog.e(TAG, "解析 FileInfo 失败", e);
             return null;
         }
     }
 
     @Override
     public byte[] downloadFile(String fileId) {
-        Log.d(TAG, "downloadFile: " + fileId);
+        AlinLog.d(TAG, "downloadFile: " + fileId);
         return httpGetBinary("/files/" + fileId + "/content");
     }
 
@@ -319,11 +319,11 @@ public class OpenAIClient implements OpenAIApi {
             if (code >= 200 && code < 300) {
                 return readStream(conn.getInputStream());
             } else {
-                Log.w(TAG, "GET " + path + " → HTTP " + code);
+                AlinLog.w(TAG, "GET " + path + " → HTTP " + code);
                 return null;
             }
         } catch (Exception e) {
-            Log.e(TAG, "GET " + path + " 失败", e);
+            AlinLog.e(TAG, "GET " + path + " 失败", e);
             return null;
         } finally {
             if (conn != null) conn.disconnect();
@@ -351,11 +351,11 @@ public class OpenAIClient implements OpenAIApi {
             if (code >= 200 && code < 300) {
                 return readStream(conn.getInputStream());
             } else {
-                Log.w(TAG, "POST " + path + " → HTTP " + code + ": " + readStream(conn.getErrorStream()));
+                AlinLog.w(TAG, "POST " + path + " → HTTP " + code + ": " + readStream(conn.getErrorStream()));
                 return null;
             }
         } catch (Exception e) {
-            Log.e(TAG, "POST " + path + " 失败", e);
+            AlinLog.e(TAG, "POST " + path + " 失败", e);
             return null;
         } finally {
             if (conn != null) conn.disconnect();
@@ -377,11 +377,11 @@ public class OpenAIClient implements OpenAIApi {
             if (code >= 200 && code < 300) {
                 return readStream(conn.getInputStream());
             } else {
-                Log.w(TAG, "DELETE " + path + " → HTTP " + code);
+                AlinLog.w(TAG, "DELETE " + path + " → HTTP " + code);
                 return null;
             }
         } catch (Exception e) {
-            Log.e(TAG, "DELETE " + path + " 失败", e);
+            AlinLog.e(TAG, "DELETE " + path + " 失败", e);
             return null;
         } finally {
             if (conn != null) conn.disconnect();
@@ -408,11 +408,11 @@ public class OpenAIClient implements OpenAIApi {
             if (code >= 200 && code < 300) {
                 return readBinaryStream(conn.getInputStream());
             } else {
-                Log.w(TAG, "POST(binary) " + path + " → HTTP " + code);
+                AlinLog.w(TAG, "POST(binary) " + path + " → HTTP " + code);
                 return null;
             }
         } catch (Exception e) {
-            Log.e(TAG, "POST(binary) " + path + " 失败", e);
+            AlinLog.e(TAG, "POST(binary) " + path + " 失败", e);
             return null;
         } finally {
             if (conn != null) conn.disconnect();
@@ -433,11 +433,11 @@ public class OpenAIClient implements OpenAIApi {
             if (code >= 200 && code < 300) {
                 return readBinaryStream(conn.getInputStream());
             } else {
-                Log.w(TAG, "GET(binary) " + path + " → HTTP " + code);
+                AlinLog.w(TAG, "GET(binary) " + path + " → HTTP " + code);
                 return null;
             }
         } catch (Exception e) {
-            Log.e(TAG, "GET(binary) " + path + " 失败", e);
+            AlinLog.e(TAG, "GET(binary) " + path + " 失败", e);
             return null;
         } finally {
             if (conn != null) conn.disconnect();

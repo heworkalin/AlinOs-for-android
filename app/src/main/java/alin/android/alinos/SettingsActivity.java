@@ -35,6 +35,7 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         CardView cvLocalShell = findViewById(R.id.cv_local_shell);
         CardView cvSshConfig = findViewById(R.id.cv_ssh_config);
         CardView cvProotContainer = findViewById(R.id.cv_proot_container);
+        CardView cvLog = findViewById(R.id.cv_log); // 统一日志界面
 
         // 语音模块卡片
         CardView cvVoiceAsr = findViewById(R.id.cv_voice_asr);        // ASR 语音识别
@@ -50,6 +51,7 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         cvLocalShell.setOnClickListener(this);
         cvSshConfig.setOnClickListener(this);
         cvProotContainer.setOnClickListener(this);
+        cvLog.setOnClickListener(this);
         cvVoiceAsr.setOnClickListener(this);
         cvVoiceTts.setOnClickListener(this);
         cvVoiceKws.setOnClickListener(this);
@@ -80,6 +82,9 @@ public class SettingsActivity extends AppCompatActivity implements View.OnClickL
         } else if (id == R.id.cv_proot_container) {
             // Proot 容器部署测试（下载 + 解压）
             startActivity(new Intent(this, ProotContainerTestActivity.class));
+        } else if (id == R.id.cv_log) {
+            // 统一日志界面
+            startActivity(new Intent(this, LogActivity.class));
         } else if (id == R.id.cv_voice_asr) {
             startActivity(new Intent(this, AsrTestActivity.class));
         } else if (id == R.id.cv_voice_tts) {

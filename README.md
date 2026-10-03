@@ -90,20 +90,17 @@
 - **MCP**：优先以客户端形态接入远端，或直接调用 `mcp-cli`。
 - **音频（搁置）**：短期不深度更新；如推进再评估 VAD/KWS 悬浮监听、SDK/AAR 等候选。
 
-## 文档归档（docs/）
+## 文档（docs/）
 
-为**避免多份文档彼此迷失、看不清该看哪份**，历史长报告已收拢到 `docs/`（保留随仓库，仅作索引）：
-
-| 归档文件 | 内容 |
+| 文件 | 内容 |
 |------|------|
-| `docs/_archive_PROJECT_STATUS.md` | 阶段推进 / 状态报告 |
-| `docs/_archive_AGENT_CAPABILITY_ROADMAP.md` | Agent 能力规划分析 |
-| `docs/_archive_PROOT_REFACTOR_PLAN.md` | proot 单次执行重构方案（曾规划） |
-| `docs/_archive_TMOE_PROOT_ANALYSIS.md` | proot 启动流程深度分析 |
-| `docs/_archive_SYSTEM_REPORT.md` | 早期系统报告 |
-| `docs/_archive_mcp.md` | MCP 官方规范摘录 |
+| `docs/MCP.md` | MCP 定位（服务器模式 = 开发者调试/开发，与内部 AI 无关）与短期规划 |
+| `docs/LOGGING.md` | 统一日志实现记录与短期规划 |
+| `docs/PROOT_HARDLINK_FIX.md` | proot 伪硬链接 ENOENT 修复记录 |
+| `docs/PROOT_LINK_SEMANTICS_REPORT.md` | proot 链接语义修复与残余限制 |
+| `docs/ANDROID_EXEC_RESTRICTION.md` | Android 私有目录可执行文件机制 |
 
-**文档约定**：先看本 README；找不到再翻 `docs/_archive_*`。
+**文档约定**：先看本 README，再看 `docs/` 下活跃文档。历史长报告已删除，可在 git log 中查阅。
 
 ---
 

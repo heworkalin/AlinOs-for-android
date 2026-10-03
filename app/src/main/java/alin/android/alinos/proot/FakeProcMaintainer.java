@@ -1,7 +1,7 @@
 package alin.android.alinos.proot;
 
 import android.os.SystemClock;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -115,7 +115,7 @@ public final class FakeProcMaintainer {
         synchronized (lock) {
             this.procDir = dir;
             if (!dir.exists() && !dir.mkdirs()) {
-                Log.w(TAG, "cannot create proot_proc dir: " + dir);
+                AlinLog.w(TAG, "cannot create proot_proc dir: " + dir);
                 return;
             }
             dedupe();
@@ -168,7 +168,7 @@ public final class FakeProcMaintainer {
                 if (!running) return;
                 // 被无关中断，继续
             } catch (Exception e) {
-                Log.w(TAG, "maintain loop error: " + e);
+                AlinLog.w(TAG, "maintain loop error: " + e);
             }
         }
     }
@@ -184,7 +184,7 @@ public final class FakeProcMaintainer {
         for (String name : OWNED) {
             File dup = new File(procDir, ".tmoe-container." + name);
             if (dup.exists() && !dup.delete()) {
-                Log.w(TAG, "cannot delete duplicate: " + dup);
+                AlinLog.w(TAG, "cannot delete duplicate: " + dup);
             }
         }
     }
@@ -238,7 +238,7 @@ public final class FakeProcMaintainer {
             raf.write(data);
             raf.setLength(data.length);
         } catch (IOException e) {
-            Log.w(TAG, "write failed: " + f + " " + e);
+            AlinLog.w(TAG, "write failed: " + f + " " + e);
         } finally {
             if (raf != null) {
                 try {

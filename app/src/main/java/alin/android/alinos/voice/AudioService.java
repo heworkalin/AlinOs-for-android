@@ -1,7 +1,7 @@
 package alin.android.alinos.voice;
 
 import android.content.Context;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.File;
 
@@ -39,7 +39,7 @@ public class AudioService {
 
     private AudioService(Context ctx) {
         this.appContext = ctx.getApplicationContext();
-        Log.d(TAG, "AudioService 初始化");
+        AlinLog.d(TAG, "AudioService 初始化");
         // VAD 模型复制到后台执行
         new Thread(this::copyVadModelIfNeeded).start();
         // 扫描已下载模型 → 自动建立模型注册库（幂等）
@@ -228,9 +228,9 @@ public class AudioService {
         target.getParentFile().mkdirs();
         try {
             copyAssetDir("vosk-model-small-cn-0.22", target);
-            Log.d(TAG, "Vosk 模型已从 assets 复制到 " + target);
+            AlinLog.d(TAG, "Vosk 模型已从 assets 复制到 " + target);
         } catch (Exception e) {
-            Log.e(TAG, "Vosk 模型复制失败", e);
+            AlinLog.e(TAG, "Vosk 模型复制失败", e);
         }
     }
 
@@ -271,9 +271,9 @@ public class AudioService {
             while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
             in.close();
             out.close();
-            Log.d(TAG, "VAD 模型已从 assets 复制到 " + mVadModelFile);
+            AlinLog.d(TAG, "VAD 模型已从 assets 复制到 " + mVadModelFile);
         } catch (Exception e) {
-            Log.e(TAG, "VAD 模型复制失败", e);
+            AlinLog.e(TAG, "VAD 模型复制失败", e);
         }
     }
 

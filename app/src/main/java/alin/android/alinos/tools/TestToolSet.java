@@ -23,14 +23,22 @@ public class TestToolSet {
                 ),
                 params -> {
                     String query = params.optString("query", "").trim();
+                    // 只暴露 AI 可见工具：内部 / 调试工具不得泄露给模型。
+                    java.util.List<ToolMeta> all = ToolRegistry.getAiTools();
                     java.util.List<ToolMeta> tools;
                     if (query.isEmpty()) {
-                        tools = ToolRegistry.getAllTools();
+                        tools = all;
                     } else {
-                        tools = ToolRegistry.searchTools(query);
+                        tools = new java.util.ArrayList<>();
+                        String lower = query.toLowerCase();
+                        for (ToolMeta t : all) {
+                            if (t.displayName.toLowerCase().contains(lower)
+                                    || t.description.toLowerCase().contains(lower)) {
+                                tools.add(t);
+                            }
+                        }
                     }
-                    JSONObject result = new JSONObject();
-                    result.put("status", "success");
+                    JSONObject result = ToolMeta.ok();
                     result.put("total", tools.size());
                     org.json.JSONArray items = new org.json.JSONArray();
                     for (ToolMeta t : tools) {
@@ -46,7 +54,8 @@ public class TestToolSet {
                     }
                     result.put("tools", items);
                     return result;
-                }
+                },
+                ToolMeta.Scope.AI, ToolMeta.Category.META
         );
     }
 }

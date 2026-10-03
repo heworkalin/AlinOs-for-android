@@ -12,10 +12,10 @@ import java.util.Map;
 /**
  * 工具注册表 + 分发器。
  *
- * <p>当前只向 AI / MCP 暴露两个工具：
+ * <p>当前向 AI / MCP 暴露的工具：
  * <ul>
- *   <li>元工具：{@code search_tools}；</li>
- *   <li>环境说明：{@code system_environment}。</li>
+ *   <li>工作环境：{@code bash} / {@code read} / {@code write} / {@code edit}；</li>
+ *   <li>元工具：{@code search_tools}。</li>
  * </ul>
  *
  * <p><b>交互式 PTY 工具（localshell_*）与 SSH 工具（ssh_*）均已不再注册给 AI。</b>
@@ -29,8 +29,6 @@ public class ToolRegistry {
     static {
         // 注册测试工具集
         TestToolSet.register();
-        // 注册环境说明工具（MCP 客户端帮助技能）
-        EnvironmentToolSet.register();
     }
 
     /**
@@ -40,21 +38,84 @@ public class ToolRegistry {
      */
     public static void init(Context context) {
         if (context != null) {
-            // 注册工作环境工具（bash / read / write / edit / ls / grep / find）
-            ContainerToolSet.register(context.getApplicationContext());
+            Context app = context.getApplicationContext();
+            // 注册工作环境工具（bash / read / write / edit + ls/grep/find）
+            ContainerToolSet.register(app);
+            // 注册宿主侧 PTY 工具（INTERNAL / DEBUG，不暴露给 AI）
+            ShellToolSet.register();
+            // 注册 SSH 工具（INTERNAL）
+            SshToolSet.register(app);
+            // 注册音频工具（INTERNAL，仅同步可查询能力）
+            AudioToolSet.register(app);
+            // 注册调试工具（DEBUG，供 MCP 读取运行态与统一日志）
+            DebugToolSet.register(app);
         }
     }
 
-    /** 公开注册方法，供 TestToolSet 或动态工具注册使用。 */
+    /** 公开注册方法，供 TestToolSet 或动态工具注册使用（默认 AI 可见 / SYSTEM 分组）。 */
     public static void register(String displayName, String description,
                                  ToolMeta.Param[] params, ToolMeta.Executor executor) {
-        tools.put(displayName, new ToolMeta(displayName, description,
-            displayName.replace("localshell_", ""), params, executor));
+        register(displayName, description, params, executor,
+                ToolMeta.Scope.AI, ToolMeta.Category.SYSTEM);
     }
 
-    /** 获取完整工具列表。 */
+    /** 完整注册（带可见面与分组）。 */
+    public static void register(String displayName, String description,
+                                 ToolMeta.Param[] params, ToolMeta.Executor executor,
+                                 ToolMeta.Scope scope, ToolMeta.Category category) {
+        tools.put(displayName, new ToolMeta(displayName, description,
+            displayName.replace("localshell_", ""), params, executor, scope, category));
+    }
+
+    /** 获取完整工具列表（全部可见面，测试界面 / 内部查询用）。 */
     public static List<ToolMeta> getAllTools() {
         return new ArrayList<>(tools.values());
+    }
+
+    /** 仅获取暴露给 AI / MCP 的工具（喂模型用）。 */
+    public static List<ToolMeta> getAiTools() {
+        List<ToolMeta> result = new ArrayList<>();
+        for (ToolMeta t : tools.values()) {
+            if (t.scope == ToolMeta.Scope.AI) result.add(t);
+        }
+        return result;
+    }
+
+    /**
+     * MCP 服务端的可见工具集。
+     *
+     * <p><b>MCP 是开发者调试通道，与 App 内部运行的 AI 无关</b>，
+     * 因此除了 {@link ToolMeta.Scope#AI} 工具，还要暴露 {@link ToolMeta.Scope#DEBUG}
+     * 调试工具（如 debug_*），否则就失去了调试意义。
+     *
+     * <p>不含 {@link ToolMeta.Scope#INTERNAL}（宿主 PTY / SSH / 音频等内部能力）。
+     */
+    public static List<ToolMeta> getMcpTools() {
+        List<ToolMeta> result = new ArrayList<>();
+        for (ToolMeta t : tools.values()) {
+            if (t.scope == ToolMeta.Scope.AI || t.scope == ToolMeta.Scope.DEBUG) {
+                result.add(t);
+            }
+        }
+        return result;
+    }
+
+    /** 按可见面筛选。 */
+    public static List<ToolMeta> getToolsByScope(ToolMeta.Scope scope) {
+        List<ToolMeta> result = new ArrayList<>();
+        for (ToolMeta t : tools.values()) {
+            if (t.scope == scope) result.add(t);
+        }
+        return result;
+    }
+
+    /** 按分组筛选。 */
+    public static List<ToolMeta> getToolsByCategory(ToolMeta.Category category) {
+        List<ToolMeta> result = new ArrayList<>();
+        for (ToolMeta t : tools.values()) {
+            if (t.category == category) result.add(t);
+        }
+        return result;
     }
 
     /** 按 displayName 查找。 */

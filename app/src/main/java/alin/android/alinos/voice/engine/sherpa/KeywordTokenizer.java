@@ -1,7 +1,7 @@
 package alin.android.alinos.voice.engine.sherpa;
 
 import android.content.Context;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -67,7 +67,7 @@ public class KeywordTokenizer {
         if (lexiconFile.exists()) {
             loadLexicon(lexiconFile);
         } else {
-            Log.w(TAG, "模型目录无 en.phone，英文唤醒词将不被支持: " + modelDir);
+            AlinLog.w(TAG, "模型目录无 en.phone，英文唤醒词将不被支持: " + modelDir);
         }
         loadPinyinTable();
     }
@@ -83,7 +83,7 @@ public class KeywordTokenizer {
             }
         }
         br.close();
-        Log.d(TAG, "vocab tokens: " + mVocab.size());
+        AlinLog.d(TAG, "vocab tokens: " + mVocab.size());
     }
 
     private void loadLexicon(File lexiconFile) throws Exception {
@@ -100,7 +100,7 @@ public class KeywordTokenizer {
             }
         }
         br.close();
-        Log.d(TAG, "lexicon words: " + mLexicon.size());
+        AlinLog.d(TAG, "lexicon words: " + mLexicon.size());
     }
 
     private void loadPinyinTable() throws Exception {
@@ -115,7 +115,7 @@ public class KeywordTokenizer {
             }
         }
         br.close();
-        Log.d(TAG, "pinyin table: " + mPinyin.size());
+        AlinLog.d(TAG, "pinyin table: " + mPinyin.size());
     }
 
     /**

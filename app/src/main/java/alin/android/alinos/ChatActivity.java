@@ -6,7 +6,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -44,6 +44,7 @@ import alin.android.alinos.prompt.ContextCache;
 import alin.android.alinos.prompt.PromptService;
 import alin.android.alinos.tools.ToolCallCardCallback;
 import alin.android.alinos.tools.ToolCallCoordinator;
+import alin.android.alinos.tools.ToolMeta;
 import alin.android.alinos.tools.ToolRegistry;
 import alin.android.alinos.utils.TokenEstimator;
 import alin.android.alinos.db.ToolCallDbHelper;
@@ -305,7 +306,7 @@ public class ChatActivity extends AppCompatActivity {
                         mMessageList.add(new ChatMessage(card.toString(), ChatMessage.TYPE_TOOL_CALL, false));
                         continue;
                     } catch (Exception e) {
-                        Log.w(TAG, "构建工具卡片失败", e);
+                        AlinLog.w(TAG, "构建工具卡片失败", e);
                     }
                 }
 
@@ -346,7 +347,7 @@ public class ChatActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(content) || mCurrentSessionId == -1 || mCurrentConfig == null) {
             String toastMsg = TextUtils.isEmpty(content) ? "输入不能为空" : "请选择会话配置";
             Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show();
-            Log.w(TAG, "触发流式发送失败：" + toastMsg);
+            AlinLog.w(TAG, "触发流式发送失败：" + toastMsg);
             return;
         }
         // 校验用户输入长度
@@ -361,7 +362,7 @@ public class ChatActivity extends AppCompatActivity {
 
 
         // 日志打印：流式发送触发信息
-        Log.d(TAG, "触发流式发送，会话ID：" + mCurrentSessionId + "，输入内容长度：" + content.length());
+        AlinLog.d(TAG, "触发流式发送，会话ID：" + mCurrentSessionId + "，输入内容长度：" + content.length());
 
         // 添加用户消息到UI
         mMessageList.add(new ChatMessage(content, ChatMessage.TYPE_USER, false));
@@ -386,7 +387,7 @@ public class ChatActivity extends AppCompatActivity {
                 mCurrentSessionId, 1, mCurrentConfig.getType() + "[流式]", "", System.currentTimeMillis()
         );
         mStreamRecordId = addRecordToDb(loadingRecord);
-        Log.d(TAG, "流式loading记录入库，recordId=" + mStreamRecordId);
+        AlinLog.d(TAG, "流式loading记录入库，recordId=" + mStreamRecordId);
 
         // 标记流式加载中，并清空上一轮的用量
         resetUsageState();
@@ -408,7 +409,7 @@ public class ChatActivity extends AppCompatActivity {
             mLastPromptTokens = data.getPromptTokens();
             mLastCompletionTokens = data.getCompletionTokens();
             mLastTotalTokens = data.getTotalTokens();
-            Log.d(TAG, "用量: prompt=" + mLastPromptTokens + " completion=" + mLastCompletionTokens
+            AlinLog.d(TAG, "用量: prompt=" + mLastPromptTokens + " completion=" + mLastCompletionTokens
                     + " total=" + mLastTotalTokens + " cost=$" + mLastCostTotal);
             // 实时把费用显示到消息卡片下方
             if (mAiMessagePosition != -1 && mLastCostTotal > 0) {
@@ -420,11 +421,11 @@ public class ChatActivity extends AppCompatActivity {
 
         // ========== 异常处理 ==========
         if (data.isError()) {
-            Log.e(TAG, "流式错误：" + data.getErrorMsg());
+            AlinLog.e(TAG, "流式错误：" + data.getErrorMsg());
 
             if ((data.getErrorMsg().contains("503") || data.getErrorMsg().contains("[超时重试]")) && retryCount < 3) {
                 retryCount++;
-                Log.d(TAG, "503服务不可用，第" + retryCount + "次重试...");
+                AlinLog.d(TAG, "503服务不可用，第" + retryCount + "次重试...");
                 mStreamHandler.postDelayed(() -> {
                     mPromptService.sendStreamMessage(mCurrentConfig, mCurrentSessionId, etInput.getText().toString().trim(), (eventType, retryData) -> {
                         runOnUiThread(() -> handleStreamEvent(retryData));
@@ -462,7 +463,7 @@ public class ChatActivity extends AppCompatActivity {
 
         // ========== 工具调用事件 ==========
         if (data.getToolCallsJson() != null && !data.getToolCallsJson().isEmpty()) {
-            Log.d(TAG, "🛠️ 收到工具调用事件，启动协调器");
+            AlinLog.d(TAG, "🛠️ 收到工具调用事件，启动协调器");
 
             try {
                 JSONArray toolCalls = new JSONArray(data.getToolCallsJson());
@@ -477,8 +478,8 @@ public class ChatActivity extends AppCompatActivity {
                 // 为每个工具生成 UUID，添加 TYPE_TOOL_CALL 占位消息 + 写入 chat_record 标记
                 String[] uuids = new String[toolCalls.length()];
                 for (int i = 0; i < toolCalls.length(); i++) {
-                    String toolName = toolCalls.getJSONObject(i)
-                            .getJSONObject("function").optString("name", "unknown");
+                    String toolName = ToolMeta.toolCallName(toolCalls.getJSONObject(i));
+                    if (toolName.isEmpty()) toolName = "unknown";
                     uuids[i] = UUID.randomUUID().toString();
 
                     JSONObject placeholder = new JSONObject();
@@ -559,7 +560,7 @@ public class ChatActivity extends AppCompatActivity {
                 coordinator.execute(toolCalls, uuids);
 
             } catch (Exception e) {
-                Log.e(TAG, "解析工具调用失败", e);
+                AlinLog.e(TAG, "解析工具调用失败", e);
             }
             return;
         }
@@ -595,7 +596,7 @@ public class ChatActivity extends AppCompatActivity {
 
             mStreamContentBuffer.append(data.getChunkContent());
             if (mStreamContentBuffer.length() % 100 < 10) {
-                Log.d(TAG, "流式缓存长度：" + mStreamContentBuffer.length());
+                AlinLog.d(TAG, "流式缓存长度：" + mStreamContentBuffer.length());
             }
             mChatAdapter.updateAiMessage(mAiMessagePosition, mStreamContentBuffer.toString(), true);
             rvChat.scrollToPosition(mAiMessagePosition);
@@ -604,14 +605,14 @@ public class ChatActivity extends AppCompatActivity {
 
         // ========== 流式结束（普通文本） ==========
         if (data.isFinish() && data.getToolCallsJson() == null) {
-            Log.d(TAG, "流式完成，总长度：" + mStreamContentBuffer.length());
+            AlinLog.d(TAG, "流式完成，总长度：" + mStreamContentBuffer.length());
             String finalContent = data.getFullContent() != null
                     ? data.getFullContent().trim()
                     : mStreamContentBuffer.toString().trim();
 
             if (TextUtils.isEmpty(finalContent)) {
                 finalContent = "[空回复] 服务端未返回有效内容";
-                Log.w(TAG, "流式完成但内容为空");
+                AlinLog.w(TAG, "流式完成但内容为空");
             }
 
             writeStreamRecordToDb(finalContent);
@@ -644,7 +645,7 @@ public class ChatActivity extends AppCompatActivity {
                     .put("content", etInput.getText().toString().trim()));
             return arr;
         } catch (Exception e) {
-            Log.e(TAG, "构建消息历史失败", e);
+            AlinLog.e(TAG, "构建消息历史失败", e);
             return new JSONArray();
         }
     }
@@ -665,7 +666,7 @@ public class ChatActivity extends AppCompatActivity {
 
     /** 停止当前 AI 执行 */
     private void stopExecution() {
-        Log.d(TAG, "用户触发停止");
+        AlinLog.d(TAG, "用户触发停止");
         isStreamLoading = false;
         if (mCoordinator != null) {
             mCoordinator.stop();
@@ -722,7 +723,7 @@ public class ChatActivity extends AppCompatActivity {
 
         // 最后再重置recordId（确保数据库已写入）
         mStreamRecordId = -1;
-        Log.d(TAG, "流式状态安全重置完成");
+        AlinLog.d(TAG, "流式状态安全重置完成");
     }
 
     // 重置流式加载状态（原有方法，修复ID重置时机）
@@ -1118,13 +1119,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private List<ChatSessionBean> getAllSessionsFromDb() {
         if (mChatDbHelper == null) {
-            Log.e(TAG, "ChatDBHelper未初始化");
+            AlinLog.e(TAG, "ChatDBHelper未初始化");
             return new ArrayList<>();
         }
         try {
             return mChatDbHelper.getAllSessions();
         } catch (Exception e) {
-            Log.e(TAG, "获取会话列表失败", e);
+            AlinLog.e(TAG, "获取会话列表失败", e);
             Toast.makeText(this, "加载会话列表失败", Toast.LENGTH_SHORT).show();
             return new ArrayList<>();
         }
@@ -1135,13 +1136,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private List<ChatRecordBean> getRecordsBySessionIdFromDb(int sessionId) {
         if (mChatDbHelper == null) {
-            Log.e(TAG, "ChatDBHelper未初始化");
+            AlinLog.e(TAG, "ChatDBHelper未初始化");
             return new ArrayList<>();
         }
         try {
             return mChatDbHelper.getRecordsBySessionId(sessionId);
         } catch (Exception e) {
-            Log.e(TAG, "获取聊天记录失败", e);
+            AlinLog.e(TAG, "获取聊天记录失败", e);
             return new ArrayList<>();
         }
     }
@@ -1152,13 +1153,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private long addRecordToDb(ChatRecordBean record) {
         if (mChatDbHelper == null || record == null) {
-            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            AlinLog.e(TAG, "参数错误或ChatDBHelper未初始化");
             return -1;
         }
         try {
             return mChatDbHelper.addRecord(record);
         } catch (Exception e) {
-            Log.e(TAG, "添加聊天记录失败", e);
+            AlinLog.e(TAG, "添加聊天记录失败", e);
             return -1;
         }
     }
@@ -1168,13 +1169,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private void updateRecordContentInDb(long recordId, String newContent) {
         if (mChatDbHelper == null || recordId <= 0 || newContent == null) {
-            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            AlinLog.e(TAG, "参数错误或ChatDBHelper未初始化");
             return;
         }
         try {
             mChatDbHelper.updateRecordContent(recordId, newContent);
         } catch (Exception e) {
-            Log.e(TAG, "更新聊天记录内容失败", e);
+            AlinLog.e(TAG, "更新聊天记录内容失败", e);
         }
     }
 
@@ -1184,13 +1185,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private long addSessionToDb(ChatSessionBean session) {
         if (mChatDbHelper == null || session == null) {
-            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            AlinLog.e(TAG, "参数错误或ChatDBHelper未初始化");
             return -1;
         }
         try {
             return mChatDbHelper.addSession(session);
         } catch (Exception e) {
-            Log.e(TAG, "添加会话失败", e);
+            AlinLog.e(TAG, "添加会话失败", e);
             return -1;
         }
     }
@@ -1200,13 +1201,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private void updateSessionInDb(ChatSessionBean session) {
         if (mChatDbHelper == null || session == null) {
-            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            AlinLog.e(TAG, "参数错误或ChatDBHelper未初始化");
             return;
         }
         try {
             mChatDbHelper.updateSession(session);
         } catch (Exception e) {
-            Log.e(TAG, "更新会话失败", e);
+            AlinLog.e(TAG, "更新会话失败", e);
         }
     }
 
@@ -1215,13 +1216,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private void deleteSessionFromDb(int sessionId) {
         if (mChatDbHelper == null || sessionId <= 0) {
-            Log.e(TAG, "参数错误或ChatDBHelper未初始化");
+            AlinLog.e(TAG, "参数错误或ChatDBHelper未初始化");
             return;
         }
         try {
             mChatDbHelper.deleteSession(sessionId);
         } catch (Exception e) {
-            Log.e(TAG, "删除会话失败", e);
+            AlinLog.e(TAG, "删除会话失败", e);
             Toast.makeText(this, "删除会话失败", Toast.LENGTH_SHORT).show();
         }
     }
@@ -1231,13 +1232,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private List<ConfigBean> getAllConfigsFromDb() {
         if (mConfigDbHelper == null) {
-            Log.e(TAG, "ConfigDBHelper未初始化");
+            AlinLog.e(TAG, "ConfigDBHelper未初始化");
             return new ArrayList<>();
         }
         try {
             return mConfigDbHelper.getAllConfigs();
         } catch (Exception e) {
-            Log.e(TAG, "获取AI配置失败", e);
+            AlinLog.e(TAG, "获取AI配置失败", e);
             return new ArrayList<>();
         }
     }
@@ -1247,13 +1248,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private ConfigBean getConfigByIdFromDb(int configId) {
         if (mConfigDbHelper == null || configId <= 0) {
-            Log.e(TAG, "参数错误或ConfigDBHelper未初始化");
+            AlinLog.e(TAG, "参数错误或ConfigDBHelper未初始化");
             return null;
         }
         try {
             return mConfigDbHelper.getConfigById(configId);
         } catch (Exception e) {
-            Log.e(TAG, "获取AI配置失败", e);
+            AlinLog.e(TAG, "获取AI配置失败", e);
             return null;
         }
     }
@@ -1263,13 +1264,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private String getModelNameByConfigIdFromDb(int configId) {
         if (mConfigDbHelper == null || configId <= 0) {
-            Log.e(TAG, "参数错误或ConfigDBHelper未初始化");
+            AlinLog.e(TAG, "参数错误或ConfigDBHelper未初始化");
             return "未知模型";
         }
         try {
             return mConfigDbHelper.getModelNameByConfigId(configId);
         } catch (Exception e) {
-            Log.e(TAG, "获取模型名称失败", e);
+            AlinLog.e(TAG, "获取模型名称失败", e);
             return "未知模型";
         }
     }
@@ -1279,13 +1280,13 @@ public class ChatActivity extends AppCompatActivity {
      */
     private String getConfigTypeByConfigIdFromDb(int configId) {
         if (mConfigDbHelper == null || configId <= 0) {
-            Log.e(TAG, "参数错误或ConfigDBHelper未初始化");
+            AlinLog.e(TAG, "参数错误或ConfigDBHelper未初始化");
             return "未知类型";
         }
         try {
             return mConfigDbHelper.getConfigTypeByConfigId(configId);
         } catch (Exception e) {
-            Log.e(TAG, "获取AI类型失败", e);
+            AlinLog.e(TAG, "获取AI类型失败", e);
             return "未知类型";
         }
     }

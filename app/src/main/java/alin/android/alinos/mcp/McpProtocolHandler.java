@@ -1,6 +1,6 @@
 package alin.android.alinos.mcp;
 
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -30,12 +30,18 @@ public class McpProtocolHandler {
 
     /** 本服务实现的协议版本。 */
     public static final String PROTOCOL_VERSION = "2025-06-18";
-    /** 兼容的旧版本（按规范：版本不符时返回服务端支持的版本）。 */
+    /**
+     * 兼容的版本列表（按规范：版本不符时返回服务端支持的版本）。
+     *
+     * <p>同时包含较新的协议版本（如 mcp-cli 使用的 2025-11-25 / 2026-07-28），
+     * 使新客户端能完成 initialize 协商而不被直接拒绝。本项目按需向下兼容即可。
+     */
     private static final List<String> SUPPORTED_VERSIONS = Arrays.asList(
+            "2026-07-28", "2025-11-25",
             "2025-06-18", "2025-03-26", "2024-11-05");
 
     private static final String SERVER_NAME = "AlinOsTools";
-    private static final String SERVER_TITLE = "AlinOs 工具服务";
+    private static final String SERVER_TITLE = "AlinOs Tool Server";
     private static final String SERVER_VERSION = "1.0.0";
 
     /**
@@ -52,7 +58,7 @@ public class McpProtocolHandler {
             if (!msg.has("id")) {
                 String method = msg.optString("method", "");
                 if (!method.isEmpty()) {
-                    Log.d(TAG, "收到通知: " + method);
+                    AlinLog.d(TAG, "收到通知: " + method);
                 }
                 return null;
             }
@@ -63,6 +69,9 @@ public class McpProtocolHandler {
             switch (method) {
                 case "initialize":
                     return initialize(msg, id);
+                case "server/discover":
+                    // 新协议 / 新客户端的发现请求：返回能力与版本信息
+                    return discover(msg, id);
                 case "ping":
                     return success(id, new JSONObject());
                 case "tools/list":
@@ -73,17 +82,43 @@ public class McpProtocolHandler {
                     return error(id, -32601, "Method not found: " + method);
             }
         } catch (JSONException e) {
-            Log.e(TAG, "JSON 解析失败", e);
+            AlinLog.e(TAG, "JSON 解析失败", e);
             return error(null, -32700, "Parse error: " + e.getMessage());
         } catch (Exception e) {
-            Log.e(TAG, "处理消息异常", e);
+            AlinLog.e(TAG, "处理消息异常", e);
             return error(null, -32603, "Internal error: " + e.getMessage());
         }
     }
 
-    /** 协议版本是否受支持（用于 MCP-Protocol-Version 头校验）。 */
+    /**
+     * 协议版本是否受支持（用于 MCP-Protocol-Version 头校验）。
+     *
+     * <p>仅作参考判断；未知版本不应直接拒绝（版本由 initialize 协商决定）。
+     */
     public static boolean isSupportedVersion(String version) {
         return SUPPORTED_VERSIONS.contains(version);
+    }
+
+    // ==================== discover ====================
+
+    /**
+     * {@code server/discover}：较新客户端在 initialize 前的探测请求。
+     * 返回服务端协议版本与能力，避免客户端因未实现该方法而中断。
+     */
+    private String discover(JSONObject msg, Object id) {
+        JSONObject result = new JSONObject();
+        try {
+            result.put("protocolVersion", PROTOCOL_VERSION);
+            JSONObject serverInfo = new JSONObject();
+            serverInfo.put("name", SERVER_NAME);
+            serverInfo.put("title", SERVER_TITLE);
+            serverInfo.put("version", SERVER_VERSION);
+            result.put("serverInfo", serverInfo);
+            result.put("capabilities", new JSONObject()
+                    .put("tools", new JSONObject().put("listChanged", false)));
+        } catch (Exception ignored) {
+        }
+        return success(id, result);
     }
 
     // ==================== initialize ====================
@@ -112,18 +147,17 @@ public class McpProtocolHandler {
             serverInfo.put("version", SERVER_VERSION);
             result.put("serverInfo", serverInfo);
 
-            // 环境标注：告知连接上来的 AI 这是什么环境、能力边界、先看哪个帮助工具
+            // Environment note: tells the connecting AI what this environment is and its limits.
             result.put("instructions",
-                    "这是运行在 Android 手机上的 MCP 工具服务端（AlinOs），"
-                    + "持有一个永久会话的交互式 PTY 终端：预编译精简 rootfs（bash/curl/ssh/scp 等），"
-                    + "非 root、无 proot，无包管理器/git/python，系统分区只读。\n"
-                    + "1. 首次连接请先调用 system_environment 获取完整能力范围（能做什么/不能做什么）与安全注意事项；\n"
-                    + "2. 工具清单通过 tools/list 获取，全部工具可直接调用；\n"
-                    + "3. 终端为交互式 PTY：前台有进程时勿用 sleep/echo 等待，用 localshell_shell_read 轮询；\n"
-                    + "4. 执行破坏性命令前必须向用户确认。");
+                    "This is the AlinOs MCP tool server running on an Android phone, "
+                    + "exposing a self-compiled proot Ubuntu 24.04 userland (running as root).\n"
+                    + "1. Get the tool list via tools/list; every listed tool can be called directly;\n"
+                    + "2. bash / read / write / edit all operate on the same Ubuntu working environment; "
+                    + "all paths are environment-internal;\n"
+                    + "3. Confirm with the user before any destructive command.");
         } catch (JSONException ignored) {}
 
-        Log.d(TAG, "initialize: 版本协商 -> " + negotiated);
+        AlinLog.d(TAG, "initialize: 版本协商 -> " + negotiated);
         return success(id, result);
     }
 
@@ -133,7 +167,7 @@ public class McpProtocolHandler {
         JSONObject result = new JSONObject();
         try {
             JSONArray tools = new JSONArray();
-            for (ToolMeta tool : ToolRegistry.getAllTools()) {
+            for (ToolMeta tool : ToolRegistry.getMcpTools()) {
                 tools.put(buildToolSchema(tool));
             }
             result.put("tools", tools);
@@ -212,7 +246,7 @@ public class McpProtocolHandler {
 
         ToolMeta tool = ToolRegistry.findTool(name);
         if (tool == null) {
-            Log.w(TAG, "未知工具: " + name);
+            AlinLog.w(TAG, "未知工具: " + name);
             return error(id, -32602, "Unknown tool: " + name);
         }
 
@@ -230,7 +264,7 @@ public class McpProtocolHandler {
             JSONObject execResult = tool.executor.execute(arguments);
             return success(id, wrapToolResult(execResult));
         } catch (Exception e) {
-            Log.e(TAG, "工具执行失败: " + name, e);
+            AlinLog.e(TAG, "工具执行失败: " + name, e);
             // 工具执行错误：在 result 中以 isError=true 体现（非 JSON-RPC error）
             JSONObject result = new JSONObject();
             try {

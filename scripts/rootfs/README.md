@@ -26,8 +26,15 @@ app/src/<abi>/assets/files.default.<arch>.tar.gz.so
 | 宿主工具 | `git tar gzip xz file docker` |
 | 磁盘 | 数十 GB（首次拉镜像 + 各架构源码与工具链） |
 
-> 本仓库的开发机是 Android proot，**没有 Docker，不能在设备上跑 `build-rootfs.sh`**。
-> 设备侧只负责解压产物，不参与构建。
+> **设备（Android proot）侧能否构建**：可以。**跑不了的是 Docker 容器运行时**
+> （设备上 `docker` daemon 起不来），但构建本身不绑定 Docker：可以**以当前 proot 环境作为
+> 构建基础、不走容器直接编译**。
+>
+> 但要注意：**当前脚本实现仍强依赖 Docker**（开头硬检查 `docker` 命令，失败即退出），
+> 要脱离 Docker 直接构建需先改造脚本（补一个类似 `IN_DOCKER=0` 的直编分支）。
+>
+> 即使改造完成，也**不推荐在手机跑**：构建性能消耗严重，属典型的电脑任务，且手机还要日常使用。
+> 故**当前暂不在设备上执行构建**（并非跑不了）。
 
 ---
 
@@ -182,7 +189,9 @@ ARCHS="aarch64 x86_64" bash scripts/rootfs/build-rootfs.sh
 | `TARGET_PACKAGES` | `bash openssh` | 目标包 |
 | `KEEP_CONTAINER=1` | 未设置 | 保留容器便于排查 |
 | `SKIP_FETCH=1` | 未设置 | 跳过克隆/更新 termux-packages |
-| `IN_DOCKER=0` | `1` | 直接在宿主编译（不走容器，需宿主工具齐全） |
+
+> `IN_DOCKER=0`（直接在宿主编译、不走容器）**目前尚未实现**，属预留方向；
+> 见「前置条件」中关于设备侧直接构建的说明。
 
 架构映射：
 
@@ -269,7 +278,7 @@ bash replace-paths.sh <目标目录> [--old-package X] [--new-package Y]
 | 文件树里仍有 `com.termux` | 用 `--binary` 复核，或检查是否落在 replace 规则未覆盖的路径 |
 | 解包后软链接悬空 | 绝对软链仍指向旧路径；确认 replace 步骤在转软链之前执行 |
 | 宿主 `python3` 缺失 | 打包在容器内执行，宿主无需 `python3` |
-| `docker: command not found` | 本脚本只能在 x86_64 Linux + Docker 上跑，不能在设备 proot 上跑 |
+| `docker: command not found` | 当前脚本强依赖 Docker（未实现直编分支）。可改用 Docker 环境跑，或改造脚本为不走容器、以本地环境直接构建 |
 
 ---
 

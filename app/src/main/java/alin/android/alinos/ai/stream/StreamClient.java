@@ -1,6 +1,6 @@
 package alin.android.alinos.ai.stream;
 
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -107,8 +107,8 @@ public class StreamClient {
         String body = dialect.buildBody(modelId, messages, tools, maxTokens, temperature, true);
         body = mergeExtra(body, extra);
 
-        Log.d(TAG, "协议=" + dialect.id() + " 请求URL=" + url);
-        Log.d(TAG, "请求体预览: " + preview(body));
+        AlinLog.d(TAG, "协议=" + dialect.id() + " 请求URL=" + url);
+        AlinLog.d(TAG, "请求体预览: " + preview(body));
 
         Request.Builder rb = new Request.Builder()
                 .url(url)

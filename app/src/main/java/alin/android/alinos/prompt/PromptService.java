@@ -1,7 +1,7 @@
 package alin.android.alinos.prompt;
 
 import android.content.Context;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -59,7 +59,7 @@ public class PromptService {
         try {
             messages = buildOpenAIMessages(sessionId, userInput, null);
         } catch (Exception e) {
-            Log.e(TAG, "构建消息失败", e);
+            AlinLog.e(TAG, "构建消息失败", e);
             if (listener != null) {
                 listener.onStreamEvent("stream_chat",
                         ChatStreamEventBus.StreamEventData.buildError("构建消息失败: " + e.getMessage()));
@@ -94,16 +94,16 @@ public class PromptService {
      * 结果缓存——工具定义在应用生命周期内不变，首轮序列化后直接复用。
      */
     private JSONArray buildToolsPayload() {
-        int currentCount = ToolRegistry.getAllTools().size();
+        int currentCount = ToolRegistry.getAiTools().size();
         if (sCachedToolsJson != null && sCachedToolsVersion == currentCount) {
             return sCachedToolsJson;
         }
         try {
-            sCachedToolsJson = ToolConverter.convertAll(ToolRegistry.getAllTools());
+            sCachedToolsJson = ToolConverter.convertAll(ToolRegistry.getAiTools());
             sCachedToolsVersion = currentCount;
-            Log.d(TAG, "工具定义已缓存: " + currentCount + " 个");
+            AlinLog.d(TAG, "工具定义已缓存: " + currentCount + " 个");
         } catch (Exception e) {
-            Log.w(TAG, "构建tools载荷失败", e);
+            AlinLog.w(TAG, "构建tools载荷失败", e);
             return null;
         }
         return sCachedToolsJson;
@@ -130,15 +130,15 @@ public class PromptService {
 
                 + "## Environment\n"
                 + "- A full Ubuntu 24.04 LTS userland (bash, coreutils, apt/dpkg and more), running "
-                + "as root with working directory /root.\n"
+                + "as root. The default working directory is /root.\n"
                 + "- You can install packages, build software, run services and modify files freely.\n"
                 + "- Each bash call starts a fresh shell: chain related commands with \" && \" when "
                 + "state matters. There is no persistent interactive terminal.\n\n"
 
                 + "## Paths\n"
                 + "- Every path you pass to a tool is an environment-internal path.\n"
-                + "- Absolute example: /etc/hosts. Relative paths resolve against /root, "
-                + "so \"notes.txt\" means \"/root/notes.txt\".\n"
+                + "- Absolute example: /etc/hosts. Relative paths resolve against the working "
+                + "directory (default /root), so \"notes.txt\" means \"/root/notes.txt\".\n"
                 + "- Symbolic links are followed: reading or writing a link affects its target, "
                 + "and the response includes link_warning with the resolved path.\n\n"
 
@@ -147,10 +147,7 @@ public class PromptService {
                 + "- read: read a file\n"
                 + "- write: create or overwrite a file\n"
                 + "- edit: exact text replacement (supports multiple edits per call)\n"
-                + "- ls: list directory contents\n"
-                + "- grep: search file contents\n"
-                + "- find: find files by glob pattern\n"
-                + "- search_tools / system_environment: discover capabilities\n\n"
+                + "- search_tools: discover capabilities\n\n"
 
                 + "## Guidelines\n"
                 + "- Prefer read / write / edit over shell cat/sed for file work.\n"
@@ -175,7 +172,7 @@ public class PromptService {
             systemMsg.put("content", systemContent);
             messages.put(systemMsg);
         } catch (Exception e) {
-            Log.e(TAG, "构建system消息失败", e);
+            AlinLog.e(TAG, "构建system消息失败", e);
         }
 
         List<ChatRecordBean> recentHistory = getRecentHistory(sessionId);
@@ -187,7 +184,7 @@ public class PromptService {
                 msg.put("content", record.getContent());
                 messages.put(msg);
             } catch (Exception e) {
-                Log.e(TAG, "转换历史消息失败: " + record.getId(), e);
+                AlinLog.e(TAG, "转换历史消息失败: " + record.getId(), e);
             }
         }
 
@@ -197,7 +194,7 @@ public class PromptService {
             currentMsg.put("content", currentUserMessage);
             messages.put(currentMsg);
         } catch (Exception e) {
-            Log.e(TAG, "构建当前用户消息失败", e);
+            AlinLog.e(TAG, "构建当前用户消息失败", e);
         }
 
         return messages;
@@ -209,14 +206,14 @@ public class PromptService {
 
     public List<ChatRecordBean> getChatHistory(int sessionId) {
         if (sessionId <= 0) {
-            Log.w(TAG, "无效的会话ID: " + sessionId);
+            AlinLog.w(TAG, "无效的会话ID: " + sessionId);
             return new ArrayList<>();
         }
         try {
             ChatDBHelper dbHelper = new ChatDBHelper(mContext);
             return dbHelper.getRecordsBySessionId(sessionId);
         } catch (Exception e) {
-            Log.e(TAG, "获取历史消息失败", e);
+            AlinLog.e(TAG, "获取历史消息失败", e);
             return new ArrayList<>();
         }
     }
@@ -237,7 +234,7 @@ public class PromptService {
             // 工具调用占位标记，不需要映射为 OpenAI 角色
             return null;
         }
-        Log.w(TAG, "无法映射的消息类型: msgType=" + msgType + ", sender=" + sender);
+        AlinLog.w(TAG, "无法映射的消息类型: msgType=" + msgType + ", sender=" + sender);
         return null;
     }
 
@@ -258,7 +255,7 @@ public class PromptService {
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "解析messages估算Token失败", e);
+            AlinLog.e(TAG, "解析messages估算Token失败", e);
         }
         return TokenEstimator.estimateMessagesTokens(contents);
     }
@@ -278,7 +275,7 @@ public class PromptService {
         int userMessageTokens = TokenEstimator.estimateTokens(currentUserMessage);
         totalTokens += userMessageTokens;
 
-        Log.d(TAG, "calculateTotalTokens: system=" + systemTokens
+        AlinLog.d(TAG, "calculateTotalTokens: system=" + systemTokens
                 + ", history(" + recentHistory.size() + "条)=" + historyTokens
                 + ", user=" + userMessageTokens
                 + ", total=" + totalTokens);
@@ -293,9 +290,9 @@ public class PromptService {
         if (contextWindow <= 0) contextWindow = 4096;
         boolean isExceeding = totalTokens > contextWindow;
         if (isExceeding) {
-            Log.w(TAG, "消息超出上下文窗口: " + totalTokens + " > " + contextWindow);
+            AlinLog.w(TAG, "消息超出上下文窗口: " + totalTokens + " > " + contextWindow);
         } else {
-            Log.d(TAG, "Token估算: " + totalTokens + " / " + contextWindow);
+            AlinLog.d(TAG, "Token估算: " + totalTokens + " / " + contextWindow);
         }
         return isExceeding;
     }
@@ -311,9 +308,9 @@ public class PromptService {
         if (contextWindow <= 0) contextWindow = 4096;
         boolean isExceeding = totalTokens > contextWindow;
         if (isExceeding) {
-            Log.w(TAG, "消息超出上下文窗口: " + totalTokens + " > " + contextWindow);
+            AlinLog.w(TAG, "消息超出上下文窗口: " + totalTokens + " > " + contextWindow);
         } else {
-            Log.d(TAG, "消息Token估算: " + totalTokens + " / " + contextWindow);
+            AlinLog.d(TAG, "消息Token估算: " + totalTokens + " / " + contextWindow);
         }
         return isExceeding;
     }

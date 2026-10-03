@@ -1,7 +1,7 @@
 package alin.android.alinos.ai;
 
 import android.content.Context;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -88,10 +88,10 @@ public final class ModelRefresher {
             ModelRegistry registry = ModelRegistry.get(ctx);
             registry.setDynamic(providerId, models, now);
             registry.persist(ctx);
-            Log.d(TAG, "刷新 " + providerId + " 成功: " + models.size() + " 个模型");
+            AlinLog.d(TAG, "刷新 " + providerId + " 成功: " + models.size() + " 个模型");
             return new Result(providerId, models.size(), null);
         } catch (Exception e) {
-            Log.w(TAG, "刷新 " + providerId + " 失败: " + e.getMessage());
+            AlinLog.w(TAG, "刷新 " + providerId + " 失败: " + e.getMessage());
             return new Result(providerId, 0, String.valueOf(e.getMessage()));
         }
     }

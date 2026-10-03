@@ -7,7 +7,7 @@ import android.media.AudioTrack;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
+import alin.android.alinos.log.AlinLog;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -338,9 +338,9 @@ public class TtsTestActivity extends AppCompatActivity {
 
             mAudioTrack.write(shorts, 0, shorts.length);
             mAudioTrack.play();
-            Log.d("TtsTest", "播放 " + shorts.length + " samples @ 22050Hz");
+            AlinLog.d("TtsTest", "播放 " + shorts.length + " samples @ 22050Hz");
         } catch (Exception e) {
-            Log.e("TtsTest", "播放失败", e);
+            AlinLog.e("TtsTest", "播放失败", e);
         }
     }
 
